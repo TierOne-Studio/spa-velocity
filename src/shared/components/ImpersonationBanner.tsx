@@ -1,5 +1,6 @@
 import { IconUserScan, IconX } from "@tabler/icons-react"
 import { toast } from "sonner"
+import { useQueryClient } from "@tanstack/react-query"
 
 import { Button } from "@/shared/components/ui/button"
 import { useStopImpersonating } from "@/features/Admin/hooks/useUsers"
@@ -12,6 +13,7 @@ import { useIsImpersonating } from "@/shared/hooks/useIsImpersonating"
  */
 export function ImpersonationBanner() {
   const { user, refreshSession } = useAuth()
+  const queryClient = useQueryClient()
   const stopImpersonating = useStopImpersonating()
   const { isImpersonating } = useIsImpersonating()
 
@@ -19,8 +21,8 @@ export function ImpersonationBanner() {
     try {
       await stopImpersonating.mutateAsync()
       await refreshSession()
+      await queryClient.invalidateQueries()
       toast.success("Stopped impersonating user")
-      window.location.reload() // Reload to get fresh session
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to stop impersonating")
     }

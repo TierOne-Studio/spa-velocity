@@ -1,7 +1,6 @@
 import { Navigate } from "react-router-dom";
 import { useAuth } from "@shared/context/AuthContext";
 import { usePermissionsContext } from "@shared/context/PermissionsContext";
-import { RouteGuardLoading } from "@shared/components/RouteGuardLoading";
 
 interface AdminRouteProps {
     children: React.ReactNode;
@@ -18,12 +17,8 @@ interface AdminRouteProps {
  * Redirects to fallbackPath (default: "/") when access is not allowed.
  */
 export function AdminRoute({ children, fallbackPath = "/", requiredPermission }: AdminRouteProps) {
-    const { isAuthenticated, isAdminOrManager, isLoading } = useAuth();
-    const { can, isLoading: permissionsLoading } = usePermissionsContext();
-
-    if (isLoading || permissionsLoading) {
-        return <RouteGuardLoading />;
-    }
+    const { isAuthenticated, isAdminOrManager } = useAuth();
+    const { can } = usePermissionsContext();
 
     // Redirect to login if not authenticated
     if (!isAuthenticated) {

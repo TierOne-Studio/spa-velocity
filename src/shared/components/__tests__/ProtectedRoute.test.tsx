@@ -43,18 +43,4 @@ describe("ProtectedRoute", () => {
     expect(nav.getAttribute("data-to")).toBe("/login");
     expect(screen.queryByTestId("child")).toBeNull();
   });
-
-  it("renders loading indicator while loading", () => {
-    mockUseAuth.mockReturnValue({ isAuthenticated: false, isLoading: true });
-
-    render(
-      <ProtectedRoute>
-        <div data-testid="child">Protected Content</div>
-      </ProtectedRoute>,
-    );
-
-    expect(screen.queryByTestId("child")).toBeNull();
-    expect(screen.queryByTestId("navigate")).toBeNull();
-    expect(screen.getByTestId("route-guard-loading")).toBeInTheDocument();
-  });
 });

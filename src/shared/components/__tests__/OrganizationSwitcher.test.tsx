@@ -8,17 +8,25 @@ const {
   mockUseAuth,
   mockCreateOrganization,
   mockOrganization,
-} = vi.hoisted(() => ({
-  mockUsePermissionsContext: vi.fn(),
-  mockUseAuth: vi.fn(),
-  mockCreateOrganization: vi.fn(),
-  mockOrganization: {
-    list: vi.fn(),
-    getActiveMember: vi.fn(),
-    setActive: vi.fn(),
-    leave: vi.fn(),
-  },
-}))
+  mockInvalidateQueries,
+  mockQueryClient,
+} = vi.hoisted(() => {
+  const mockInvalidateQueries = vi.fn().mockResolvedValue(undefined)
+  const mockQueryClient = { invalidateQueries: mockInvalidateQueries }
+  return {
+    mockUsePermissionsContext: vi.fn(),
+    mockUseAuth: vi.fn(),
+    mockCreateOrganization: vi.fn(),
+    mockOrganization: {
+      list: vi.fn(),
+      getActiveMember: vi.fn(),
+      setActive: vi.fn(),
+      leave: vi.fn(),
+    },
+    mockInvalidateQueries,
+    mockQueryClient,
+  }
+})
 
 vi.mock("@/shared/context/PermissionsContext", () => ({
   usePermissionsContext: () => mockUsePermissionsContext(),
@@ -27,6 +35,14 @@ vi.mock("@/shared/context/PermissionsContext", () => ({
 vi.mock("@/shared/context/AuthContext", () => ({
   useAuth: () => mockUseAuth(),
 }))
+
+vi.mock("@tanstack/react-query", async () => {
+  const actual = await vi.importActual("@tanstack/react-query")
+  return {
+    ...actual,
+    useQueryClient: () => mockQueryClient,
+  }
+})
 
 vi.mock("@/shared/lib/auth-client", () => ({
   organization: mockOrganization,
@@ -52,9 +68,8 @@ const ORG = { id: "org-1", name: "Test Org", slug: "test-org" }
 describe("OrganizationSwitcher", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.stubGlobal("location", { ...window.location, reload: vi.fn() })
     mockUsePermissionsContext.mockReturnValue({ can: () => false })
-    mockUseAuth.mockReturnValue({ isAdmin: false })
+    mockUseAuth.mockReturnValue({ isAdmin: false, refreshSession: vi.fn().mockResolvedValue(undefined) })
     mockOrganization.list.mockResolvedValue({ data: [ORG] })
     mockOrganization.getActiveMember.mockResolvedValue({ data: { organizationId: "org-1" } })
     mockOrganization.setActive.mockResolvedValue({ data: null, error: null })
@@ -63,7 +78,7 @@ describe("OrganizationSwitcher", () => {
   })
 
   afterEach(() => {
-    vi.unstubAllGlobals()
+    vi.clearAllMocks()
   })
 
   it("renders a skeleton while organizations are loading", () => {
@@ -107,8 +122,9 @@ describe("OrganizationSwitcher", () => {
     expect(await screen.findByText("No organizations")).toBeInTheDocument()
   })
 
-  it("calls setActive and reloads on org click", async () => {
-    mockUseAuth.mockReturnValue({ isAdmin: true })
+  it("calls setActive and refreshes session on org click", async () => {
+    const mockRefreshSession = vi.fn().mockResolvedValue(undefined)
+    mockUseAuth.mockReturnValue({ isAdmin: true, refreshSession: mockRefreshSession })
 
     const user = userEvent.setup()
     render(<OrganizationSwitcher />)
@@ -122,7 +138,8 @@ describe("OrganizationSwitcher", () => {
     await waitFor(() => {
       expect(mockOrganization.setActive).toHaveBeenCalledWith({ organizationId: "org-1" })
       expect(toast.success).toHaveBeenCalledWith("Switched organization")
-      expect(window.location.reload).toHaveBeenCalled()
+      expect(mockRefreshSession).toHaveBeenCalled()
+      expect(mockInvalidateQueries).toHaveBeenCalled()
     })
   })
 

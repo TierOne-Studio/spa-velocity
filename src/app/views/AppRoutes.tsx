@@ -84,18 +84,10 @@ const AppRoutesContent = () => {
                         </AdminRoute>
                       }
                     />
-                    <Route
-                      path="admin/invitations"
-                      element={
-                        <AdminRoute requiredPermission={{ resource: "organization", action: "read" }}>
-                          <InvitationsPage />
-                        </AdminRoute>
-                      }
-                    />
-
                     {/* User pages */}
                     <Route path="settings" element={<SettingsPage />} />
                     <Route path="account" element={<AccountPage />} />
+                    <Route path="invitations" element={<InvitationsPage />} />
                   </Route>
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>

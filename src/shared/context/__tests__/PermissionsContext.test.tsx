@@ -152,7 +152,7 @@ describe("PermissionsContext", () => {
       </QueryClientProvider>,
     );
 
-    await user.click(screen.getByRole("button", { name: "Refetch" }));
+    await user.click(await screen.findByRole("button", { name: "Refetch" }));
 
     expect(invalidateSpy).toHaveBeenCalledWith(
       expect.objectContaining({ queryKey: ["rbac", "my-permissions"] }),

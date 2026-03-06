@@ -78,15 +78,6 @@ const getNavItems = (
     })
   }
 
-  if (can("organization", "read")) {
-    adminItems.push({
-      title: "Invitations",
-      url: "/admin/invitations",
-      icon: IconMail,
-      isActive: pathname === "/admin/invitations",
-    })
-  }
-
   return {
     navMain: [],
     navGroups: [
@@ -100,6 +91,12 @@ const getNavItems = (
             url: "/",
             icon: IconDashboard,
             isActive: pathname === "/",
+          },
+          {
+            title: "Invitations",
+            url: "/invitations",
+            icon: IconMail,
+            isActive: pathname === "/invitations",
           },
         ],
       },

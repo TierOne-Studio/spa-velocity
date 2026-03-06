@@ -21,24 +21,20 @@ import { AdminRoute } from "../AdminRoute";
 const authenticatedAdmin = {
   isAuthenticated: true,
   isAdminOrManager: true,
-  isLoading: false,
 };
 
 const authenticatedMember = {
   isAuthenticated: true,
   isAdminOrManager: false,
-  isLoading: false,
 };
 
 const unauthenticated = {
   isAuthenticated: false,
   isAdminOrManager: false,
-  isLoading: false,
 };
 
-const permissionsGranted = { can: () => true, isLoading: false };
-const permissionsDenied = { can: () => false, isLoading: false };
-const permissionsLoading = { can: () => false, isLoading: true };
+const permissionsGranted = { can: () => true };
+const permissionsDenied = { can: () => false };
 
 describe("AdminRoute", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -97,36 +93,6 @@ describe("AdminRoute", () => {
 
     const nav = screen.getByTestId("navigate");
     expect(nav.getAttribute("data-to")).toBe("/");
-  });
-
-  it("renders loading indicator while auth is loading", () => {
-    mockUseAuth.mockReturnValue({ isAuthenticated: false, isAdminOrManager: false, isLoading: true });
-    mockUsePermissionsContext.mockReturnValue(permissionsGranted);
-
-    render(
-      <AdminRoute>
-        <div data-testid="child">Admin Content</div>
-      </AdminRoute>,
-    );
-
-    expect(screen.queryByTestId("child")).toBeNull();
-    expect(screen.queryByTestId("navigate")).toBeNull();
-    expect(screen.getByTestId("route-guard-loading")).toBeInTheDocument();
-  });
-
-  it("renders loading indicator while permissions are loading", () => {
-    mockUseAuth.mockReturnValue(authenticatedAdmin);
-    mockUsePermissionsContext.mockReturnValue(permissionsLoading);
-
-    render(
-      <AdminRoute>
-        <div data-testid="child">Admin Content</div>
-      </AdminRoute>,
-    );
-
-    expect(screen.queryByTestId("child")).toBeNull();
-    expect(screen.queryByTestId("navigate")).toBeNull();
-    expect(screen.getByTestId("route-guard-loading")).toBeInTheDocument();
   });
 
   it("redirects when requiredPermission is not granted", () => {

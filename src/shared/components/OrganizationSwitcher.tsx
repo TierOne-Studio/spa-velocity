@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import {
   IconBuilding,
   IconCheck,
@@ -29,6 +29,7 @@ import { Input } from "@/shared/components/ui/input"
 import { Label } from "@/shared/components/ui/label"
 import { Skeleton } from "@/shared/components/ui/skeleton"
 
+import { useQueryClient } from "@tanstack/react-query"
 import { organization } from "@/shared/lib/auth-client"
 import { usePermissionsContext } from "@/shared/context/PermissionsContext"
 import { useAuth } from "@/shared/context/AuthContext"
@@ -43,13 +44,21 @@ interface Organization {
 
 export function OrganizationSwitcher() {
   const { can } = usePermissionsContext()
-  const { isAdmin } = useAuth()
+  const { isAdmin, refreshSession } = useAuth()
+  const queryClient = useQueryClient()
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [newOrgData, setNewOrgData] = useState({ name: "", slug: "" })
   const [organizations, setOrganizations] = useState<Organization[]>([])
   const [activeMember, setActiveMember] = useState<{ organizationId?: string } | null>(null)
   const [orgsLoading, setOrgsLoading] = useState(true)
   const canCreateOrganization = can("organization", "create")
+
+  // Refresh session + invalidate all cached queries after org change.
+  // Replaces window.location.reload() to avoid full-page flicker.
+  const refreshAfterOrgChange = useCallback(async () => {
+    await refreshSession()
+    await queryClient.invalidateQueries()
+  }, [refreshSession, queryClient])
 
   // Fetch organizations using Better Auth client
   useEffect(() => {
@@ -73,7 +82,7 @@ export function OrganizationSwitcher() {
         if (orgs.length > 0 && !member?.organizationId) {
           try {
             await organization.setActive({ organizationId: orgs[0].id })
-            window.location.reload()
+            await refreshAfterOrgChange()
             return
           } catch (err) {
             console.error("Failed to auto-activate organization:", err)
@@ -86,7 +95,7 @@ export function OrganizationSwitcher() {
       }
     }
     fetchData()
-  }, [])
+  }, [refreshAfterOrgChange])
 
   const [isLoading, setIsLoading] = useState(false)
 
@@ -112,10 +121,11 @@ export function OrganizationSwitcher() {
         throw new Error(result.error.message || "Failed to switch organization")
       }
       toast.success("Switched organization")
-      // Reload page to refresh session data across the app
-      window.location.reload()
+      await refreshAfterOrgChange()
+      await refreshData()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to switch organization")
+    } finally {
       setIsLoading(false)
     }
   }
