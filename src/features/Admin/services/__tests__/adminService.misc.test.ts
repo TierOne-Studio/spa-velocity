@@ -1,12 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockFetchWithAuth, mockAdmin } = vi.hoisted(() => ({
+const { mockFetchWithAuth } = vi.hoisted(() => ({
   mockFetchWithAuth: vi.fn(),
-  mockAdmin: {
-    listUsers: vi.fn(),
-    impersonateUser: vi.fn(),
-    stopImpersonating: vi.fn(),
-  },
 }));
 
 vi.mock("@shared/lib/fetch-with-auth", () => ({
@@ -14,11 +9,11 @@ vi.mock("@shared/lib/fetch-with-auth", () => ({
 }));
 
 vi.mock("@shared/lib/auth-client", () => ({
-  admin: mockAdmin,
+  admin: {},
   organization: {},
 }));
 
-import { adminService, getOrganizationRolesMetadata } from "../adminService";
+import { getOrganizationRolesMetadata } from "../adminService";
 
 describe("getOrganizationRolesMetadata", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -66,46 +61,3 @@ describe("getOrganizationRolesMetadata", () => {
   });
 });
 
-describe("adminService.hasPermission", () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it("throws when admin.listUsers returns error — covers if(error) branch", async () => {
-    mockAdmin.listUsers.mockResolvedValue({ data: null, error: { message: "List failed" } });
-
-    await expect(
-      adminService.hasPermission({ userId: "u-1", permissions: { user: ["read"] } }),
-    ).rejects.toThrow("List failed");
-  });
-
-  it("throws fallback when error has no message", async () => {
-    mockAdmin.listUsers.mockResolvedValue({ data: null, error: {} });
-
-    await expect(
-      adminService.hasPermission({ userId: "u-1", permissions: {} }),
-    ).rejects.toThrow("Failed to check permission");
-  });
-
-  it("returns false when user not found — covers !user branch", async () => {
-    mockAdmin.listUsers.mockResolvedValue({ data: { users: [] }, error: null });
-
-    const result = await adminService.hasPermission({ userId: "missing", permissions: {} });
-
-    expect(result).toEqual({ hasPermission: false });
-  });
-
-  it("returns true for admin role — covers user.role === admin branch", async () => {
-    mockAdmin.listUsers.mockResolvedValue({ data: { users: [{ id: "u-1", role: "admin" }] }, error: null });
-
-    const result = await adminService.hasPermission({ userId: "u-1", permissions: {} });
-
-    expect(result).toEqual({ hasPermission: true });
-  });
-
-  it("returns false for non-admin role — covers else branch", async () => {
-    mockAdmin.listUsers.mockResolvedValue({ data: { users: [{ id: "u-1", role: "member" }] }, error: null });
-
-    const result = await adminService.hasPermission({ userId: "u-1", permissions: {} });
-
-    expect(result).toEqual({ hasPermission: false });
-  });
-});

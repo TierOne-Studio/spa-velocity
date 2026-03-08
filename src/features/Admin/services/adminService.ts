@@ -422,43 +422,6 @@ export const adminService = {
         }
     },
 
-    // ============ Permission Checking ============
-
-    /**
-     * Check if a user has specific permissions.
-     * This fetches the user to get their role, then checks permissions client-side.
-     */
-    async hasPermission(params: {
-        userId: string;
-        permissions: Record<string, string[]>;
-    }): Promise<{ hasPermission: boolean }> {
-        // Fetch user to get their role
-        const { data, error } = await admin.listUsers({
-            query: {
-                limit: 1,
-                filterField: "id",
-                filterValue: params.userId,
-            },
-        });
-
-        if (error) {
-            throw new Error(error.message || "Failed to check permission");
-        }
-
-        const user = data?.users?.[0];
-        if (!user) {
-            return { hasPermission: false };
-        }
-
-        // Admin role has all permissions
-        if (user.role === "admin") {
-            return { hasPermission: true };
-        }
-
-        // For other roles, we would check against the RBAC config
-        // For now, return false for non-admin users
-        return { hasPermission: false };
-    },
 };
 
 /**
@@ -530,26 +493,6 @@ export const organizationService = {
     },
 
     /**
-     * Check whether a role can create organizations.
-     * Uses backend permission source of truth (role_permissions + PermissionsGuard).
-     */
-    async canCreateOrganization(role: string | undefined): Promise<boolean> {
-        if (!role) return false;
-        if (role === "admin") return true;
-
-        const response = await fetchWithAuth(
-            `${API_BASE_URL}/api/rbac/check/${encodeURIComponent(role)}/organization/create`,
-        );
-
-        if (!response.ok) {
-            return false;
-        }
-
-        const result = await response.json().catch(() => ({ data: { hasPermission: false } }));
-        return Boolean(result?.data?.hasPermission);
-    },
-
-    /**
      * Get full organization details.
      */
     async getOrganization(organizationId: string) {
@@ -568,16 +511,18 @@ export const organizationService = {
      * Update an organization.
      */
     async updateOrganization(organizationId: string, data: { name?: string; slug?: string; logo?: string; metadata?: Record<string, unknown> }) {
-        const { data: result, error } = await organization.update({
-            organizationId,
-            data,
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/platform-admin/organizations/${organizationId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data),
         });
-
-        if (error) {
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
             throw new Error(error.message || "Failed to update organization");
         }
 
-        return result;
+        const result = await response.json();
+        return result.data;
     },
 
     /**

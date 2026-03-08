@@ -221,11 +221,11 @@ test.describe('Admin Panel E2E Tests', () => {
 
     test('should display organizations page', async ({ page }) => {
       await expect(page.getByRole('heading', { name: /organizations/i })).toBeVisible();
-      await expect(page.getByRole('button', { name: /create organization/i })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Create Organization', exact: true })).toBeVisible();
     });
 
     test('should open create organization dialog', async ({ page }) => {
-      await page.getByRole('button', { name: /create organization/i }).click();
+      await page.getByRole('button', { name: 'Create Organization', exact: true }).click();
       await expect(page.getByRole('dialog')).toBeVisible();
       // Use heading role to be specific about the dialog title
       await expect(page.getByRole('heading', { name: 'Create Organization' })).toBeVisible();
@@ -239,7 +239,7 @@ test.describe('Admin Panel E2E Tests', () => {
 
     test('should render OrganizationsPage without Select component errors', async ({ page }) => {
       await expect(page.getByRole('heading', { name: /organizations/i })).toBeVisible({ timeout: 10000 });
-      await expect(page.getByRole('button', { name: /create organization/i })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Create Organization', exact: true })).toBeVisible();
 
       const consoleErrors: string[] = [];
       page.on('console', (msg) => {
@@ -476,7 +476,7 @@ test.describe('Admin Panel E2E Tests', () => {
     });
 
     test('should validate slug when creating organization', async ({ page }) => {
-      await page.getByRole('button', { name: /create organization/i }).click();
+      await page.getByRole('button', { name: 'Create Organization', exact: true }).click();
       await expect(page.getByRole('dialog')).toBeVisible();
       
       // Fill in name

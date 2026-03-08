@@ -225,7 +225,7 @@ test.describe.serial('Organization Management - Full CRUD', () => {
     await page.goto('/admin/organizations');
     // Wait for page heading and Create button to be visible
     await expect(page.getByRole('heading', { name: /organizations/i })).toBeVisible({ timeout: 15000 });
-    await expect(page.getByRole('button', { name: /create organization/i })).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole('button', { name: 'Create Organization', exact: true })).toBeVisible({ timeout: 15000 });
   });
 
   test('should create a new organization', async ({ page }) => {
@@ -233,7 +233,7 @@ test.describe.serial('Organization Management - Full CRUD', () => {
     const orgSlug = `test-org-${uniqueId()}`;
 
     // Wait for Create button to be ready
-    const createButton = page.getByRole('button', { name: /create organization/i });
+    const createButton = page.getByRole('button', { name: 'Create Organization', exact: true });
     await expect(createButton).toBeEnabled();
     await createButton.click();
     

@@ -58,7 +58,14 @@ export default function LoginPage() {
     const onSubmit = async (values: LoginFormValues) => {
         try {
             await login(values);
-            // Navigation will happen via useEffect when isAuthenticated changes
+            const pendingInvitationId = sessionStorage.getItem("pendingInvitationId");
+            if (pendingInvitationId) {
+                sessionStorage.removeItem("pendingInvitationId");
+                navigate(`/accept-invitation/${pendingInvitationId}`, { replace: true });
+                return;
+            }
+
+            navigate("/", { replace: true });
         } catch (error) {
             const message = error instanceof Error ? error.message : "Login failed";
             toast.error(message);

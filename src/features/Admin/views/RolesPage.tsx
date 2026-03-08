@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   useRoles,
   useCreateRole,
@@ -7,7 +7,6 @@ import {
   usePermissionsGrouped,
   useAssignPermissions,
 } from "../hooks/useRoles";
-import { useAuth } from "@/shared/context/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -39,6 +38,8 @@ import { toast } from "sonner";
 import { roleColorMap, ROLE_COLORS } from "../types/rbac";
 import type { Role, Permission } from "../types/rbac";
 import { usePermissionsContext } from "@/shared/context/PermissionsContext";
+import { useAuth } from "@/shared/context/AuthContext";
+import { filterVisibleRoles } from "../utils/role-hierarchy";
 
 /**
  * Component to display permissions for a role
@@ -149,6 +150,8 @@ function RoleCard({
 export function RolesPage() {
   const { can } = usePermissionsContext();
   const { user } = useAuth();
+  const userRole = user?.role ?? "member";
+  
   const { data: roles = [], isLoading } = useRoles();
   const { data: permissionsGrouped = {} } = usePermissionsGrouped();
   const createRole = useCreateRole();
@@ -161,14 +164,8 @@ export function RolesPage() {
   const canDeleteRole = can("role", "delete");
   const canAssignRolePermissions = can("role", "assign");
 
-  // Filter roles based on user's platform role
-  // Managers can only work with member role, admins see all roles
-  const visibleRoles = useMemo(() => {
-    if (user?.role === 'manager') {
-      return roles.filter(role => role.name === 'member');
-    }
-    return roles;
-  }, [roles, user?.role]);
+  // Filter roles by hierarchy: users see only roles strictly below their level
+  const visibleRoles = filterVisibleRoles(roles, userRole);
   
   // State for role permissions (fetched individually)
   const [rolePermissions, setRolePermissions] = useState<Record<string, Permission[]>>({});
@@ -224,7 +221,7 @@ export function RolesPage() {
   }, [roles, fetchRolePermissions]);
 
   const handleCreateRole = async () => {
-    if (!canCreateRole || user?.role !== 'admin') {
+    if (!canCreateRole) {
       toast.error("You do not have permission to create roles");
       return;
     }
@@ -344,7 +341,7 @@ export function RolesPage() {
             Manage role-based access control for your application
           </p>
         </div>
-        {canCreateRole && user?.role === 'admin' && (
+        {canCreateRole && (
           <Button onClick={() => setCreateDialogOpen(true)}>
             <IconPlus className="h-4 w-4 mr-2" />
             Create Role

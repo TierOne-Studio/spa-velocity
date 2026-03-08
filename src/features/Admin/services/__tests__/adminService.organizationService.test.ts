@@ -102,32 +102,6 @@ describe("organizationService.createOrganization", () => {
   });
 });
 
-describe("organizationService.canCreateOrganization", () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it("returns false when role is undefined — covers !role branch", async () => {
-    const result = await organizationService.canCreateOrganization(undefined);
-    expect(result).toBe(false);
-    expect(mockFetchWithAuth).not.toHaveBeenCalled();
-  });
-
-  it("returns false when json parse fails — covers catch(() => ...) branch", async () => {
-    mockFetchWithAuth.mockResolvedValue({
-      ok: true,
-      json: () => Promise.reject(new Error("parse error")),
-    });
-
-    const result = await organizationService.canCreateOrganization("manager");
-    expect(result).toBe(false);
-  });
-
-  it("returns false when hasPermission is false in response", async () => {
-    mockFetchWithAuth.mockResolvedValue(okJson({ data: { hasPermission: false } }));
-
-    const result = await organizationService.canCreateOrganization("manager");
-    expect(result).toBe(false);
-  });
-});
 
 describe("organizationService.getOrganization", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -156,22 +130,41 @@ describe("organizationService.updateOrganization", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("returns updated org on success", async () => {
-    mockOrganization.update.mockResolvedValue({ data: { id: "org-1", name: "Updated" }, error: null });
+    mockFetchWithAuth.mockResolvedValue(okJson({ data: { id: "org-1", name: "Updated" } }));
 
     const result = await organizationService.updateOrganization("org-1", { name: "Updated" });
     expect(result).toEqual({ id: "org-1", name: "Updated" });
+    expect(mockFetchWithAuth).toHaveBeenCalledWith(
+      expect.stringContaining("/api/platform-admin/organizations/org-1"),
+      expect.objectContaining({
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Updated" }),
+      }),
+    );
   });
 
-  it("throws on error — covers if(error) branch", async () => {
-    mockOrganization.update.mockResolvedValue({ data: null, error: { message: "Update failed" } });
+  it("throws on error response", async () => {
+    mockFetchWithAuth.mockResolvedValue(errJson("Update failed"));
 
     await expect(organizationService.updateOrganization("org-1", { name: "X" })).rejects.toThrow("Update failed");
   });
 
   it("throws fallback message when error has no message", async () => {
-    mockOrganization.update.mockResolvedValue({ data: null, error: {} });
+    mockFetchWithAuth.mockResolvedValue({ ok: false, json: () => Promise.resolve({}) });
 
     await expect(organizationService.updateOrganization("org-1", {})).rejects.toThrow("Failed to update organization");
+  });
+
+  it("throws fallback when json parse fails", async () => {
+    mockFetchWithAuth.mockResolvedValue({
+      ok: false,
+      json: () => Promise.reject(new Error("parse error")),
+    });
+
+    await expect(organizationService.updateOrganization("org-1", { name: "X" })).rejects.toThrow(
+      "Failed to update organization",
+    );
   });
 });
 

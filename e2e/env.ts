@@ -29,8 +29,44 @@ function parseEnvFile(filePath: string): Record<string, string> {
   return env;
 }
 
-const envTestPath = resolve(__dirname, '../../nestjs-api-starter/.env.test');
+function resolveBackendProjectRoot(): string {
+  const candidates = [
+    process.env.E2E_BACKEND_PROJECT_ROOT,
+    resolve(__dirname, '../../api-ampliri'),
+    resolve(__dirname, '../../nestjs-api-starter'),
+  ].filter((value): value is string => Boolean(value));
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return resolve(__dirname, '../../api-ampliri');
+}
+
+function resolveBackendEnvFile(backendProjectRoot: string): string {
+  const candidates = [
+    process.env.E2E_BACKEND_ENV_FILE,
+    resolve(backendProjectRoot, '.env.test'),
+    resolve(backendProjectRoot, '.env'),
+    resolve(__dirname, '../.env.test'),
+  ].filter((value): value is string => Boolean(value));
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return resolve(backendProjectRoot, '.env.test');
+}
+
+const backendProjectRoot = resolveBackendProjectRoot();
+const envTestPath = resolveBackendEnvFile(backendProjectRoot);
 const envVars = existsSync(envTestPath) ? parseEnvFile(envTestPath) : {};
+
+export const BACKEND_PROJECT_ROOT = backendProjectRoot;
 
 /** Absolute path to .env.test — used by playwright.config.ts to tell the backend which env file to load */
 export const ENV_TEST_PATH = envTestPath;

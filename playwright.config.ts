@@ -1,5 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
-import { API_BASE_URL, FE_URL, ENV_TEST_PATH, DATABASE_URL } from './e2e/env';
+import { API_BASE_URL, FE_URL, ENV_TEST_PATH, DATABASE_URL, BACKEND_PROJECT_ROOT, ENV_VARS } from './e2e/env';
 
 function getPortFromUrl(url: string, fallback: number): number {
   try {
@@ -45,12 +45,13 @@ export default defineConfig({
   webServer: [
     {
       command: 'npm run start:dev',
-      cwd: '../nestjs-api-starter',
+      cwd: BACKEND_PROJECT_ROOT,
       url: `${API_BASE_URL}/health`,
       reuseExistingServer,
       timeout: 120 * 1000,
       // Tell dotenv/config (used by the backend) to load .env.test
       env: {
+        ...ENV_VARS,
         DOTENV_CONFIG_PATH: ENV_TEST_PATH,
         PORT: String(apiPort),
         ...(DATABASE_URL ? { DATABASE_URL } : {}),

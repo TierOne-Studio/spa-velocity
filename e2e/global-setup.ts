@@ -1,5 +1,5 @@
 import { Pool } from 'pg';
-import { DATABASE_URL, API_BASE_URL, TEST_USER } from './env';
+import { DATABASE_URL, API_BASE_URL, TEST_USER, ENV_TEST_PATH } from './env';
 
 const TEST_USER_EMAIL = TEST_USER.email;
 const TEST_USER_PASSWORD = TEST_USER.password;
@@ -84,7 +84,7 @@ async function globalSetup() {
 
   if (!databaseUrl) {
     throw new Error(
-      'E2E setup failed: DATABASE_URL is missing. Set E2E_DATABASE_URL or provide DATABASE_URL in nestjs-api-starter/.env.test.',
+      `E2E setup failed: DATABASE_URL is missing. Set E2E_DATABASE_URL or provide DATABASE_URL in ${ENV_TEST_PATH}.`,
     );
   }
   
