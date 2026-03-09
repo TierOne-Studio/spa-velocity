@@ -1,12 +1,13 @@
 import { test, expect, type Page } from '@playwright/test';
 
 import { TEST_USER } from './env';
-import { loginWithCredentials, withDatabase } from './test-helpers';
+import { ensureUserRecord, escapeRegExp, loginWithCredentials, withDatabase } from './test-helpers';
 import { resendTestEmail } from '../src/shared/utils/resendTestEmail';
 
 const EXISTING_ORG_SLUG = `e2e-org-existing-${Date.now()}`;
 const MANAGE_ORG_SLUG = `e2e-org-manage-${Date.now()}`;
 const MANAGE_MEMBER_EMAIL = resendTestEmail('delivered', `e2e-org-member-${Date.now()}`);
+const ADD_MEMBER_CANDIDATE_EMAIL = resendTestEmail('delivered', `e2e-org-candidate-${Date.now()}`);
 
 async function ensureOrganization(slug: string, name: string): Promise<void> {
   await withDatabase(async (pool) => {
@@ -78,6 +79,26 @@ async function loginAsAdmin(page: Page) {
   await loginWithCredentials(page, TEST_USER.email, TEST_USER.password);
 }
 
+async function openAddMemberUserDropdown(page: Page) {
+  const dialog = page.getByRole('dialog');
+  const userSelect = dialog.getByRole('combobox').first();
+
+  await expect(userSelect).toBeVisible({ timeout: 10000 });
+  await userSelect.click();
+
+  const candidateOption = page.getByRole('option', {
+    name: new RegExp(escapeRegExp(ADD_MEMBER_CANDIDATE_EMAIL), 'i'),
+  });
+
+  const opened = await candidateOption.isVisible({ timeout: 3000 }).catch(() => false);
+  if (!opened) {
+    await userSelect.focus();
+    await userSelect.press('Enter');
+  }
+
+  await expect(candidateOption).toBeVisible({ timeout: 5000 });
+}
+
 async function openOrganizationsPage(page: Page) {
   await page.goto('/admin/organizations');
   await page.waitForLoadState('networkidle');
@@ -88,6 +109,11 @@ test.describe('Organizations edge cases', () => {
   test.beforeAll(async () => {
     await ensureOrganization(EXISTING_ORG_SLUG, 'E2E Existing Organization');
     await ensureOrganization(MANAGE_ORG_SLUG, 'E2E Manage Organization');
+    await ensureUserRecord({
+      email: ADD_MEMBER_CANDIDATE_EMAIL,
+      name: 'E2E Candidate User',
+      role: 'member',
+    });
     await ensureMemberInOrganization({
       orgSlug: MANAGE_ORG_SLUG,
       email: MANAGE_MEMBER_EMAIL,
@@ -143,10 +169,10 @@ test.describe('Organizations edge cases', () => {
     const addButton = dialog.getByRole('button', { name: /^add member$/i });
     await expect(addButton).toBeDisabled();
 
-    const noUsersOption = dialog.getByText(/no users available/i);
-    if (await noUsersOption.isVisible().catch(() => false)) {
-      await expect(addButton).toBeDisabled();
-    }
+    await openAddMemberUserDropdown(page);
+    await expect(
+      page.getByRole('option', { name: new RegExp(escapeRegExp(ADD_MEMBER_CANDIDATE_EMAIL), 'i') }),
+    ).toBeVisible();
   });
 
   test('cancel remove member should keep member count unchanged', async ({ page }) => {
