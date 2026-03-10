@@ -1,7 +1,8 @@
 import React, { createContext, useContext } from "react";
 import type { User, AuthState, LoginCredentials, SignupCredentials } from "@features/Auth/types";
-import { useSession, signIn, signUp, signOut } from "@shared/lib/auth-client";
+import { signIn, signUp, signOut } from "@shared/lib/auth-client";
 import { fetchWithAuth } from "@shared/lib/fetch-with-auth";
+import { useEffectiveSession } from "@shared/hooks/useEffectiveSession";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
@@ -19,8 +20,7 @@ interface AuthContextType extends AuthState {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-    // Use Better Auth's useSession hook
-    const { data: session, isPending: isLoading, refetch } = useSession();
+    const { data: session, isPending: isLoading, refetch } = useEffectiveSession();
 
     const rawRole = (session?.user as { role?: string | string[] } | undefined)?.role;
     const normalizedRole = (() => {
