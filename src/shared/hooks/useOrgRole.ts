@@ -1,4 +1,4 @@
-import { useSession } from "@shared/lib/auth-client";
+import { useEffectiveSession } from "@shared/hooks/useEffectiveSession";
 
 // Unified Role Model - roles that can manage organization settings
 // - 'admin': Global platform administrator (can manage all orgs)
@@ -15,7 +15,7 @@ const MANAGER_ROLES = ['admin', 'manager'];
  * - 'member': Organization member
  */
 export function useOrgRole() {
-  const { data: session } = useSession();
+  const { data: session } = useEffectiveSession();
 
   const sessionData = session?.session as { 
     activeOrganizationId?: string;

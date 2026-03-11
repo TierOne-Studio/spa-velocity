@@ -111,7 +111,7 @@ export function UsersPage() {
   const [newUserData, setNewUserData] = useState<{ name: string; email: string; password: string; role: 'admin' | 'manager' | 'member'; organizationId?: string }>({ name: "", email: "", password: "", role: "member" })
   const [editUserData, setEditUserData] = useState({ name: "" })
   const [banReason, setBanReason] = useState("")
-  const [newRole, setNewRole] = useState("user")
+  const [newRole, setNewRole] = useState("member")
   const [newPassword, setNewPassword] = useState("")
 
   const [createMeta, setCreateMeta] = useState<null | {
@@ -138,7 +138,7 @@ export function UsersPage() {
   }), [pageSize, pageIndex, sortBy, sortDirection, searchValue])
 
   // Auth context
-  const { user: currentUser, refreshSession } = useAuth()
+  const { user: currentUser } = useAuth()
   const { can } = usePermissionsContext()
   const { activeOrganizationId } = useOrgRole()
 
@@ -330,9 +330,8 @@ export function UsersPage() {
       await impersonateUser.mutateAsync({
         userId: user.id,
         role: currentUser?.role || "member",
-        organizationId: activeOrganizationId || undefined,
+        organizationId: currentUser?.role === "manager" ? activeOrganizationId || undefined : undefined,
       })
-      await refreshSession()
       toast.success(`Now impersonating ${user.name}`)
       window.location.href = "/" // Redirect to dashboard
     } catch (error) {
@@ -384,7 +383,7 @@ export function UsersPage() {
       accessorKey: "role",
       header: "Role",
       cell: ({ row }) => {
-        const role = row.original.role || "user"
+        const role = row.original.role || "member"
         return (
           <Badge variant={role === "admin" ? "default" : "secondary"}>
             {role}

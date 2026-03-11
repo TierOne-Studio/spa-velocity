@@ -86,7 +86,7 @@ describe("useRoles hooks", () => {
     it("should fetch roles from API", async () => {
       const mockRoles = [
         { id: "1", name: "admin", displayName: "Admin", description: "Full access", color: "red", isSystem: true },
-        { id: "2", name: "user", displayName: "User", description: "Basic user", color: "gray", isSystem: true },
+        { id: "2", name: "member", displayName: "Member", description: "Basic member", color: "gray", isSystem: true },
       ];
       mockRbacService.getRoles.mockResolvedValue(mockRoles);
 

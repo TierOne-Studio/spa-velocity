@@ -16,7 +16,8 @@ export async function withDatabase<T>(fn: (pool: Pool) => Promise<T>): Promise<T
 }
 
 export function uniqueEmail(prefix: string): string {
-  return uniqueResendDeliveredEmail(prefix);
+  const normalizedPrefix = prefix.startsWith('e2e-') ? prefix : `e2e-${prefix}`;
+  return uniqueResendDeliveredEmail(normalizedPrefix);
 }
 
 export function escapeRegExp(value: string): string {

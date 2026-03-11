@@ -1,19 +1,19 @@
-import { useSession } from "@shared/lib/auth-client";
+import { useEffectiveSession } from "@shared/hooks/useEffectiveSession";
 
 /**
  * Hook to check if the current session is an impersonation session.
  * Returns impersonation state and the original user ID (impersonatedBy).
  */
 export function useIsImpersonating() {
-  const { data: session } = useSession();
+  const { data: session } = useEffectiveSession();
 
   const sessionData = session?.session as { impersonatedBy?: string } | undefined;
   const impersonatedBy = sessionData?.impersonatedBy ?? null;
-  const hasOrgScopedImpersonation =
+  const hasLocalImpersonation =
     typeof window !== "undefined" &&
-    localStorage.getItem("impersonation_mode") === "org" &&
+    ["custom", "org"].includes(localStorage.getItem("impersonation_mode") ?? "") &&
     !!localStorage.getItem("original_bearer_token");
-  const isImpersonating = !!impersonatedBy || hasOrgScopedImpersonation;
+  const isImpersonating = !!impersonatedBy || hasLocalImpersonation;
 
   return {
     isImpersonating,
