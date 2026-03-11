@@ -1,4 +1,4 @@
-import { admin, organization } from "@shared/lib/auth-client";
+import { organization } from "@shared/lib/auth-client";
 import { fetchWithAuth } from "@shared/lib/fetch-with-auth";
 import type {
     AdminUser,
@@ -294,44 +294,27 @@ export const adminService = {
      * Manager uses org-scoped endpoint which validates org membership.
      */
     async impersonateUser(userId: string, options?: { role?: string; organizationId?: string }): Promise<void> {
-        const role = options?.role || "admin";
         const orgId = options?.organizationId;
 
-        if (role === "admin") {
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/users/${userId}/impersonate`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(orgId ? { organizationId: orgId } : {}),
+        });
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.message || "Failed to impersonate user");
+        }
+        const data = await response.json();
+        if (data.sessionToken) {
             const originalToken = localStorage.getItem("bearer_token");
-            const { error } = await admin.impersonateUser({ userId });
-            if (error) {
-                throw new Error(error.message || "Failed to impersonate user");
-            }
             if (originalToken) {
                 localStorage.setItem("original_bearer_token", originalToken);
             }
-            localStorage.setItem(IMPERSONATION_MODE_STORAGE_KEY, "admin");
+            localStorage.setItem("bearer_token", data.sessionToken);
+            localStorage.setItem(IMPERSONATION_MODE_STORAGE_KEY, "custom");
         } else {
-            if (!orgId) {
-                throw new Error("Active organization required for manager impersonation");
-            }
-            const response = await fetchWithAuth(`${API_BASE_URL}/api/organization/${orgId}/impersonate`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ userId }),
-            });
-            if (!response.ok) {
-                const error = await response.json().catch(() => ({}));
-                throw new Error(error.message || "Failed to impersonate user");
-            }
-            const data = await response.json();
-            if (data.sessionToken) {
-                // Save original token so we can restore it when stopping impersonation
-                const originalToken = localStorage.getItem("bearer_token");
-                if (originalToken) {
-                    localStorage.setItem("original_bearer_token", originalToken);
-                }
-                localStorage.setItem("bearer_token", data.sessionToken);
-                localStorage.setItem(IMPERSONATION_MODE_STORAGE_KEY, "org");
-            } else {
-                throw new Error("Missing impersonation session token");
-            }
+            throw new Error("Missing impersonation session token");
         }
     },
 
@@ -344,32 +327,13 @@ export const adminService = {
         const originalToken = localStorage.getItem("original_bearer_token");
         const mode = localStorage.getItem(IMPERSONATION_MODE_STORAGE_KEY);
 
-        if (originalToken && mode === "admin") {
-            const { error } = await admin.stopImpersonating();
-            if (error) {
-                const errorCode = (error as { code?: string }).code;
-                const errorMessage = error.message || "";
-                const isMissingAdminSession =
-                    errorCode === "FAILED_TO_FIND_ADMIN_SESSION" ||
-                    errorMessage.toLowerCase().includes("failed to find admin session");
-
-                if (!isMissingAdminSession) {
-                    throw new Error(error.message || "Failed to stop impersonating");
-                }
-            }
-            restoreOriginalToken(originalToken);
-            return;
-        }
-
         if (originalToken) {
-            // Org-scoped impersonation: delete the impersonated session, restore original token
             const response = await fetchWithAuth(`${API_BASE_URL}/api/organization/stop-impersonating`, {
                 method: "POST",
             });
             if (!response.ok) {
                 const error = await response.json().catch(() => ({}));
 
-                // Recover gracefully when impersonated session is already gone.
                 const statusCode =
                     typeof (error as { statusCode?: unknown }).statusCode === "number"
                         ? (error as { statusCode: number }).statusCode
@@ -387,37 +351,9 @@ export const adminService = {
             }
             restoreOriginalToken(originalToken);
         } else {
-            if (mode === "org") {
-                const adminWithOrgStop = admin as typeof admin & {
-                    stopOrgImpersonating?: () => Promise<{ error: { message?: string } | null }>;
-                };
-
-                try {
-                    if (typeof adminWithOrgStop.stopOrgImpersonating === "function") {
-                        const { error } = await adminWithOrgStop.stopOrgImpersonating();
-                        if (error) {
-                            throw new Error(error.message || "Failed to stop impersonating");
-                        }
-                    } else {
-                        console.warn(
-                            "[Impersonation] org stop requested without original token, but admin.stopOrgImpersonating is unavailable; clearing local mode only.",
-                        );
-                    }
-                } finally {
-                    localStorage.removeItem(IMPERSONATION_MODE_STORAGE_KEY);
-                }
-
-                return;
-            }
-
-            // Admin impersonation: use Better Auth's built-in endpoint
-            try {
-                const { error } = await admin.stopImpersonating();
-                if (error) {
-                    throw new Error(error.message || "Failed to stop impersonating");
-                }
-            } finally {
+            if (mode === "custom" || mode === "org" || mode === "admin") {
                 localStorage.removeItem(IMPERSONATION_MODE_STORAGE_KEY);
+                return;
             }
         }
     },
@@ -547,6 +483,25 @@ export const organizationService = {
             const error = await response.json().catch(() => ({}));
             throw new Error(error.message || "Failed to list members");
         }
+        const result = await response.json();
+        return result.data ?? [];
+    },
+
+    async listMemberCandidates(organizationId: string, params: { search?: string; limit?: number } = {}) {
+        const url = new URL(`${API_BASE_URL}/api/platform-admin/organizations/${organizationId}/member-candidates`);
+        if (params.search) {
+            url.searchParams.set("search", params.search);
+        }
+        if (params.limit) {
+            url.searchParams.set("limit", String(params.limit));
+        }
+
+        const response = await fetchWithAuth(url.toString());
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.message || "Failed to list member candidates");
+        }
+
         const result = await response.json();
         return result.data ?? [];
     },

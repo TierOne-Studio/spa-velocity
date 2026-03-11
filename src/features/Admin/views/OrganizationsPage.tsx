@@ -48,7 +48,7 @@ import {
   useAddMember,
   useCheckSlug,
 } from "../hooks/useOrganizations"
-import { adminService } from "../services/adminService"
+import { organizationService } from "../services/adminService"
 import { getOrganizationRolesMetadata } from "../services/adminService"
 import { filterAssignableRoles } from "../utils/role-hierarchy"
 import { useAuth } from "@/shared/context/AuthContext"
@@ -239,6 +239,8 @@ export function OrganizationsPage() {
   }
 
   const handleOpenAddMemberDialog = async () => {
+    if (!selectedOrg) return
+
     if (!canManageMembers) {
       toast.error("You do not have permission to invite members")
       return
@@ -246,11 +248,8 @@ export function OrganizationsPage() {
 
     setUsersLoading(true)
     try {
-      const response = await adminService.listUsers({ limit: 100 })
-      // Filter out users who are already members
-      const memberUserIds = members.map(m => m.userId)
-      const filtered = response.data.filter((u: User) => !memberUserIds.includes(u.id))
-      setAvailableUsers(filtered)
+      const candidates = await organizationService.listMemberCandidates(selectedOrg.id, { limit: 100 })
+      setAvailableUsers(candidates)
     } catch {
       toast.error("Failed to load users")
     } finally {
