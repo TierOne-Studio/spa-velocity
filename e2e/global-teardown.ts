@@ -21,33 +21,27 @@ async function globalTeardown() {
   });
 
   try {
-    // Get test user ID
-    const userResult = await pool.query(
-      `SELECT id FROM "user" WHERE email = $1`,
-      [TEST_USER_EMAIL]
+    const userResult = await pool.query<{ id: string }>(
+      `SELECT id
+       FROM "user"
+       WHERE email = $1
+          OR email LIKE $2`,
+      [TEST_USER_EMAIL, 'delivered+e2e-%@resend.dev']
     );
 
     if (userResult.rowCount === 0) {
-      console.log('ℹ️ Test user not found, nothing to clean up');
+      console.log('ℹ️ E2E users not found, nothing to clean up');
       return;
     }
 
-    const userId = userResult.rows[0].id;
+    const userIds = userResult.rows.map((row) => row.id);
 
-    // Delete in correct order to respect foreign key constraints
-    // 1. Delete sessions
-    await pool.query(`DELETE FROM session WHERE "userId" = $1`, [userId]);
-    
-    // 2. Delete organization memberships
-    await pool.query(`DELETE FROM member WHERE "userId" = $1`, [userId]);
-    
-    // 3. Delete account (credentials)
-    await pool.query(`DELETE FROM account WHERE "userId" = $1`, [userId]);
-    
-    // 4. Delete user
-    await pool.query(`DELETE FROM "user" WHERE id = $1`, [userId]);
+    await pool.query(`DELETE FROM session WHERE "userId" = ANY($1::text[])`, [userIds]);
+    await pool.query(`DELETE FROM member WHERE "userId" = ANY($1::text[])`, [userIds]);
+    await pool.query(`DELETE FROM account WHERE "userId" = ANY($1::text[])`, [userIds]);
+    await pool.query(`DELETE FROM "user" WHERE id = ANY($1::text[])`, [userIds]);
 
-    console.log(`🧹 Cleaned up test user: ${TEST_USER_EMAIL}`);
+    console.log(`🧹 Cleaned up ${userIds.length} E2E user(s) including ${TEST_USER_EMAIL}`);
   } catch (error) {
     console.error('❌ Failed to clean up test user:', error);
     throw error;
