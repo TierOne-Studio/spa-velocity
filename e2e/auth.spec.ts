@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { API_BASE_URL, TEST_USER } from './env';
-import { uniqueEmail } from './test-helpers';
+import { uniqueEmail, withDatabase } from './test-helpers';
 import { resendTestEmail } from '../src/shared/utils/resendTestEmail';
 
 // Helper to create a verified user directly via API
@@ -64,6 +64,17 @@ test.describe('Authentication E2E Tests', () => {
       await expect
         .poll(() => new URL(page.url()).pathname, { timeout: 10000 })
         .toMatch(/^\/(?:login)?$/);
+
+      const createdRole = await withDatabase(async (pool) => {
+        const result = await pool.query<{ role: string }>(
+          `SELECT role FROM "user" WHERE email = $1`,
+          [testUser.email],
+        );
+
+        return result.rows[0]?.role ?? null;
+      });
+
+      expect(createdRole).toBe('member');
     });
 
     test('should navigate to login page from signup', async ({ page }) => {

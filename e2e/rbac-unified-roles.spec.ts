@@ -814,7 +814,7 @@ test.describe('Organization Scoping - Manager Restrictions', () => {
         `INSERT INTO "user" (id, name, email, role, "emailVerified", "createdAt", "updatedAt")
          VALUES (gen_random_uuid()::text, $1, $2, $3, false, NOW(), NOW())
          RETURNING id`,
-        ['User In Manager Org', resendTestEmail('delivered', `user-in-mgr-org-${Date.now()}`), 'member']
+        ['User In Manager Org', resendTestEmail('delivered', `e2e-user-in-mgr-org-${Date.now()}`), 'member']
       );
       userInManagerOrg = user1Result.rows[0].id;
       
@@ -828,7 +828,7 @@ test.describe('Organization Scoping - Manager Restrictions', () => {
         `INSERT INTO "user" (id, name, email, role, "emailVerified", "createdAt", "updatedAt")
          VALUES (gen_random_uuid()::text, $1, $2, $3, false, NOW(), NOW())
          RETURNING id`,
-        ['User In Other Org', resendTestEmail('delivered', `user-in-other-org-${Date.now()}`), 'member']
+        ['User In Other Org', resendTestEmail('delivered', `e2e-user-in-other-org-${Date.now()}`), 'member']
       );
       userInOtherOrg = user2Result.rows[0].id;
       
