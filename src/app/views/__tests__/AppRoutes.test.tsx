@@ -23,7 +23,6 @@ vi.mock("@features/Admin", () => ({
   SessionsPage: () => <div>Sessions</div>,
   OrganizationsPage: () => <div>Organizations</div>,
   RolesPage: () => <div>Roles</div>,
-  InvitationsPage: () => <div>Invitations</div>,
 }));
 
 vi.mock("../RootLayout", () => ({

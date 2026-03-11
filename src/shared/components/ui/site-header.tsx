@@ -22,7 +22,6 @@ const routeConfig: Record<string, { label: string; parent?: string }> = {
   "/admin/organizations": { label: "Organizations", parent: "/admin" },
   "/admin/roles": { label: "Roles & Permissions", parent: "/admin" },
   "/admin": { label: "Admin" },
-  "/invitations": { label: "Invitations" },
 }
 
 type BreadcrumbItem = { path: string; label: string; isLast: boolean }
