@@ -1,22 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
 
-const mockUseSession = vi.fn();
+const mockUseEffectiveSession = vi.fn();
 
-vi.mock('@shared/lib/auth-client', () => ({
-    useSession: () => mockUseSession(),
+vi.mock('@shared/hooks/useEffectiveSession', () => ({
+    useEffectiveSession: () => mockUseEffectiveSession(),
 }));
 
 import { useIsImpersonating } from '../useIsImpersonating';
 
 describe('useIsImpersonating (PR#7 - role-based actions)', () => {
     beforeEach(() => {
-        mockUseSession.mockReset();
+        mockUseEffectiveSession.mockReset();
         localStorage.clear();
     });
 
     it('should return isImpersonating=true when session has impersonatedBy', () => {
-        mockUseSession.mockReturnValue({
+        mockUseEffectiveSession.mockReturnValue({
             data: {
                 session: { impersonatedBy: 'manager-user-id' },
             },
@@ -29,7 +29,7 @@ describe('useIsImpersonating (PR#7 - role-based actions)', () => {
     });
 
     it('should return isImpersonating=false when no impersonatedBy', () => {
-        mockUseSession.mockReturnValue({
+        mockUseEffectiveSession.mockReturnValue({
             data: {
                 session: {},
             },
@@ -42,7 +42,7 @@ describe('useIsImpersonating (PR#7 - role-based actions)', () => {
     });
 
     it('should return isImpersonating=false when no session', () => {
-        mockUseSession.mockReturnValue({ data: null });
+        mockUseEffectiveSession.mockReturnValue({ data: null });
 
         const { result } = renderHook(() => useIsImpersonating());
 
@@ -50,8 +50,23 @@ describe('useIsImpersonating (PR#7 - role-based actions)', () => {
         expect(result.current.impersonatedBy).toBeNull();
     });
 
-    it('should return isImpersonating=true for org-scoped manager impersonation stored in localStorage', () => {
-        mockUseSession.mockReturnValue({
+    it('should return isImpersonating=true for unified custom impersonation stored in localStorage', () => {
+        mockUseEffectiveSession.mockReturnValue({
+            data: {
+                session: {},
+            },
+        });
+        localStorage.setItem('original_bearer_token', 'manager-original-token');
+        localStorage.setItem('impersonation_mode', 'custom');
+
+        const { result } = renderHook(() => useIsImpersonating());
+
+        expect(result.current.isImpersonating).toBe(true);
+        expect(result.current.impersonatedBy).toBeNull();
+    });
+
+    it('should continue to support legacy org-scoped impersonation markers', () => {
+        mockUseEffectiveSession.mockReturnValue({
             data: {
                 session: {},
             },
