@@ -2,6 +2,8 @@ import { test, expect, type Page } from '@playwright/test';
 
 import {
   ensureOrganizationMembership,
+  ensureUserRecord,
+  escapeRegExp,
   ensureUserWithRole,
   uniqueEmail,
 } from './test-helpers';
@@ -16,6 +18,7 @@ const DEFAULT_PASSWORD = 'MatrixPassword123!';
 const adminActorEmail = uniqueEmail('e2e-rbac-orgs-admin-actor');
 const managerActorEmail = uniqueEmail('e2e-rbac-orgs-manager-actor');
 const memberActorEmail = uniqueEmail('e2e-rbac-orgs-member-actor');
+const managerCandidateEmail = uniqueEmail('e2e-rbac-orgs-manager-candidate');
 
 const managedOrgSlug = `e2e-rbac-orgs-managed-${Date.now()}`;
 
@@ -98,6 +101,28 @@ async function openAddMemberRoleDropdown(page: Page) {
   await expect(memberOption).toBeVisible({ timeout: 5000 });
 }
 
+async function openAddMemberUserDropdown(page: Page) {
+  await page.getByRole('button', { name: /add member/i }).click();
+
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible({ timeout: 10000 });
+
+  const userSelect = dialog.getByRole('combobox').first();
+  await expect(userSelect).toBeVisible({ timeout: 10000 });
+  await userSelect.click();
+
+  const candidateOption = page.getByRole('option', {
+    name: new RegExp(escapeRegExp(managerCandidateEmail), 'i'),
+  });
+  const opened = await candidateOption.isVisible({ timeout: 3000 }).catch(() => false);
+  if (!opened) {
+    await userSelect.focus();
+    await userSelect.press('Enter');
+  }
+
+  await expect(candidateOption).toBeVisible({ timeout: 5000 });
+}
+
 test.describe.serial('RBAC Organizations matrix (UI-aligned)', () => {
   test.beforeAll(async () => {
     await ensureUserWithRole({
@@ -118,6 +143,12 @@ test.describe.serial('RBAC Organizations matrix (UI-aligned)', () => {
       email: memberActorEmail,
       password: DEFAULT_PASSWORD,
       name: 'E2E RBAC Orgs Member Actor',
+      role: 'member',
+    });
+
+    await ensureUserRecord({
+      email: managerCandidateEmail,
+      name: 'E2E Manager Candidate User',
       role: 'member',
     });
 
@@ -167,6 +198,20 @@ test.describe.serial('RBAC Organizations matrix (UI-aligned)', () => {
     await openOrganizationsPage(page);
     await openOrganizationBySlug(page, managedOrgSlug);
     await expect(page.getByRole('button', { name: /add member/i })).toBeVisible();
+  });
+
+  test('manager add-member dialog lists existing non-member user candidates', async ({ page }) => {
+    await loginAs(page, 'manager');
+    await openOrganizationsPage(page);
+    await openOrganizationBySlug(page, managedOrgSlug);
+    await openAddMemberUserDropdown(page);
+
+    await expect(
+      page.getByRole('option', { name: new RegExp(escapeRegExp(managerCandidateEmail), 'i') }),
+    ).toBeVisible();
+
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
   });
 
   test('manager add-member role dropdown excludes admin option', async ({ page }) => {

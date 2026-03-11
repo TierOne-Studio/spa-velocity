@@ -223,6 +223,33 @@ describe("organizationService.listMembers", () => {
   });
 });
 
+describe("organizationService.listMemberCandidates", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("returns candidate users array on success", async () => {
+    mockFetchWithAuth.mockResolvedValue(okJson({ data: [{ id: "u-2", email: "candidate@example.com" }] }));
+
+    const result = await (organizationService as any).listMemberCandidates("org-1", { search: "candidate", limit: 25 });
+
+    expect(result).toEqual([{ id: "u-2", email: "candidate@example.com" }]);
+    expect(mockFetchWithAuth).toHaveBeenCalledWith(
+      expect.stringContaining("/api/platform-admin/organizations/org-1/member-candidates?search=candidate&limit=25"),
+    );
+  });
+
+  it("returns empty array when data is missing", async () => {
+    mockFetchWithAuth.mockResolvedValue(okJson({}));
+
+    await expect((organizationService as any).listMemberCandidates("org-1")).resolves.toEqual([]);
+  });
+
+  it("throws on error response", async () => {
+    mockFetchWithAuth.mockResolvedValue(errJson("Forbidden"));
+
+    await expect((organizationService as any).listMemberCandidates("org-1")).rejects.toThrow("Forbidden");
+  });
+});
+
 describe("organizationService.addMember", () => {
   beforeEach(() => vi.clearAllMocks());
 
