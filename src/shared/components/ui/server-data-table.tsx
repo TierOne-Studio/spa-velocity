@@ -15,6 +15,7 @@ import {
   type ColumnFiltersState,
   flexRender,
   getCoreRowModel,
+  type RowSelectionState,
   type SortingState,
   useReactTable,
   type VisibilityState,
@@ -87,9 +88,48 @@ export function ServerDataTable<TData, TValue>({
 }: ServerDataTableProps<TData, TValue>) {
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
-  const [rowSelection, setRowSelection] = React.useState({})
+  const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({})
 
   const pageCount = Math.ceil(total / pageSize)
+
+  const resolveRowId = React.useCallback((row: TData, index: number) => {
+    return getRowId ? getRowId(row) : index.toString()
+  }, [getRowId])
+
+  const getSelectedRows = React.useCallback((selection: RowSelectionState) => {
+    const selectedRowIds = new Set(
+      Object.entries(selection)
+        .filter(([, isSelected]) => Boolean(isSelected))
+        .map(([rowId]) => rowId)
+    )
+
+    return data.filter((row, index) => selectedRowIds.has(resolveRowId(row, index)))
+  }, [data, resolveRowId])
+
+  React.useEffect(() => {
+    if (!enableRowSelection) {
+      if (Object.keys(rowSelection).length > 0) {
+        setRowSelection({})
+        onRowSelectionChange?.([])
+      }
+      return
+    }
+
+    const availableRowIds = new Set(data.map((row, index) => resolveRowId(row, index)))
+
+    setRowSelection((currentSelection) => {
+      const nextSelection = Object.fromEntries(
+        Object.entries(currentSelection).filter(([rowId]) => availableRowIds.has(rowId))
+      ) as RowSelectionState
+
+      if (Object.keys(nextSelection).length === Object.keys(currentSelection).length) {
+        return currentSelection
+      }
+
+      onRowSelectionChange?.(getSelectedRows(nextSelection))
+      return nextSelection
+    })
+  }, [data, enableRowSelection, getSelectedRows, onRowSelectionChange, resolveRowId, rowSelection])
 
   const table = useReactTable({
     data,
@@ -112,16 +152,7 @@ export function ServerDataTable<TData, TValue>({
     onRowSelectionChange: (updater) => {
       const newSelection = typeof updater === "function" ? updater(rowSelection) : updater
       setRowSelection(newSelection)
-      if (onRowSelectionChange) {
-        const selectedRows = Object.keys(newSelection)
-          .filter((key) => newSelection[key as keyof typeof newSelection])
-          .map((key) => {
-            const row = table.getRow(key)
-            return row?.original
-          })
-          .filter(Boolean) as TData[]
-        onRowSelectionChange(selectedRows)
-      }
+      onRowSelectionChange?.(getSelectedRows(newSelection))
     },
     onSortingChange: (updater) => {
       const newSorting = typeof updater === "function" ? updater(sorting) : updater
