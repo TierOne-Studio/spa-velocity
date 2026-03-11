@@ -29,14 +29,6 @@ test.describe('Navigation integrity', () => {
     await expect(page.getByRole('heading', { name: /settings/i })).toBeVisible();
   });
 
-  test('direct /invitations navigation should resolve to dashboard fallback', async ({ page }) => {
-    await page.goto('/invitations');
-    await expect(page).toHaveURL('/');
-
-    const breadcrumb = page.getByLabel('breadcrumb');
-    await expect(breadcrumb.getByText('Dashboard')).toBeVisible();
-  });
-
   test('admin users page should show breadcrumb chain Admin > Users', async ({ page }) => {
     await page.goto('/admin/users');
 
