@@ -14,16 +14,15 @@ const managerEmail = uniqueEmail('e2e-role-create-manager');
 const orgSlug = `e2e-role-create-org-${Date.now()}`;
 
 const defaultManagerPermissions = [
-  ['user', 'read'],
-  ['user', 'update'],
-  ['user', 'ban'],
-  ['session', 'read'],
-  ['session', 'revoke'],
   ['organization', 'read'],
+  ['organization', 'update'],
   ['organization', 'invite'],
   ['role', 'read'],
-  ['role', 'assign'],
-  ['role', 'update'],
+  ['session', 'read'],
+  ['session', 'revoke'],
+  ['user', 'create'],
+  ['user', 'read'],
+  ['user', 'update'],
 ] as const;
 
 const managerPermissionsWithRoleCreate = [
@@ -42,8 +41,12 @@ async function setManagerPermissions(
     try {
       await client.query('BEGIN');
       await client.query(
-        `DELETE FROM role_permissions
-         WHERE role_id = (SELECT id FROM roles WHERE name = 'manager')`,
+        `DELETE FROM role_permissions rp
+         USING roles r
+         WHERE rp.role_id = r.id
+           AND r.name = 'manager'
+           AND r.organization_id = $1`,
+        [organizationId],
       );
 
       for (const [resource, action] of permissions) {
@@ -53,8 +56,9 @@ async function setManagerPermissions(
            FROM roles r
            JOIN permissions p ON p.resource = $2 AND p.action = $3
            WHERE r.name = $1
+             AND r.organization_id = $4
            ON CONFLICT DO NOTHING`,
-          ['manager', resource, action],
+          ['manager', resource, action, organizationId],
         );
       }
 
@@ -111,9 +115,9 @@ test.describe.serial('Roles page manager permission flow', () => {
     await openRolesPage(page);
 
     await expect(page.getByRole('button', { name: /create role/i })).toBeVisible();
-    await expect(page.locator('[data-testid="role-card-member"]')).toBeVisible();
-    await expect(page.locator('[data-testid="role-card-admin"]')).not.toBeVisible();
-    await expect(page.locator('[data-testid="role-card-manager"]')).not.toBeVisible();
+    await expect(page.locator('[data-testid="role-card-member"]').first()).toBeVisible();
+    await expect(page.locator('[data-testid="role-card-admin"]').first()).toBeVisible();
+    await expect(page.locator('[data-testid="role-card-manager"]').first()).toBeVisible();
 
     await page.getByRole('button', { name: /create role/i }).click();
     await expect(page.getByRole('dialog')).toBeVisible();

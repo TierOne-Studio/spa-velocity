@@ -23,6 +23,8 @@ import {
 } from '../useUsers';
 import { adminService } from '../../services/adminService';
 
+const mockUseEffectiveSession = vi.fn();
+
 // Mock the admin service
 vi.mock('../../services/adminService', () => ({
   adminService: {
@@ -43,6 +45,10 @@ vi.mock('../../services/adminService', () => ({
     impersonateUser: vi.fn(),
     stopImpersonating: vi.fn(),
   },
+}));
+
+vi.mock('@/shared/hooks/useEffectiveSession', () => ({
+  useEffectiveSession: () => mockUseEffectiveSession(),
 }));
 
 // Get typed mock references
@@ -69,6 +75,15 @@ const createWrapper = () => {
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
 };
+
+beforeEach(() => {
+  mockUseEffectiveSession.mockReturnValue({
+    data: {
+      user: { id: 'admin-1' },
+      session: { activeOrganizationId: 'org-1' },
+    },
+  });
+});
 
 describe('useUsers hook', () => {
   beforeEach(() => {
@@ -310,7 +325,7 @@ describe('useImpersonateUser hook', () => {
     vi.clearAllMocks();
   });
 
-  it('should call adminService.impersonateUser with userId, role, and organizationId', async () => {
+  it('should call adminService.impersonateUser with userId and organizationId', async () => {
     (adminService.impersonateUser as Mock).mockResolvedValue(undefined);
 
     const { result } = renderHook(() => useImpersonateUser(), {
@@ -319,17 +334,15 @@ describe('useImpersonateUser hook', () => {
 
     await result.current.mutateAsync({
       userId: 'user-1',
-      role: 'manager',
       organizationId: 'org-1',
     });
 
     expect(adminService.impersonateUser).toHaveBeenCalledWith('user-1', {
-      role: 'manager',
       organizationId: 'org-1',
     });
   });
 
-  it('should call adminService.impersonateUser with admin role by default', async () => {
+  it('should call adminService.impersonateUser without organizationId by default', async () => {
     (adminService.impersonateUser as Mock).mockResolvedValue(undefined);
 
     const { result } = renderHook(() => useImpersonateUser(), {
@@ -339,7 +352,6 @@ describe('useImpersonateUser hook', () => {
     await result.current.mutateAsync({ userId: 'user-1' });
 
     expect(adminService.impersonateUser).toHaveBeenCalledWith('user-1', {
-      role: undefined,
       organizationId: undefined,
     });
   });
@@ -474,10 +486,17 @@ describe('userKeys', () => {
   it('should generate correct query keys', () => {
     expect(userKeys.all).toEqual(['users']);
     expect(userKeys.lists()).toEqual(['users', 'list']);
-    expect(userKeys.list({ limit: 10 })).toEqual(['users', 'list', { limit: 10 }]);
+    expect(userKeys.list({ limit: 10 })).toEqual(['users', 'list', 'anonymous', 'no-org', { limit: 10 }]);
+    expect(userKeys.list({ limit: 10 }, { userId: 'admin-1', activeOrganizationId: 'org-1' })).toEqual([
+      'users',
+      'list',
+      'admin-1',
+      'org-1',
+      { limit: 10 },
+    ]);
     expect(userKeys.details()).toEqual(['users', 'detail']);
-    expect(userKeys.detail('1')).toEqual(['users', 'detail', '1']);
-    expect(userKeys.sessions('1')).toEqual(['users', 'sessions', '1']);
-    expect(userKeys.capabilities('1')).toEqual(['users', 'capabilities', '1']);
+    expect(userKeys.detail('1')).toEqual(['users', 'detail', 'anonymous', 'no-org', '1']);
+    expect(userKeys.sessions('1')).toEqual(['users', 'sessions', 'anonymous', 'no-org', '1']);
+    expect(userKeys.capabilities('1')).toEqual(['users', 'capabilities', 'anonymous', 'no-org', '1']);
   });
 });

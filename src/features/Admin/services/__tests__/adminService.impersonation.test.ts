@@ -37,13 +37,13 @@ describe('adminService.impersonateUser', () => {
     });
 
     describe('unified custom start flow', () => {
-        it('should call unified admin/users impersonation endpoint for admin role', async () => {
+        it('should call unified admin/users impersonation endpoint without role metadata', async () => {
             mockFetchWithAuth.mockResolvedValue({
                 ok: true,
                 json: () => Promise.resolve({ sessionToken: 'new-session-token' }),
             });
 
-            await adminService.impersonateUser('user-1', { role: 'admin' });
+            await adminService.impersonateUser('user-1');
 
             expect(mockFetchWithAuth).toHaveBeenCalledWith(
                 expect.stringContaining('/api/admin/users/user-1/impersonate'),
@@ -62,7 +62,7 @@ describe('adminService.impersonateUser', () => {
                 json: () => Promise.resolve({ sessionToken: 'new-admin-session-token' }),
             });
 
-            await adminService.impersonateUser('user-1', { role: 'admin' });
+            await adminService.impersonateUser('user-1');
 
             expect(localStorageMock.setItem).toHaveBeenCalledWith(
                 'original_bearer_token',
@@ -72,7 +72,7 @@ describe('adminService.impersonateUser', () => {
             expect(localStorageMock.setItem).toHaveBeenCalledWith('impersonation_mode', 'custom');
         });
 
-        it('should default to admin role when no options provided', async () => {
+        it('should omit organizationId when no options provided', async () => {
             mockFetchWithAuth.mockResolvedValue({
                 ok: true,
                 json: () => Promise.resolve({ sessionToken: 'new-session-token' }),
@@ -86,14 +86,13 @@ describe('adminService.impersonateUser', () => {
             );
         });
 
-        it('should include organizationId when provided for manager role', async () => {
+        it('should include organizationId when provided', async () => {
             mockFetchWithAuth.mockResolvedValue({
                 ok: true,
                 json: () => Promise.resolve({ sessionToken: 'mgr-session-token' }),
             });
 
             await adminService.impersonateUser('user-1', {
-                role: 'manager',
                 organizationId: 'org-1',
             });
 
@@ -106,13 +105,13 @@ describe('adminService.impersonateUser', () => {
             );
         });
 
-        it('should allow manager to delegate org resolution to backend when organizationId is omitted', async () => {
+        it('should allow backend org resolution when organizationId is omitted', async () => {
             mockFetchWithAuth.mockResolvedValue({
                 ok: true,
                 json: () => Promise.resolve({ sessionToken: 'new-session-token' }),
             });
 
-            await adminService.impersonateUser('user-1', { role: 'manager' });
+            await adminService.impersonateUser('user-1');
 
             expect(mockFetchWithAuth).toHaveBeenCalledWith(
                 expect.stringContaining('/api/admin/users/user-1/impersonate'),
@@ -133,7 +132,6 @@ describe('adminService.impersonateUser', () => {
             });
 
             await adminService.impersonateUser('user-1', {
-                role: 'manager',
                 organizationId: 'org-1',
             });
 
@@ -150,7 +148,6 @@ describe('adminService.impersonateUser', () => {
 
             await expect(
                 adminService.impersonateUser('user-1', {
-                    role: 'manager',
                     organizationId: 'org-1',
                 }),
             ).rejects.toThrow('Not a member');
@@ -164,7 +161,6 @@ describe('adminService.impersonateUser', () => {
 
             await expect(
                 adminService.impersonateUser('user-1', {
-                    role: 'manager',
                     organizationId: 'org-1',
                 }),
             ).rejects.toThrow('Missing impersonation session token');

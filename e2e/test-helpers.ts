@@ -6,6 +6,94 @@ import { uniqueResendDeliveredEmail } from '../src/shared/utils/resendTestEmail'
 
 export type AppRole = 'admin' | 'manager' | 'member';
 
+const MANAGER_ROLE_PERMISSIONS = [
+  ['organization', 'read'],
+  ['organization', 'update'],
+  ['organization', 'invite'],
+  ['role', 'read'],
+  ['session', 'read'],
+  ['session', 'revoke'],
+  ['user', 'create'],
+  ['user', 'read'],
+  ['user', 'update'],
+] as const;
+
+const MEMBER_ROLE_PERMISSIONS = [
+  ['organization', 'read'],
+] as const;
+
+async function seedDefaultOrganizationRoles(pool: Pool, organizationId: string): Promise<void> {
+  await pool.query(
+    `INSERT INTO roles (name, display_name, description, color, is_system, organization_id)
+     VALUES
+       ('admin', 'Admin', 'Organization administrator with full access within their organization', 'red', true, $1),
+       ('manager', 'Manager', 'Organization manager with elevated operational access within their organization', 'blue', true, $1),
+       ('member', 'Member', 'Organization member with basic access within their organization', 'gray', true, $1)
+     ON CONFLICT (organization_id, name) WHERE organization_id IS NOT NULL DO UPDATE SET
+       display_name = EXCLUDED.display_name,
+       description = EXCLUDED.description,
+       color = EXCLUDED.color,
+       is_system = EXCLUDED.is_system,
+       updated_at = NOW()`,
+    [organizationId],
+  );
+
+  await pool.query(
+    `INSERT INTO role_permissions (role_id, permission_id)
+     SELECT r.id, p.id
+     FROM roles r
+     CROSS JOIN permissions p
+     WHERE r.organization_id = $1
+       AND r.name = 'admin'
+     ON CONFLICT DO NOTHING`,
+    [organizationId],
+  );
+
+  await pool.query(
+    `DELETE FROM role_permissions rp
+     USING roles r
+     WHERE rp.role_id = r.id
+       AND r.organization_id = $1
+       AND r.name = 'manager'`,
+    [organizationId],
+  );
+
+  for (const [resource, action] of MANAGER_ROLE_PERMISSIONS) {
+    await pool.query(
+      `INSERT INTO role_permissions (role_id, permission_id)
+       SELECT r.id, p.id
+       FROM roles r
+       JOIN permissions p ON p.resource = $2 AND p.action = $3
+       WHERE r.organization_id = $1
+         AND r.name = 'manager'
+       ON CONFLICT DO NOTHING`,
+      [organizationId, resource, action],
+    );
+  }
+
+  await pool.query(
+    `DELETE FROM role_permissions rp
+     USING roles r
+     WHERE rp.role_id = r.id
+       AND r.organization_id = $1
+       AND r.name = 'member'`,
+    [organizationId],
+  );
+
+  for (const [resource, action] of MEMBER_ROLE_PERMISSIONS) {
+    await pool.query(
+      `INSERT INTO role_permissions (role_id, permission_id)
+       SELECT r.id, p.id
+       FROM roles r
+       JOIN permissions p ON p.resource = $2 AND p.action = $3
+       WHERE r.organization_id = $1
+         AND r.name = 'member'
+       ON CONFLICT DO NOTHING`,
+      [organizationId, resource, action],
+    );
+  }
+}
+
 export async function withDatabase<T>(fn: (pool: Pool) => Promise<T>): Promise<T> {
   const pool = new Pool({ connectionString: DATABASE_URL });
   try {
@@ -157,6 +245,8 @@ export async function ensureOrganizationMembership(params: {
     );
 
     const organizationId = orgResult.rows[0].id;
+
+    await seedDefaultOrganizationRoles(pool, organizationId);
 
     await pool.query(
       `INSERT INTO member (id, "organizationId", "userId", role, "createdAt")

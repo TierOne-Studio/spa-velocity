@@ -50,8 +50,6 @@ import {
 } from "../hooks/useOrganizations"
 import { organizationService } from "../services/adminService"
 import { getOrganizationRolesMetadata } from "../services/adminService"
-import { filterAssignableRoles } from "../utils/role-hierarchy"
-import { useAuth } from "@/shared/context/AuthContext"
 import { usePermissionsContext } from "@/shared/context/PermissionsContext"
 
 interface Organization {
@@ -94,7 +92,6 @@ const getMembersArray = (data: unknown): Member[] => {
 
 
 export function OrganizationsPage() {
-  const { user } = useAuth()
   const { can } = usePermissionsContext()
 
   // State
@@ -515,8 +512,7 @@ export function OrganizationsPage() {
                                   const isAdmin = member.role === "admin"
                                   const isOnlyAdmin = isAdmin && members.filter(m => m.role === "admin").length === 1
                                   // Build role options: include current role even if not in assignableRoles
-                                  const rawAssignable = orgRolesMeta?.assignableRoles ?? []
-                                  const assignable = filterAssignableRoles(rawAssignable, user?.role ?? 'member')
+                                  const assignable = orgRolesMeta?.assignableRoles ?? []
                                   const allRoleOptions = assignable.includes(member.role)
                                     ? assignable
                                     : [member.role, ...assignable]
@@ -739,7 +735,7 @@ export function OrganizationsPage() {
                   <SelectValue placeholder="Select role" />
                 </SelectTrigger>
                 <SelectContent>
-                  {filterAssignableRoles(orgRolesMeta?.assignableRoles ?? [], user?.role ?? 'member').map((roleName) => {
+                  {(orgRolesMeta?.assignableRoles ?? []).map((roleName) => {
                     const role = orgRolesMeta?.roles.find((r) => r.name === roleName)
                     return (
                       <SelectItem key={roleName} value={roleName}>

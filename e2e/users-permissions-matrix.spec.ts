@@ -22,6 +22,11 @@ let organizationId = '';
 
 async function loginAsAdmin(page: Page) {
   await loginWithCredentials(page, adminActorEmail, DEFAULT_PASSWORD);
+  await setActiveOrganizationForUserSessions({
+    userEmail: adminActorEmail,
+    organizationId,
+  });
+  await page.reload({ waitUntil: 'networkidle' });
 }
 
 async function loginAsManager(page: Page) {
@@ -93,6 +98,13 @@ test.describe.serial('Users page permissions matrix', () => {
     organizationId = await ensureOrganizationMembership({
       userEmail: managerActorEmail,
       role: 'manager',
+      orgSlug,
+      orgName: 'E2E Matrix Organization',
+    });
+
+    await ensureOrganizationMembership({
+      userEmail: adminActorEmail,
+      role: 'admin',
       orgSlug,
       orgName: 'E2E Matrix Organization',
     });
@@ -181,7 +193,7 @@ test.describe.serial('Users page permissions matrix', () => {
     await expect(page.getByRole('menuitem', { name: /change role/i })).not.toBeVisible();
     await expect(page.getByRole('menuitem', { name: /reset password/i })).not.toBeVisible();
     await expect(page.getByRole('menuitem', { name: /impersonate/i })).not.toBeVisible();
-    await expect(page.getByRole('menuitem', { name: /ban user|unban user/i })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: /ban user|unban user/i })).not.toBeVisible();
   });
 
   test('manager should not have actions on admin or manager targets', async ({ page }) => {

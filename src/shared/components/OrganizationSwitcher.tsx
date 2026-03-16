@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import {
   IconBuilding,
   IconCheck,
@@ -44,13 +44,14 @@ interface Organization {
 
 export function OrganizationSwitcher() {
   const { can } = usePermissionsContext()
-  const { isAdmin, refreshSession } = useAuth()
+  const { refreshSession } = useAuth()
   const queryClient = useQueryClient()
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [newOrgData, setNewOrgData] = useState({ name: "", slug: "" })
   const [organizations, setOrganizations] = useState<Organization[]>([])
   const [activeMember, setActiveMember] = useState<{ organizationId?: string } | null>(null)
   const [orgsLoading, setOrgsLoading] = useState(true)
+  const hasFetchedInitialDataRef = useRef(false)
   const canCreateOrganization = can("organization", "create")
 
   // Refresh session + invalidate all cached queries after org change.
@@ -62,6 +63,12 @@ export function OrganizationSwitcher() {
 
   // Fetch organizations using Better Auth client
   useEffect(() => {
+    if (hasFetchedInitialDataRef.current) {
+      return
+    }
+
+    hasFetchedInitialDataRef.current = true
+
     const fetchData = async () => {
       try {
         // Fetch orgs first; getActiveMember may fail if no org is active
@@ -168,19 +175,6 @@ export function OrganizationSwitcher() {
 
   if (orgsLoading) {
     return <Skeleton className="h-9 w-40" />
-  }
-
-  if (!isAdmin) {
-    return (
-      <Button variant="outline" className="w-full justify-between" disabled>
-        <div className="flex items-center gap-2">
-          <IconBuilding className="h-4 w-4" />
-          <span className="truncate max-w-[120px]">
-            {activeOrg?.name ?? "Organization"}
-          </span>
-        </div>
-      </Button>
-    )
   }
 
   return (

@@ -33,16 +33,20 @@ export async function loginAsRole(page: Page, params: {
   emails: MatrixRoleEmails;
   password: string;
   managerOrganizationId?: string;
+  activeOrganizationId?: string;
 }) {
   await loginWithCredentials(page, params.emails[params.role], params.password);
 
-  if (params.role === 'manager' && params.managerOrganizationId) {
+  const organizationId =
+    params.activeOrganizationId ??
+    (params.role === 'manager' ? params.managerOrganizationId : undefined);
+
+  if (organizationId) {
     await setActiveOrganizationForUserSessions({
-      userEmail: params.emails.manager,
-      organizationId: params.managerOrganizationId,
+      userEmail: params.emails[params.role],
+      organizationId,
     });
-    await page.goto('/', { waitUntil: 'domcontentloaded' });
-    await page.waitForLoadState('networkidle');
+    await page.reload({ waitUntil: 'networkidle' });
   }
 }
 

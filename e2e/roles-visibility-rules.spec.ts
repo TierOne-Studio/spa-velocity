@@ -1,23 +1,34 @@
 import { test, expect, type Page } from '@playwright/test';
 
 import {
+  ensureOrganizationMembership,
   ensureUserWithRole,
   loginWithCredentials,
+  setActiveOrganizationForUserSessions,
   uniqueEmail,
 } from './test-helpers';
 
 const PASSWORD = 'RolesVisibility123!';
 
 const adminEmail = uniqueEmail('e2e-roles-admin');
+const orgSlug = `e2e-roles-visibility-org-${Date.now()}`;
+
+let organizationId = '';
 
 async function openRolesPage(page: Page) {
   await page.goto('/admin/roles');
   await expect(page).toHaveURL('/admin/roles', { timeout: 15000 });
   await expect(page.getByRole('heading', { name: /roles & permissions/i })).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('[data-testid="role-card-admin"]').first()).toBeVisible({ timeout: 15000 });
 }
 
 async function loginAsAdmin(page: Page) {
   await loginWithCredentials(page, adminEmail, PASSWORD);
+  await setActiveOrganizationForUserSessions({
+    userEmail: adminEmail,
+    organizationId,
+  });
+  await page.reload({ waitUntil: 'networkidle' });
 }
 
 test.describe('Roles page system-role invariants', () => {
@@ -28,6 +39,13 @@ test.describe('Roles page system-role invariants', () => {
       name: 'E2E Roles Admin',
       role: 'admin',
     });
+
+    organizationId = await ensureOrganizationMembership({
+      userEmail: adminEmail,
+      role: 'admin',
+      orgSlug,
+      orgName: 'E2E Roles Visibility Org',
+    });
   });
 
   test('system roles should render system badge and block edit/delete actions', async ({ page }) => {
@@ -35,7 +53,7 @@ test.describe('Roles page system-role invariants', () => {
     await openRolesPage(page);
 
     for (const roleName of ['admin', 'manager', 'member']) {
-      const roleCard = page.locator(`[data-testid="role-card-${roleName}"]`);
+      const roleCard = page.locator(`[data-testid="role-card-${roleName}"]`).first();
       await expect(roleCard).toBeVisible();
       await expect(roleCard.getByText(/^system$/i)).toBeVisible();
       await expect(roleCard.getByRole('button', { name: /^edit$/i })).toHaveCount(0);

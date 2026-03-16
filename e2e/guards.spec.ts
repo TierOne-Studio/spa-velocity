@@ -28,6 +28,15 @@ async function loginAsManager(page: Page) {
   await page.reload({ waitUntil: 'networkidle' });
 }
 
+async function loginAsMember(page: Page) {
+  await loginWithCredentials(page, memberEmail, MEMBER_PASSWORD);
+  await setActiveOrganizationForUserSessions({
+    userEmail: memberEmail,
+    organizationId: managerOrganizationId,
+  });
+  await page.reload({ waitUntil: 'networkidle' });
+}
+
 test.describe('Route guard behavior', () => {
   test.beforeAll(async () => {
     await ensureUserWithRole({
@@ -74,18 +83,28 @@ test.describe('Route guard behavior', () => {
     }
   });
 
-  test('member should be blocked from admin routes and redirected to dashboard', async ({ page }) => {
-    await loginWithCredentials(page, memberEmail, MEMBER_PASSWORD);
+  test('member should only access organizations route with org context and be blocked from users, roles, and sessions', async ({ page }) => {
+    await loginAsMember(page);
 
-    for (const route of adminRoutes) {
-      await page.goto(route);
-      await expect(page).toHaveURL('/');
-      await expect(
-        page.locator('[data-slot="sidebar"]').getByRole('link', { name: /^dashboard$/i }),
-      ).toBeVisible();
-    }
+    await page.goto('/admin/users');
+    await expect(page).toHaveURL('/');
 
+    await page.goto('/admin/organizations');
+    await expect(page.getByRole('heading', { name: /organizations/i })).toBeVisible();
+
+    await page.goto('/admin/roles');
+    await expect(page).toHaveURL('/');
+
+    await page.goto('/admin/sessions');
+    await expect(page).toHaveURL('/');
+    await expect(
+      page.locator('[data-slot="sidebar"]').getByRole('link', { name: /^dashboard$/i }),
+    ).toBeVisible();
+
+    await expect(page.getByRole('link', { name: /^organizations$/i })).toBeVisible();
     await expect(page.getByRole('link', { name: /^users$/i })).not.toBeVisible();
+    await expect(page.getByRole('link', { name: /^roles/i })).not.toBeVisible();
+    await expect(page.getByRole('link', { name: /^sessions$/i })).not.toBeVisible();
   });
 
   test('manager should access admin routes but not see create role action', async ({ page }) => {

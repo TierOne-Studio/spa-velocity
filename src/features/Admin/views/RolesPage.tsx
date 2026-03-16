@@ -38,8 +38,10 @@ import { toast } from "sonner";
 import { roleColorMap, ROLE_COLORS } from "../types/rbac";
 import type { Role, Permission } from "../types/rbac";
 import { usePermissionsContext } from "@/shared/context/PermissionsContext";
-import { useAuth } from "@/shared/context/AuthContext";
-import { filterVisibleRoles } from "../utils/role-hierarchy";
+import { useEffectiveSession } from "@/shared/hooks/useEffectiveSession";
+
+const EMPTY_ROLES: Role[] = [];
+const EMPTY_PERMISSIONS_GROUPED: Record<string, Permission[]> = {};
 
 /**
  * Component to display permissions for a role
@@ -149,11 +151,20 @@ function RoleCard({
  */
 export function RolesPage() {
   const { can } = usePermissionsContext();
-  const { user } = useAuth();
-  const userRole = user?.role ?? "member";
-  
-  const { data: roles = [], isLoading } = useRoles();
-  const { data: permissionsGrouped = {} } = usePermissionsGrouped();
+  const { data: session } = useEffectiveSession();
+  const activeOrganizationId =
+    (session?.session as { activeOrganizationId?: string } | undefined)?.activeOrganizationId ?? null;
+  const hasActiveOrganization = Boolean(activeOrganizationId);
+
+  const { data: rolesData, isLoading } = useRoles({
+    activeOrganizationId,
+    enabled: hasActiveOrganization,
+  });
+  const roles = rolesData ?? EMPTY_ROLES;
+  const { data: permissionsGroupedData } = usePermissionsGrouped({
+    enabled: hasActiveOrganization,
+  });
+  const permissionsGrouped = permissionsGroupedData ?? EMPTY_PERMISSIONS_GROUPED;
   const createRole = useCreateRole();
   const updateRole = useUpdateRole();
   const deleteRole = useDeleteRole();
@@ -164,9 +175,6 @@ export function RolesPage() {
   const canDeleteRole = can("role", "delete");
   const canAssignRolePermissions = can("role", "assign");
 
-  // Filter roles by hierarchy: users see only roles strictly below their level
-  const visibleRoles = filterVisibleRoles(roles, userRole);
-  
   // State for role permissions (fetched individually)
   const [rolePermissions, setRolePermissions] = useState<Record<string, Permission[]>>({});
   
@@ -192,6 +200,10 @@ export function RolesPage() {
 
   // Fetch role permissions when needed
   const fetchRolePermissions = useCallback(async (roleId: string, force = false) => {
+    if (!hasActiveOrganization) {
+      return;
+    }
+
     // Skip if already fetched (unless forced)
     if (!force && fetchedRolesRef.current.has(roleId)) {
       return;
@@ -211,14 +223,20 @@ export function RolesPage() {
     } catch (error) {
       console.error("Failed to fetch role permissions", error);
     }
-  }, []);
+  }, [hasActiveOrganization]);
 
   // Fetch permissions for all roles when roles change
   useEffect(() => {
+    if (!hasActiveOrganization) {
+      fetchedRolesRef.current.clear();
+      setRolePermissions((prev) => (Object.keys(prev).length === 0 ? prev : {}));
+      return;
+    }
+
     roles.forEach((role) => {
       fetchRolePermissions(role.id);
     });
-  }, [roles, fetchRolePermissions]);
+  }, [hasActiveOrganization, roles, fetchRolePermissions]);
 
   const handleCreateRole = async () => {
     if (!canCreateRole) {
@@ -331,6 +349,27 @@ export function RolesPage() {
     return <div className="p-4">Loading roles...</div>;
   }
 
+  if (!hasActiveOrganization) {
+    return (
+      <div className="flex flex-1 flex-col gap-4 p-4 lg:p-6">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Roles & Permissions</h1>
+          <p className="text-muted-foreground">
+            Manage role-based access control for your application
+          </p>
+        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Select an organization</CardTitle>
+            <CardDescription>
+              Choose an active organization from the switcher before managing organization roles and permissions.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-1 flex-col gap-4 p-4 lg:p-6">
       {/* Header */}
@@ -351,7 +390,7 @@ export function RolesPage() {
 
       {/* Roles Grid */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {visibleRoles.map((role) => (
+        {roles.map((role) => (
           <RoleCard 
             key={role.id} 
             role={role}

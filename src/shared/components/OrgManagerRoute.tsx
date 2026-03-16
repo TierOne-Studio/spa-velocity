@@ -1,6 +1,6 @@
 import { Navigate } from "react-router-dom";
 import { useAuth } from "@shared/context/AuthContext";
-import { useOrgRole, isManagerRole } from "@shared/hooks/useOrgRole";
+import { useOrgRole } from "@shared/hooks/useOrgRole";
 
 interface OrgManagerRouteProps {
     children: React.ReactNode;
@@ -21,7 +21,6 @@ interface OrgManagerRouteProps {
 export function OrgManagerRoute({ 
     children, 
     fallbackPath = "/",
-    memberRole,
 }: OrgManagerRouteProps) {
     const { isAuthenticated, isLoading } = useAuth();
     const { isInOrganization } = useOrgRole();
@@ -35,10 +34,6 @@ export function OrgManagerRoute({
     }
 
     if (!isInOrganization) {
-        return <Navigate to={fallbackPath} replace />;
-    }
-
-    if (memberRole && !isManagerRole(memberRole)) {
         return <Navigate to={fallbackPath} replace />;
     }
 

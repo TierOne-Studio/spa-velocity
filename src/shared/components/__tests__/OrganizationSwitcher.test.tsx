@@ -69,7 +69,7 @@ describe("OrganizationSwitcher", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockUsePermissionsContext.mockReturnValue({ can: () => false })
-    mockUseAuth.mockReturnValue({ isAdmin: false, refreshSession: vi.fn().mockResolvedValue(undefined) })
+    mockUseAuth.mockReturnValue({ refreshSession: vi.fn().mockResolvedValue(undefined) })
     mockOrganization.list.mockResolvedValue({ data: [ORG] })
     mockOrganization.getActiveMember.mockResolvedValue({ data: { organizationId: "org-1" } })
     mockOrganization.setActive.mockResolvedValue({ data: null, error: null })
@@ -90,17 +90,7 @@ describe("OrganizationSwitcher", () => {
     expect(screen.queryByRole("button")).toBeNull()
   })
 
-  it("renders a read-only organization control for managers", async () => {
-    render(<OrganizationSwitcher />)
-
-    const button = await waitFor(() => screen.getByRole("button", { name: /test org/i }))
-
-    expect(button).toBeDisabled()
-  })
-
-  it("renders an interactive organization dropdown for admins", async () => {
-    mockUseAuth.mockReturnValue({ isAdmin: true })
-
+  it("renders an interactive organization dropdown for authenticated users", async () => {
     render(<OrganizationSwitcher />)
 
     const button = await waitFor(() => screen.getByRole("button", { name: /test org/i }))
@@ -109,7 +99,7 @@ describe("OrganizationSwitcher", () => {
   })
 
   it("shows 'No organizations' when the list is empty", async () => {
-    mockUseAuth.mockReturnValue({ isAdmin: true })
+    mockUseAuth.mockReturnValue({ refreshSession: vi.fn().mockResolvedValue(undefined) })
     mockOrganization.list.mockResolvedValue({ data: [] })
     mockOrganization.getActiveMember.mockResolvedValue({ data: null })
 
@@ -122,9 +112,26 @@ describe("OrganizationSwitcher", () => {
     expect(await screen.findByText("No organizations")).toBeInTheDocument()
   })
 
+  it("does not refetch initial org data on rerender when auth context changes identity", async () => {
+    mockUseAuth.mockImplementation(() => ({ refreshSession: vi.fn().mockResolvedValue(undefined) }))
+
+    const { rerender } = render(<OrganizationSwitcher />)
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /test org/i })).toBeInTheDocument()
+    })
+
+    rerender(<OrganizationSwitcher />)
+
+    await waitFor(() => {
+      expect(mockOrganization.list).toHaveBeenCalledTimes(1)
+      expect(mockOrganization.getActiveMember).toHaveBeenCalledTimes(1)
+    })
+  })
+
   it("calls setActive and refreshes session on org click", async () => {
     const mockRefreshSession = vi.fn().mockResolvedValue(undefined)
-    mockUseAuth.mockReturnValue({ isAdmin: true, refreshSession: mockRefreshSession })
+    mockUseAuth.mockReturnValue({ refreshSession: mockRefreshSession })
 
     const user = userEvent.setup()
     render(<OrganizationSwitcher />)
@@ -144,7 +151,7 @@ describe("OrganizationSwitcher", () => {
   })
 
   it("shows error toast when setActive fails", async () => {
-    mockUseAuth.mockReturnValue({ isAdmin: true })
+    mockUseAuth.mockReturnValue({ refreshSession: vi.fn().mockResolvedValue(undefined) })
     mockOrganization.setActive.mockRejectedValue(new Error("Switch failed"))
 
     const user = userEvent.setup()
@@ -162,7 +169,7 @@ describe("OrganizationSwitcher", () => {
   })
 
   it("calls leave and shows success toast when leaving an org", async () => {
-    mockUseAuth.mockReturnValue({ isAdmin: true })
+    mockUseAuth.mockReturnValue({ refreshSession: vi.fn().mockResolvedValue(undefined) })
 
     const user = userEvent.setup()
     render(<OrganizationSwitcher />)
@@ -180,7 +187,7 @@ describe("OrganizationSwitcher", () => {
   })
 
   it("shows error toast when createOrg fails", async () => {
-    mockUseAuth.mockReturnValue({ isAdmin: true })
+    mockUseAuth.mockReturnValue({ refreshSession: vi.fn().mockResolvedValue(undefined) })
     mockUsePermissionsContext.mockReturnValue({ can: () => true })
     mockCreateOrganization.mockRejectedValue(new Error("Create failed"))
 
@@ -205,7 +212,7 @@ describe("OrganizationSwitcher", () => {
   })
 
   it("closes create org dialog when Cancel is clicked", async () => {
-    mockUseAuth.mockReturnValue({ isAdmin: true })
+    mockUseAuth.mockReturnValue({ refreshSession: vi.fn().mockResolvedValue(undefined) })
     mockUsePermissionsContext.mockReturnValue({ can: () => true })
 
     const user = userEvent.setup()
@@ -226,7 +233,7 @@ describe("OrganizationSwitcher", () => {
   })
 
   it("shows error toast when leaving an org fails", async () => {
-    mockUseAuth.mockReturnValue({ isAdmin: true })
+    mockUseAuth.mockReturnValue({ refreshSession: vi.fn().mockResolvedValue(undefined) })
     mockOrganization.leave.mockRejectedValue(new Error("Leave failed"))
 
     const user = userEvent.setup()
@@ -244,7 +251,7 @@ describe("OrganizationSwitcher", () => {
   })
 
   it("opens create org dialog and submits when user has create permission", async () => {
-    mockUseAuth.mockReturnValue({ isAdmin: true })
+    mockUseAuth.mockReturnValue({ refreshSession: vi.fn().mockResolvedValue(undefined) })
     mockUsePermissionsContext.mockReturnValue({ can: () => true })
 
     const user = userEvent.setup()

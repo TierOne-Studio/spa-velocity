@@ -17,7 +17,8 @@ import type {
 export const rbacKeys = {
   all: ["rbac"] as const,
   myPermissions: () => [...rbacKeys.all, "my-permissions"] as const,
-  roles: () => [...rbacKeys.all, "roles"] as const,
+  roles: (activeOrganizationId?: string | null) =>
+    [...rbacKeys.all, "roles", activeOrganizationId ?? "no-org"] as const,
   role: (id: string) => [...rbacKeys.all, "role", id] as const,
   permissions: () => [...rbacKeys.all, "permissions"] as const,
   permissionsGrouped: () => [...rbacKeys.all, "permissions", "grouped"] as const,
@@ -30,10 +31,11 @@ export const rbacKeys = {
 /**
  * Hook to fetch all roles
  */
-export function useRoles() {
+export function useRoles(options?: { activeOrganizationId?: string | null; enabled?: boolean }) {
   return useQuery({
-    queryKey: rbacKeys.roles(),
+    queryKey: rbacKeys.roles(options?.activeOrganizationId),
     queryFn: () => rbacService.getRoles(),
+    enabled: options?.enabled ?? true,
   });
 }
 
@@ -127,10 +129,11 @@ export function usePermissions() {
 /**
  * Hook to fetch permissions grouped by resource
  */
-export function usePermissionsGrouped() {
+export function usePermissionsGrouped(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: rbacKeys.permissionsGrouped(),
     queryFn: () => rbacService.getPermissionsGrouped(),
+    enabled: options?.enabled ?? true,
   });
 }
 

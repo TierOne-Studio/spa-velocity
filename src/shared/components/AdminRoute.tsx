@@ -17,17 +17,12 @@ interface AdminRouteProps {
  * Redirects to fallbackPath (default: "/") when access is not allowed.
  */
 export function AdminRoute({ children, fallbackPath = "/", requiredPermission }: AdminRouteProps) {
-    const { isAuthenticated, isAdminOrManager } = useAuth();
+    const { isAuthenticated } = useAuth();
     const { can } = usePermissionsContext();
 
     // Redirect to login if not authenticated
     if (!isAuthenticated) {
         return <Navigate to="/login" replace />;
-    }
-
-    // Redirect to fallback if not admin/manager
-    if (!isAdminOrManager) {
-        return <Navigate to={fallbackPath} replace />;
     }
 
     if (requiredPermission && !can(requiredPermission.resource, requiredPermission.action)) {

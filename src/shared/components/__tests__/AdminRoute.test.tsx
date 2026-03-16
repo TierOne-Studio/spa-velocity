@@ -20,17 +20,14 @@ import { AdminRoute } from "../AdminRoute";
 
 const authenticatedAdmin = {
   isAuthenticated: true,
-  isAdminOrManager: true,
 };
 
 const authenticatedMember = {
   isAuthenticated: true,
-  isAdminOrManager: false,
 };
 
 const unauthenticated = {
   isAuthenticated: false,
-  isAdminOrManager: false,
 };
 
 const permissionsGranted = { can: () => true };
@@ -39,8 +36,8 @@ const permissionsDenied = { can: () => false };
 describe("AdminRoute", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("renders children for admin/manager user", () => {
-    mockUseAuth.mockReturnValue(authenticatedAdmin);
+  it("renders children for authenticated user when no requiredPermission is provided", () => {
+    mockUseAuth.mockReturnValue(authenticatedMember);
     mockUsePermissionsContext.mockReturnValue(permissionsGranted);
 
     render(
@@ -67,12 +64,12 @@ describe("AdminRoute", () => {
     expect(screen.queryByTestId("child")).toBeNull();
   });
 
-  it("redirects to fallbackPath when authenticated but not admin/manager", () => {
+  it("redirects to fallbackPath when requiredPermission is not granted", () => {
     mockUseAuth.mockReturnValue(authenticatedMember);
-    mockUsePermissionsContext.mockReturnValue(permissionsGranted);
+    mockUsePermissionsContext.mockReturnValue(permissionsDenied);
 
     render(
-      <AdminRoute fallbackPath="/dashboard">
+      <AdminRoute fallbackPath="/dashboard" requiredPermission={{ resource: "user", action: "create" }}>
         <div data-testid="child">Admin Content</div>
       </AdminRoute>,
     );
@@ -81,21 +78,7 @@ describe("AdminRoute", () => {
     expect(nav.getAttribute("data-to")).toBe("/dashboard");
   });
 
-  it("redirects to default fallback '/' when no fallbackPath provided", () => {
-    mockUseAuth.mockReturnValue(authenticatedMember);
-    mockUsePermissionsContext.mockReturnValue(permissionsGranted);
-
-    render(
-      <AdminRoute>
-        <div data-testid="child">Admin Content</div>
-      </AdminRoute>,
-    );
-
-    const nav = screen.getByTestId("navigate");
-    expect(nav.getAttribute("data-to")).toBe("/");
-  });
-
-  it("redirects when requiredPermission is not granted", () => {
+  it("redirects to default fallback '/' when no fallbackPath is provided and permission is denied", () => {
     mockUseAuth.mockReturnValue(authenticatedAdmin);
     mockUsePermissionsContext.mockReturnValue(permissionsDenied);
 
@@ -107,7 +90,6 @@ describe("AdminRoute", () => {
 
     const nav = screen.getByTestId("navigate");
     expect(nav.getAttribute("data-to")).toBe("/");
-    expect(screen.queryByTestId("child")).toBeNull();
   });
 
   it("renders children when requiredPermission is granted", () => {

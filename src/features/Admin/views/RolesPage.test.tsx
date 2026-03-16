@@ -16,7 +16,7 @@ const {
   mockUseDeleteRole,
   mockUseAssignPermissions,
   mockCan,
-  mockUseAuth,
+  mockUseEffectiveSession,
   mockToastSuccess,
   mockToastError,
 } = vi.hoisted(() => ({
@@ -27,14 +27,14 @@ const {
   mockUseDeleteRole: vi.fn(),
   mockUseAssignPermissions: vi.fn(),
   mockCan: vi.fn(),
-  mockUseAuth: vi.fn(),
+  mockUseEffectiveSession: vi.fn(),
   mockToastSuccess: vi.fn(),
   mockToastError: vi.fn(),
 }));
 
 vi.mock("../hooks/useRoles", () => ({
-  useRoles: () => mockUseRoles(),
-  usePermissionsGrouped: () => mockUsePermissionsGrouped(),
+  useRoles: (...args: unknown[]) => mockUseRoles(...args),
+  usePermissionsGrouped: (...args: unknown[]) => mockUsePermissionsGrouped(...args),
   useCreateRole: () => mockUseCreateRole(),
   useUpdateRole: () => mockUseUpdateRole(),
   useDeleteRole: () => mockUseDeleteRole(),
@@ -45,8 +45,8 @@ vi.mock("@/shared/context/PermissionsContext", () => ({
   usePermissionsContext: () => ({ can: mockCan }),
 }));
 
-vi.mock("@/shared/context/AuthContext", () => ({
-  useAuth: () => mockUseAuth(),
+vi.mock("@/shared/hooks/useEffectiveSession", () => ({
+  useEffectiveSession: () => mockUseEffectiveSession(),
 }));
 
 vi.mock("sonner", () => ({
@@ -140,8 +140,10 @@ describe("RolesPage", () => {
     mockUseDeleteRole.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
     mockUseAssignPermissions.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
     mockCan.mockReturnValue(false);
-    mockUseAuth.mockReturnValue({
-      user: { role: "member" },
+    mockUseEffectiveSession.mockReturnValue({
+      data: {
+        session: { activeOrganizationId: "org-1" },
+      },
     });
 
     vi.stubGlobal(
@@ -162,9 +164,6 @@ describe("RolesPage", () => {
       isLoading: false,
     });
     mockCan.mockImplementation((resource: string, action: string) => resource === "role" && action === "create");
-    mockUseAuth.mockReturnValue({
-      user: { role: "admin" },
-    });
 
     render(<RolesPage />);
 
@@ -177,6 +176,23 @@ describe("RolesPage", () => {
     });
   });
 
+  it("shows backend-returned custom roles for managers", async () => {
+    mockUseRoles.mockReturnValue({
+      data: [
+        { id: "role-1", name: "admin", displayName: "Admin", description: "Admin role", color: "red", isSystem: true },
+        { id: "role-2", name: "manager", displayName: "Manager", description: "Manager role", color: "blue", isSystem: true },
+        { id: "role-3", name: "member", displayName: "Member", description: "Member role", color: "gray", isSystem: true },
+        { id: "role-4", name: "test", displayName: "Test", description: "Org custom role", color: "green", isSystem: false },
+      ],
+      isLoading: false,
+    });
+    mockCan.mockImplementation((resource: string, action: string) => resource === "role" && action === "read");
+
+    render(<RolesPage />);
+
+    expect(screen.getByTestId("role-card-test")).toBeVisible();
+  });
+
   it("submits role creation when role:create is granted", async () => {
     createRoleMutation.mutateAsync.mockResolvedValue({
       id: "role-3",
@@ -185,9 +201,6 @@ describe("RolesPage", () => {
       color: "gray",
     });
     mockCan.mockImplementation((resource: string, action: string) => resource === "role" && action === "create");
-    mockUseAuth.mockReturnValue({
-      user: { role: "admin" },
-    });
 
     render(<RolesPage />);
 
@@ -206,5 +219,40 @@ describe("RolesPage", () => {
     });
 
     expect(mockToastSuccess).toHaveBeenCalledWith("Role created successfully");
+  });
+
+  it("shows an organization prompt and disables org-scoped role queries when no organization is active", () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    mockUseEffectiveSession.mockReturnValue({
+      data: {
+        session: {},
+      },
+    });
+    mockUseRoles.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+    });
+    mockCan.mockImplementation(
+      (resource: string, action: string) =>
+        resource === "role" && (action === "read" || action === "create"),
+    );
+
+    render(<RolesPage />);
+
+    expect(screen.getByText(/select an organization/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /choose an active organization from the switcher before managing organization roles and permissions/i,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /create role/i })).not.toBeInTheDocument();
+    expect(mockUseRoles).toHaveBeenCalledWith({ activeOrganizationId: null, enabled: false });
+    expect(mockUsePermissionsGrouped).toHaveBeenCalledWith({ enabled: false });
+    expect(consoleErrorSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining("Maximum update depth exceeded"),
+    );
+
+    consoleErrorSpy.mockRestore();
   });
 });

@@ -16,16 +16,15 @@ const memberTargetEmail = uniqueEmail('e2e-manager-impersonation-target');
 const orgSlug = `e2e-manager-impersonation-org-${Date.now()}`;
 
 const defaultManagerPermissions = [
-  ['user', 'read'],
-  ['user', 'update'],
-  ['user', 'ban'],
-  ['session', 'read'],
-  ['session', 'revoke'],
   ['organization', 'read'],
+  ['organization', 'update'],
   ['organization', 'invite'],
   ['role', 'read'],
-  ['role', 'assign'],
-  ['role', 'update'],
+  ['session', 'read'],
+  ['session', 'revoke'],
+  ['user', 'create'],
+  ['user', 'read'],
+  ['user', 'update'],
 ] as const;
 
 const managerPermissionsWithImpersonate = [
@@ -44,8 +43,12 @@ async function setManagerPermissions(
     try {
       await client.query('BEGIN');
       await client.query(
-        `DELETE FROM role_permissions
-         WHERE role_id = (SELECT id FROM roles WHERE name = 'manager')`,
+        `DELETE FROM role_permissions rp
+         USING roles r
+         WHERE rp.role_id = r.id
+           AND r.name = 'manager'
+           AND r.organization_id = $1`,
+        [organizationId],
       );
 
       for (const [resource, action] of permissions) {
@@ -55,8 +58,9 @@ async function setManagerPermissions(
            FROM roles r
            JOIN permissions p ON p.resource = $2 AND p.action = $3
            WHERE r.name = $1
+             AND r.organization_id = $4
            ON CONFLICT DO NOTHING`,
-          ['manager', resource, action],
+          ['manager', resource, action, organizationId],
         );
       }
 

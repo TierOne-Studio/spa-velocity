@@ -30,7 +30,6 @@ import { usePermissionsContext } from "@/shared/context/PermissionsContext"
 
 // Navigation configuration
 const getNavItems = (
-  isAdminOrManager: boolean,
   pathname: string,
   can: (resource: string, action: string) => boolean,
 ) => {
@@ -93,7 +92,7 @@ const getNavItems = (
           },
         ],
       },
-      ...(isAdminOrManager && adminItems.length > 0
+      ...(adminItems.length > 0
         ? [
             {
               title: "Admin",
@@ -109,10 +108,10 @@ const getNavItems = (
 }
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const { user, isAdminOrManager } = useAuth()
+  const { user } = useAuth()
   const { can } = usePermissionsContext()
   const location = useLocation()
-  const navItems = getNavItems(isAdminOrManager, location.pathname, can)
+  const navItems = getNavItems(location.pathname, can)
 
   const userData = {
     name: user?.name ?? "User",
@@ -138,7 +137,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        {isAdminOrManager && (
+        {user && (
           <SidebarGroup>
             <SidebarGroupLabel>Organization</SidebarGroupLabel>
             <div className="px-2">

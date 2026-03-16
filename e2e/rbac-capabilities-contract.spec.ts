@@ -78,6 +78,7 @@ async function loginAs(page: Page, role: 'admin' | 'manager' | 'member') {
     emails: roleEmails,
     password: DEFAULT_PASSWORD,
     managerOrganizationId,
+    activeOrganizationId: managerOrganizationId,
   });
 }
 
@@ -172,6 +173,13 @@ test.describe.serial('RBAC capabilities API↔UI contract', () => {
     });
 
     await ensureOrganizationMembership({
+      userEmail: adminActorEmail,
+      role: 'admin',
+      orgSlug,
+      orgName: 'E2E RBAC Capabilities Org',
+    });
+
+    await ensureOrganizationMembership({
       userEmail: memberTargetEmail,
       role: 'member',
       orgSlug,
@@ -188,6 +196,10 @@ test.describe.serial('RBAC capabilities API↔UI contract', () => {
 
   test('admin→member: API capabilities match visible users action menu', async ({ page, request }) => {
     const headers = await signInAndGetAuthHeaders(request, adminActorEmail, DEFAULT_PASSWORD);
+    await setActiveOrganizationForUserSessions({
+      userEmail: adminActorEmail,
+      organizationId: managerOrganizationId,
+    });
     const actions = await fetchCapabilities(request, headers, memberTargetId);
     const permissions = await fetchMyPermissions(request, headers);
 
@@ -206,6 +218,10 @@ test.describe.serial('RBAC capabilities API↔UI contract', () => {
 
   test('admin→admin target: API capabilities match whether action menu exists', async ({ page, request }) => {
     const headers = await signInAndGetAuthHeaders(request, adminActorEmail, DEFAULT_PASSWORD);
+    await setActiveOrganizationForUserSessions({
+      userEmail: adminActorEmail,
+      organizationId: managerOrganizationId,
+    });
     const actions = await fetchCapabilities(request, headers, adminTargetId);
     const permissions = await fetchMyPermissions(request, headers);
 

@@ -1,6 +1,7 @@
 import { test, expect, type APIRequestContext, type Locator, Page } from '@playwright/test';
 import { Pool } from 'pg';
 import { DATABASE_URL, API_BASE_URL, TEST_USER } from './env';
+import { ensureOrganizationMembership } from './test-helpers';
 import { resendTestEmail } from '../src/shared/utils/resendTestEmail';
 
 /**
@@ -28,7 +29,7 @@ async function withDatabase<T>(fn: (pool: Pool) => Promise<T>): Promise<T> {
 }
 
 // Set user role and clear sessions
-async function setUserRole(role: 'admin' | 'manager' | 'member') {
+async function setUserRole(role: 'superadmin' | 'admin' | 'manager' | 'member') {
   await withDatabase(async (pool) => {
     await pool.query(`UPDATE "user" SET role = $1 WHERE email = $2`, [role, TEST_USER.email]);
     await pool.query(`DELETE FROM session WHERE "userId" IN (SELECT id FROM "user" WHERE email = $1)`, [TEST_USER.email]);
@@ -36,7 +37,11 @@ async function setUserRole(role: 'admin' | 'manager' | 'member') {
   });
 }
 
-async function ensureOrganizationForTestUser(params: { orgSlug: string; orgName: string; memberRole: 'manager' | 'member' }) {
+async function ensureOrganizationForTestUser(params: {
+  orgSlug: string;
+  orgName: string;
+  memberRole: 'admin' | 'manager' | 'member';
+}) {
   return await withDatabase(async (pool) => {
     const userRow = await pool.query(`SELECT id FROM "user" WHERE email = $1`, [TEST_USER.email]);
     if (userRow.rowCount === 0) {
@@ -44,21 +49,12 @@ async function ensureOrganizationForTestUser(params: { orgSlug: string; orgName:
     }
     const userId = userRow.rows[0].id as string;
 
-    const orgRow = await pool.query(
-      `INSERT INTO organization (id, name, slug, "createdAt", metadata)
-       VALUES (gen_random_uuid()::text, $1, $2, NOW(), NULL)
-       ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
-       RETURNING id, name, slug`,
-      [params.orgName, params.orgSlug],
-    );
-    const organizationId = orgRow.rows[0].id as string;
-
-    await pool.query(
-      `INSERT INTO member (id, "organizationId", "userId", role, "createdAt")
-       VALUES (gen_random_uuid()::text, $1, $2, $3, NOW())
-       ON CONFLICT DO NOTHING`,
-      [organizationId, userId, params.memberRole],
-    );
+    const organizationId = await ensureOrganizationMembership({
+      userEmail: TEST_USER.email,
+      role: params.memberRole,
+      orgSlug: params.orgSlug,
+      orgName: params.orgName,
+    });
 
     return { organizationId, userId };
   });
@@ -211,19 +207,31 @@ test.describe.serial('Unified Role Model - Serial', () => {
 // ============================================================================
 
 test.describe('Admin Role - Full Platform Access', () => {
+  let adminOrgId: string;
+
   test.beforeAll(async () => {
-    await setUserRole('admin');
+    await setUserRole('superadmin');
+    const { organizationId } = await ensureOrganizationForTestUser({
+      orgSlug: 'admin-org',
+      orgName: 'Admin Org',
+      memberRole: 'admin',
+    });
+    adminOrgId = organizationId;
   });
 
   test.beforeEach(async ({ page }) => {
     await login(page);
+    await setActiveOrganizationForUserSessions(adminOrgId);
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
   });
 
   test('should see all admin navigation items', async ({ page }) => {
-    await expect(page.getByRole('link', { name: /^users$/i })).toBeVisible();
-    await expect(page.getByRole('link', { name: /sessions/i })).toBeVisible();
-    await expect(page.getByRole('link', { name: /organizations/i })).toBeVisible();
-    await expect(page.getByRole('link', { name: /roles & permissions/i })).toBeVisible();
+    const sidebar = page.locator('[data-slot="sidebar"]');
+    await expect(sidebar.getByRole('link', { name: /^users$/i })).toBeVisible();
+    await expect(sidebar.getByRole('link', { name: /sessions/i })).toBeVisible();
+    await expect(sidebar.getByRole('link', { name: /organizations/i })).toBeVisible();
+    await expect(sidebar.getByRole('link', { name: /roles & permissions/i })).toBeVisible();
   });
 
   test('should access Users management page', async ({ page }) => {
@@ -241,12 +249,13 @@ test.describe('Admin Role - Full Platform Access', () => {
   test('should access Organizations management page', async ({ page }) => {
     await page.goto('/admin/organizations');
     await expect(page.getByRole('heading', { name: /organizations/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /create organization/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^create organization$/i })).toBeVisible();
   });
 
   test('should access Roles & Permissions page', async ({ page }) => {
     await page.goto('/admin/roles');
     await page.waitForLoadState('networkidle');
+    await expect(page.locator('[data-testid="role-card-admin"]').first()).toBeVisible({ timeout: 15000 });
     await expect(page.getByRole('heading', { name: /roles & permissions/i })).toBeVisible();
     await expect(page.getByRole('button', { name: /create role/i })).toBeVisible();
   });
@@ -255,25 +264,27 @@ test.describe('Admin Role - Full Platform Access', () => {
     await page.goto('/admin/roles');
     await page.waitForLoadState('networkidle');
 
-    await expect(page.locator('[data-testid="role-card-admin"]')).toBeVisible({ timeout: 15000 });
-    await expect(page.locator('[data-testid="role-card-manager"]')).toBeVisible({ timeout: 15000 });
-    await expect(page.locator('[data-testid="role-card-member"]')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('[data-testid="role-card-admin"]').first()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('[data-testid="role-card-manager"]').first()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('[data-testid="role-card-member"]').first()).toBeVisible({ timeout: 15000 });
   });
 
   test('should see correct Admin role description', async ({ page }) => {
     await page.goto('/admin/roles');
     await page.waitForLoadState('networkidle');
 
-    const adminCard = page.locator('[data-testid="role-card-admin"]');
+    const adminCard = page.locator('[data-testid="role-card-admin"]').first();
     await expect(adminCard).toBeVisible({ timeout: 15000 });
-    await expect(adminCard.getByText(/global platform administrator/i)).toBeVisible({ timeout: 15000 });
+    await expect(
+      adminCard.getByText(/organization administrator with full access within their organization/i),
+    ).toBeVisible({ timeout: 15000 });
   });
 
   test('should see correct Manager role description', async ({ page }) => {
     await page.goto('/admin/roles');
     await page.waitForLoadState('networkidle');
 
-    const managerCard = page.locator('[data-testid="role-card-manager"]');
+    const managerCard = page.locator('[data-testid="role-card-manager"]').first();
     await expect(managerCard).toBeVisible({ timeout: 15000 });
     await expect(managerCard.getByText(/organization manager/i)).toBeVisible({ timeout: 15000 });
   });
@@ -282,7 +293,7 @@ test.describe('Admin Role - Full Platform Access', () => {
     await page.goto('/admin/roles');
     await page.waitForLoadState('networkidle');
 
-    const memberCard = page.locator('[data-testid="role-card-member"]');
+    const memberCard = page.locator('[data-testid="role-card-member"]').first();
     await expect(memberCard).toBeVisible({ timeout: 15000 });
     await expect(memberCard.getByText(/organization member/i)).toBeVisible({ timeout: 15000 });
   });
@@ -291,7 +302,7 @@ test.describe('Admin Role - Full Platform Access', () => {
     await page.goto('/admin/roles');
     await page.waitForLoadState('networkidle');
 
-    const managerCard = page.locator('[data-testid="role-card-manager"]');
+    const managerCard = page.locator('[data-testid="role-card-manager"]').first();
     await expect(managerCard).toBeVisible({ timeout: 15000 });
     await managerCard.getByRole('button', { name: /manage/i }).click();
     
@@ -350,7 +361,7 @@ test.describe('Admin Role - Full Platform Access', () => {
     await page.waitForLoadState('networkidle');
     await page.waitForSelector('[data-testid^="role-card-"]', { timeout: 60000 });
 
-    const adminCard = page.locator('[data-testid="role-card-admin"]');
+    const adminCard = page.locator('[data-testid="role-card-admin"]').first();
     await adminCard.getByRole('button', { name: /manage/i }).click();
 
     await expect(page.getByRole('dialog')).toBeVisible();
@@ -370,7 +381,7 @@ test.describe('Admin Role - Full Platform Access', () => {
     await page.waitForLoadState('networkidle');
     await page.waitForSelector('[data-testid^="role-card-"]');
 
-    const memberCard = page.locator('[data-testid="role-card-member"]');
+    const memberCard = page.locator('[data-testid="role-card-member"]').first();
     const permissionBadges = await memberCard.locator('.text-xs.font-mono').count();
     expect(permissionBadges).toBeLessThanOrEqual(5);
   });
@@ -446,8 +457,7 @@ test.describe('Manager Role - Organization-Scoped Access', () => {
     managerOrgId = organizationId;
     await login(page);
     await setActiveOrganizationForUserSessions(managerOrgId);
-    // Navigate to dashboard to force backend to re-read the updated session
-    await page.goto('/');
+    await page.reload().catch(() => page.reload());
     await page.waitForLoadState('networkidle');
   });
 
@@ -457,9 +467,10 @@ test.describe('Manager Role - Organization-Scoped Access', () => {
   });
 
   test('should see admin navigation items (manager allowed)', async ({ page }) => {
-    await expect(page.getByRole('link', { name: /^users$/i })).toBeVisible();
-    await expect(page.getByRole('link', { name: /sessions/i })).toBeVisible();
-    await expect(page.getByRole('link', { name: /organizations/i })).toBeVisible();
+    const sidebar = page.locator('[data-slot="sidebar"]');
+    await expect(sidebar.getByRole('link', { name: /^users$/i })).toBeVisible();
+    await expect(sidebar.getByRole('link', { name: /sessions/i })).toBeVisible();
+    await expect(sidebar.getByRole('link', { name: /organizations/i })).toBeVisible();
   });
 
   test('should access Users page and gate create-user UI by permission', async ({ page }) => {
@@ -504,7 +515,7 @@ test.describe('Manager Role - Organization-Scoped Access', () => {
     await expect(page.getByRole('menuitem', { name: /change role/i })).not.toBeVisible();
     await expect(page.getByRole('menuitem', { name: /reset password/i })).not.toBeVisible();
     await expect(page.getByRole('menuitem', { name: /impersonate/i })).not.toBeVisible();
-    await expect(page.getByRole('menuitem', { name: /ban user|unban user/i })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: /ban user|unban user/i })).not.toBeVisible();
 
     await page.keyboard.press('Escape');
   });
@@ -532,7 +543,7 @@ test.describe('Manager Role - Organization-Scoped Access', () => {
     await expect(managerRow.getByRole('button')).toHaveCount(0);
   });
 
-  test('manager should see read-only organization control in sidebar', async ({ page }) => {
+  test('manager should see interactive organization control in sidebar', async ({ page }) => {
     await page.waitForTimeout(3000);
     const sidebar = page.locator('[data-slot="sidebar"]');
     await expect(sidebar).toBeVisible();
@@ -544,7 +555,7 @@ test.describe('Manager Role - Organization-Scoped Access', () => {
     const orgControl = orgGroup.getByRole('button').first();
 
     await expect(orgControl).toBeVisible();
-    await expect(orgControl).toBeDisabled();
+    await expect(orgControl).toBeEnabled();
     await expect(orgControl).toContainText(/manager org|organization/i);
   });
 
@@ -570,15 +581,10 @@ test.describe('Manager Role - Organization-Scoped Access', () => {
     await page.waitForTimeout(500);
 
     // Check dropdown options — Admin should NOT be visible for a manager
-    const adminOption = page.getByRole('option', { name: /^admin$/i });
-    await expect(adminOption).not.toBeVisible();
-
-    // Manager and Member should be visible
-    const managerOption = page.getByRole('option', { name: /^manager$/i });
-    const memberOption = page.getByRole('option', { name: /^member$/i });
-    const managerVisible = await managerOption.isVisible().catch(() => false);
-    const memberVisible = await memberOption.isVisible().catch(() => false);
-    expect(managerVisible || memberVisible).toBeTruthy();
+    const roleListbox = page.getByRole('listbox').last();
+    await expect(roleListbox).toBeVisible({ timeout: 5000 });
+    await expect(roleListbox.getByRole('option', { name: /^admin$/i })).toHaveCount(0);
+    await expect(roleListbox.getByRole('option', { name: /^manager$/i }).first()).toBeVisible();
 
     await page.keyboard.press('Escape');
   });
@@ -624,12 +630,23 @@ test.describe('Manager Role - Organization-Scoped Access', () => {
 // ============================================================================
 
 test.describe('Member Role - Basic Read Access', () => {
+  let memberOrgId: string;
+
   test.beforeAll(async () => {
     await setUserRole('member');
+    const { organizationId } = await ensureOrganizationForTestUser({
+      orgSlug: 'member-org',
+      orgName: 'Member Org',
+      memberRole: 'member',
+    });
+    memberOrgId = organizationId;
   });
 
   test.beforeEach(async ({ page }) => {
     await login(page);
+    await setActiveOrganizationForUserSessions(memberOrgId);
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
   });
 
   test('should login successfully and see dashboard', async ({ page }) => {
@@ -637,21 +654,22 @@ test.describe('Member Role - Basic Read Access', () => {
     await expect(page.locator('[data-slot="sidebar"]').getByRole('link', { name: /dashboard/i })).toBeVisible();
   });
 
-  test('should NOT see admin navigation items in sidebar', async ({ page }) => {
+  test('should see read-only admin navigation items in sidebar', async ({ page }) => {
     await expect(page).toHaveURL('/');
     await page.waitForLoadState('networkidle');
 
-    // Member role must not have any admin navigation routes rendered.
-    const adminRouteLinks = page.locator('a[href^="/admin"]');
-    await expect(adminRouteLinks).toHaveCount(0);
+    await expect(page.getByRole('link', { name: /^organizations$/i })).toBeVisible();
+    await expect(page.getByRole('link', { name: /^users$/i })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: /^roles/i })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: /^sessions$/i })).toHaveCount(0);
   });
 
-  test('should be redirected when accessing /admin/users directly', async ({ page }) => {
+  test('should access /admin/organizations directly but be blocked from /admin/users', async ({ page }) => {
+    await page.goto('/admin/organizations');
+    await expect(page.getByRole('heading', { name: /organizations/i })).toBeVisible();
+
     await page.goto('/admin/users');
     await expect(page).toHaveURL('/');
-    await expect(
-      page.locator('[data-slot="sidebar"]').getByRole('link', { name: /^dashboard$/i }),
-    ).toBeVisible();
   });
 });
 
@@ -743,12 +761,23 @@ test.describe('API Permission Restrictions', () => {
 // ============================================================================
 
 test.describe('User Creation - Admin (UI)', () => {
+  let adminUiOrgId: string;
+
   test.beforeAll(async () => {
     await setUserRole('admin');
+    const { organizationId } = await ensureOrganizationForTestUser({
+      orgSlug: 'user-creation-admin-org',
+      orgName: 'User Creation Admin Org',
+      memberRole: 'admin',
+    });
+    adminUiOrgId = organizationId;
   });
 
   test.beforeEach(async ({ page }) => {
     await login(page);
+    await setActiveOrganizationForUserSessions(adminUiOrgId);
+    await page.reload().catch(() => page.reload());
+    await page.waitForLoadState('networkidle');
   });
 
   test('should open create user dialog and see all role options', async ({ page }) => {
@@ -852,8 +881,7 @@ test.describe('Organization Scoping - Manager Restrictions', () => {
   test('manager can access users page', async ({ page }) => {
     await page.goto('/admin/users');
     await expect(page.getByRole('heading', { name: /users/i })).toBeVisible();
-    // DB-backed permissions may hide create-user action for manager.
-    await expect(page.getByRole('button', { name: /add user/i })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /add user/i })).toBeVisible();
   });
 });
 
@@ -862,12 +890,23 @@ test.describe('Organization Scoping - Manager Restrictions', () => {
 // ============================================================================
 
 test.describe('Unified Role Dropdowns - Database-Driven', () => {
+  let dropdownAdminOrgId: string;
+
   test.beforeAll(async () => {
     await setUserRole('admin');
+    const { organizationId } = await ensureOrganizationForTestUser({
+      orgSlug: 'dropdowns-admin-org',
+      orgName: 'Dropdowns Admin Org',
+      memberRole: 'admin',
+    });
+    dropdownAdminOrgId = organizationId;
   });
 
   test.beforeEach(async ({ page }) => {
     await login(page);
+    await setActiveOrganizationForUserSessions(dropdownAdminOrgId);
+    await page.reload().catch(() => page.reload());
+    await page.waitForLoadState('networkidle');
   });
 
   test('Users page Create User modal should show database roles (Admin, Manager, Member)', async ({ page }) => {
@@ -965,6 +1004,13 @@ test.describe('Unified Role Dropdowns - Database-Driven', () => {
     const signInData = await signInRes.json();
     const token = signInData.token || signInData.session?.token;
     const authHeaders: Record<string, string> = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+    const { organizationId } = await ensureOrganizationForTestUser({
+      orgSlug: 'dropdown-admin-org',
+      orgName: 'Dropdown Admin Org',
+      memberRole: 'admin',
+    });
+    await setActiveOrganizationForUserSessions(organizationId);
     
     const [userMetaRes, orgMetaRes] = await Promise.all([
       request.get(`${API_BASE_URL}/api/admin/users/create-metadata`, { headers: authHeaders }),

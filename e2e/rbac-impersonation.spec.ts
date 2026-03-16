@@ -1,12 +1,13 @@
 import { test, expect } from '@playwright/test';
 import { Pool } from 'pg';
 import { DATABASE_URL, API_BASE_URL, TEST_USER } from './env';
-import { escapeRegExp, loginWithCredentials } from './test-helpers';
+import { escapeRegExp, loginWithCredentials, setActiveOrganizationForUserSessions } from './test-helpers';
 import { resendTestEmail } from '../src/shared/utils/resendTestEmail';
 
 const IMPERSONATION_ORG_SLUG = 'e2e-impersonation-org';
 const IMPERSONATION_TARGET_EMAIL = resendTestEmail('delivered', 'e2e-impersonation-member');
 const IMPERSONATION_TARGET_NAME = 'E2E Impersonation Member';
+let impersonationOrgId = '';
 
 /**
  * RBAC and Impersonation E2E Tests
@@ -32,7 +33,7 @@ async function ensureAdminRole() {
 
     const adminId = adminResult.rows[0].id;
 
-    await pool.query(`UPDATE "user" SET role = 'admin', "emailVerified" = true WHERE id = $1`, [adminId]);
+    await pool.query(`UPDATE "user" SET role = 'superadmin', "emailVerified" = true WHERE id = $1`, [adminId]);
 
     await pool.query(
       `INSERT INTO organization (id, name, slug, "createdAt", metadata)
@@ -53,6 +54,7 @@ async function ensureAdminRole() {
     }
 
     const orgId = orgResult.rows[0].id;
+    impersonationOrgId = orgId;
 
     const targetResult = await pool.query<{ id: string }>(
       `INSERT INTO "user" (id, name, email, role, "emailVerified", "createdAt", "updatedAt")
@@ -94,15 +96,21 @@ async function findOrganizationCardBySlug(page: import('@playwright/test').Page,
   const searchInput = page.getByPlaceholder(/search organizations/i);
   await expect(searchInput).toBeVisible({ timeout: 10000 });
   await searchInput.fill(slug);
-  await page.waitForTimeout(800);
+  await page.waitForTimeout(500);
 
-  const targetOrg = page
-    .locator('button')
-    .filter({ hasText: new RegExp(`/${slug}\\b`, 'i') })
-    .first();
+  const allOrgButtons = page.locator('main button').filter({ hasText: /\// });
+  const count = await allOrgButtons.count();
 
-  await expect(targetOrg).toBeVisible({ timeout: 15000 });
-  return targetOrg;
+  for (let i = 0; i < count; i += 1) {
+    const button = allOrgButtons.nth(i);
+    const text = await button.textContent();
+    if (text && text.toLowerCase().includes(`/${slug.toLowerCase()}`)) {
+      await expect(button).toBeVisible({ timeout: 15000 });
+      return button;
+    }
+  }
+
+  throw new Error(`Could not find organization card for slug "${slug}"`);
 }
 
 // Helper to login
@@ -113,6 +121,13 @@ async function login(page: import('@playwright/test').Page, email = TEST_USER.em
 // Helper to login as admin and navigate to admin page
 async function loginAsAdmin(page: import('@playwright/test').Page, adminPath: string) {
   await login(page);
+  if (impersonationOrgId) {
+    await setActiveOrganizationForUserSessions({
+      userEmail: TEST_USER.email,
+      organizationId: impersonationOrgId,
+    });
+    await page.reload({ waitUntil: 'networkidle' });
+  }
   await page.goto(adminPath, { waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('networkidle');
   
@@ -244,8 +259,9 @@ test.describe.serial('Impersonation', () => {
     // Click Impersonate User
     await page.getByRole('menuitem', { name: /impersonate/i }).click();
     
-    // Wait for impersonation to take effect (page should reload)
+    // Wait for impersonation to take effect
     await page.waitForLoadState('networkidle');
+    await expect(page).toHaveURL('/');
 
     // Check impersonation banner appears and contains expected user
     const banner = page.locator('.bg-amber-500');

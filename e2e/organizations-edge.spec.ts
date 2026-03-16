@@ -1,7 +1,13 @@
 import { test, expect, type Page } from '@playwright/test';
 
 import { TEST_USER } from './env';
-import { ensureUserRecord, escapeRegExp, loginWithCredentials, withDatabase } from './test-helpers';
+import {
+  ensureUserRecord,
+  escapeRegExp,
+  loginWithCredentials,
+  setActiveOrganizationForUserSessions,
+  withDatabase,
+} from './test-helpers';
 import { resendTestEmail } from '../src/shared/utils/resendTestEmail';
 
 const EXISTING_ORG_SLUG = `e2e-org-existing-${Date.now()}`;
@@ -77,6 +83,42 @@ async function ensureMemberInOrganization(params: {
 
 async function loginAsAdmin(page: Page) {
   await loginWithCredentials(page, TEST_USER.email, TEST_USER.password);
+  const organizationId = await withDatabase(async (pool) => {
+    const result = await pool.query<{ id: string }>(
+      `SELECT id FROM organization WHERE slug = $1`,
+      [MANAGE_ORG_SLUG],
+    );
+    return result.rows[0]?.id ?? null;
+  });
+
+  if (organizationId) {
+    await setActiveOrganizationForUserSessions({
+      userEmail: TEST_USER.email,
+      organizationId,
+    });
+    await page.reload({ waitUntil: 'networkidle' });
+  }
+}
+
+async function openOrganizationBySlug(page: Page, slug: string) {
+  const searchInput = page.getByPlaceholder(/search organizations/i);
+  await expect(searchInput).toBeVisible({ timeout: 10000 });
+  await searchInput.fill(slug);
+  await page.waitForTimeout(500);
+
+  const allOrgButtons = page.locator('main button').filter({ hasText: /\// });
+  const count = await allOrgButtons.count();
+
+  for (let i = 0; i < count; i += 1) {
+    const button = allOrgButtons.nth(i);
+    const text = await button.textContent();
+    if (text && text.toLowerCase().includes(`/${slug.toLowerCase()}`)) {
+      await button.click();
+      return;
+    }
+  }
+
+  throw new Error(`Could not find organization button for slug "${slug}"`);
 }
 
 async function openAddMemberUserDropdown(page: Page) {
@@ -154,13 +196,7 @@ test.describe('Organizations edge cases', () => {
   test('add member dialog should keep submit disabled until a user is selected', async ({ page }) => {
     await loginAsAdmin(page);
     await openOrganizationsPage(page);
-
-    const searchInput = page.getByPlaceholder(/search organizations/i);
-    await searchInput.fill(MANAGE_ORG_SLUG);
-
-    const targetOrg = page.locator('button', { hasText: `/${MANAGE_ORG_SLUG}` }).first();
-    await expect(targetOrg).toBeVisible({ timeout: 15000 });
-    await targetOrg.click();
+    await openOrganizationBySlug(page, MANAGE_ORG_SLUG);
 
     await page.getByRole('button', { name: /add member/i }).click();
     const dialog = page.getByRole('dialog');
@@ -178,13 +214,7 @@ test.describe('Organizations edge cases', () => {
   test('cancel remove member should keep member count unchanged', async ({ page }) => {
     await loginAsAdmin(page);
     await openOrganizationsPage(page);
-
-    const searchInput = page.getByPlaceholder(/search organizations/i);
-    await searchInput.fill(MANAGE_ORG_SLUG);
-
-    const targetOrg = page.locator('button', { hasText: `/${MANAGE_ORG_SLUG}` }).first();
-    await expect(targetOrg).toBeVisible({ timeout: 15000 });
-    await targetOrg.click();
+    await openOrganizationBySlug(page, MANAGE_ORG_SLUG);
 
     const targetMemberRow = page.locator('table tbody tr', { hasText: MANAGE_MEMBER_EMAIL }).first();
     await expect(targetMemberRow).toBeVisible({ timeout: 15000 });

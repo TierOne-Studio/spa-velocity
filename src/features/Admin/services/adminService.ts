@@ -293,7 +293,7 @@ export const adminService = {
      * Admin uses Better Auth's built-in endpoint.
      * Manager uses org-scoped endpoint which validates org membership.
      */
-    async impersonateUser(userId: string, options?: { role?: string; organizationId?: string }): Promise<void> {
+    async impersonateUser(userId: string, options?: { organizationId?: string }): Promise<void> {
         const orgId = options?.organizationId;
 
         const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/users/${userId}/impersonate`, {

@@ -58,33 +58,18 @@ import {
 import { Checkbox } from "@/shared/components/ui/checkbox"
 import { useAuth } from "@/shared/context/AuthContext"
 import { usePermissionsContext } from "@/shared/context/PermissionsContext"
-import { useOrgRole } from "@/shared/hooks/useOrgRole"
 import type { AdminUser, UserFilterParams } from "../types"
 import { adminService, type UserCapabilities } from "../services/adminService"
 
-function getFallbackUserActions(
-  actorRole: string,
-  targetRole: string,
-  isSelf: boolean,
-): UserCapabilities["actions"] {
-  const canMutateNonSelf = !isSelf && (
-    actorRole === "admin"
-      ? targetRole !== "admin"
-      : actorRole === "manager"
-        ? targetRole === "member"
-        : false
-  )
-
-  return {
-    update: isSelf || canMutateNonSelf,
-    setRole: canMutateNonSelf,
-    ban: canMutateNonSelf,
-    unban: canMutateNonSelf,
-    setPassword: isSelf || canMutateNonSelf,
-    remove: canMutateNonSelf,
-    revokeSessions: canMutateNonSelf,
-    impersonate: canMutateNonSelf,
-  }
+const EMPTY_USER_ACTIONS: UserCapabilities["actions"] = {
+  update: false,
+  setRole: false,
+  ban: false,
+  unban: false,
+  setPassword: false,
+  remove: false,
+  revokeSessions: false,
+  impersonate: false,
 }
 
 export function UsersPage() {
@@ -140,7 +125,6 @@ export function UsersPage() {
   // Auth context
   const { user: currentUser } = useAuth()
   const { can } = usePermissionsContext()
-  const { activeOrganizationId } = useOrgRole()
 
   // DB-backed permission flags
   const canCreateUser = can('user', 'create')
@@ -161,13 +145,10 @@ export function UsersPage() {
   const capabilitiesByUserId = useMemo<Record<string, UserCapabilities["actions"]>>(() => {
     return Object.fromEntries(
       users.map((user) => {
-        const isSelf = user.id === currentUser?.id
-        const targetRole = user.role || "member"
-        const fallbackActions = getFallbackUserActions(currentUser?.role || "member", targetRole, isSelf)
-        return [user.id, batchCapabilities?.[user.id]?.actions ?? fallbackActions]
+        return [user.id, batchCapabilities?.[user.id]?.actions ?? EMPTY_USER_ACTIONS]
       })
     )
-  }, [users, batchCapabilities, currentUser?.id, currentUser?.role])
+  }, [users, batchCapabilities])
 
   const createUser = useCreateUser()
   const updateUser = useUpdateUser()
@@ -182,8 +163,8 @@ export function UsersPage() {
   // Handlers
   const handleCreateUser = async () => {
     try {
-      if (newUserData.role !== "admin" && !newUserData.organizationId) {
-        toast.error("Organization is required for non-admin users")
+      if (!newUserData.organizationId) {
+        toast.error("Organization is required for organization-scoped users")
         return
       }
       await createUser.mutateAsync({
@@ -191,7 +172,7 @@ export function UsersPage() {
         email: newUserData.email,
         password: newUserData.password,
         role: newUserData.role,
-        organizationId: newUserData.role === "admin" ? undefined : newUserData.organizationId,
+        organizationId: newUserData.organizationId,
       })
       toast.success("User created successfully")
       setCreateDialogOpen(false)
@@ -329,8 +310,6 @@ export function UsersPage() {
     try {
       await impersonateUser.mutateAsync({
         userId: user.id,
-        role: currentUser?.role || "member",
-        organizationId: currentUser?.role === "manager" ? activeOrganizationId || undefined : undefined,
       })
       toast.success(`Now impersonating ${user.name}`)
       window.location.href = "/" // Redirect to dashboard
@@ -433,9 +412,7 @@ export function UsersPage() {
       id: "actions",
       cell: ({ row }) => {
         const user = row.original
-        const isSelf = user.id === currentUser?.id
-        const targetRole = user.role || "member"
-        const actions = capabilitiesByUserId[user.id] ?? getFallbackUserActions(currentUser?.role || "member", targetRole, isSelf)
+        const actions = capabilitiesByUserId[user.id] ?? EMPTY_USER_ACTIONS
 
         const canUpdate = actions.update && canUpdateUser
         const canDoSetRole = actions.setRole && canSetRole
@@ -655,26 +632,24 @@ export function UsersPage() {
               </Select>
             </div>
 
-            {newUserData.role !== "admin" && (
-              <div className="grid gap-2">
-                <Label htmlFor="organization">Organization</Label>
-                <Select
-                  value={newUserData.organizationId}
-                  onValueChange={(value) => setNewUserData({ ...newUserData, organizationId: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select organization" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(createMeta?.organizations ?? []).map((org) => (
-                      <SelectItem key={org.id} value={org.id}>
-                        {org.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+            <div className="grid gap-2">
+              <Label htmlFor="organization">Organization</Label>
+              <Select
+                value={newUserData.organizationId}
+                onValueChange={(value) => setNewUserData({ ...newUserData, organizationId: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select organization" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(createMeta?.organizations ?? []).map((org) => (
+                    <SelectItem key={org.id} value={org.id}>
+                      {org.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>
