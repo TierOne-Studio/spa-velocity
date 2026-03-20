@@ -1,4 +1,11 @@
 // User types for admin operations
+export interface AdminUserMembership {
+    organizationId: string;
+    organizationName: string;
+    roleName: string;
+    roleDisplayName?: string;
+}
+
 export interface AdminUser {
     id: string;
     name: string;
@@ -11,6 +18,7 @@ export interface AdminUser {
     banExpires?: number;
     createdAt: Date;
     updatedAt: Date;
+    memberships?: AdminUserMembership[];
 }
 
 export interface UserSession {
@@ -73,6 +81,7 @@ export interface UserFilterParams extends PaginationParams {
     searchValue?: string;
     searchField?: "email" | "name";
     searchOperator?: "contains" | "starts_with" | "ends_with";
+    organizationId?: string;
     filterField?: string;
     filterValue?: string | number | boolean;
     filterOperator?: "eq" | "ne" | "lt" | "lte" | "gt" | "gte";

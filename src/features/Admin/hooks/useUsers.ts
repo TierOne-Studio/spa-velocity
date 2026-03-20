@@ -236,9 +236,13 @@ export function useRevokeAllSessions() {
  * Hook to impersonate a user.
  */
 export function useImpersonateUser() {
+    const scope = useUserQueryScope();
+
     return useMutation({
         mutationFn: (params: { userId: string; organizationId?: string }) =>
-            adminService.impersonateUser(params.userId, { organizationId: params.organizationId }),
+            adminService.impersonateUser(params.userId, {
+                organizationId: params.organizationId ?? scope.activeOrganizationId ?? undefined,
+            }),
     });
 }
 

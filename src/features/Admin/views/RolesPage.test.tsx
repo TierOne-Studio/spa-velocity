@@ -15,6 +15,7 @@ const {
   mockUseUpdateRole,
   mockUseDeleteRole,
   mockUseAssignPermissions,
+  mockUseOrganizations,
   mockCan,
   mockUseEffectiveSession,
   mockToastSuccess,
@@ -26,6 +27,7 @@ const {
   mockUseUpdateRole: vi.fn(),
   mockUseDeleteRole: vi.fn(),
   mockUseAssignPermissions: vi.fn(),
+  mockUseOrganizations: vi.fn(),
   mockCan: vi.fn(),
   mockUseEffectiveSession: vi.fn(),
   mockToastSuccess: vi.fn(),
@@ -39,6 +41,10 @@ vi.mock("../hooks/useRoles", () => ({
   useUpdateRole: () => mockUseUpdateRole(),
   useDeleteRole: () => mockUseDeleteRole(),
   useAssignPermissions: () => mockUseAssignPermissions(),
+}));
+
+vi.mock("../hooks/useOrganizations", () => ({
+  useOrganizations: (...args: unknown[]) => mockUseOrganizations(...args),
 }));
 
 vi.mock("@/shared/context/PermissionsContext", () => ({
@@ -108,11 +114,29 @@ vi.mock("@/shared/components/ui/dialog", () => ({
 }));
 
 vi.mock("@/shared/components/ui/select", () => ({
-  Select: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  SelectContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  SelectItem: ({ children, value }: { children: ReactNode; value: string }) => <div data-value={value}>{children}</div>,
-  SelectTrigger: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  SelectValue: () => <span />,
+  Select: ({
+    children,
+    value,
+    onValueChange,
+    "aria-label": ariaLabel,
+  }: {
+    children: ReactNode;
+    value?: string;
+    onValueChange?: (value: string) => void;
+    "aria-label"?: string;
+  }) => (
+    <select
+      aria-label={ariaLabel ?? "select"}
+      value={value}
+      onChange={(event) => onValueChange?.(event.target.value)}
+    >
+      {children}
+    </select>
+  ),
+  SelectContent: ({ children }: { children: ReactNode }) => <>{children}</>,
+  SelectItem: ({ children, value }: { children: ReactNode; value: string }) => <option value={value}>{children}</option>,
+  SelectTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
+  SelectValue: () => null,
 }));
 
 import { RolesPage } from "./RolesPage";
@@ -139,9 +163,11 @@ describe("RolesPage", () => {
     mockUseUpdateRole.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
     mockUseDeleteRole.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
     mockUseAssignPermissions.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
+    mockUseOrganizations.mockReturnValue({ data: undefined, isLoading: false });
     mockCan.mockReturnValue(false);
     mockUseEffectiveSession.mockReturnValue({
       data: {
+        user: { role: "manager" },
         session: { activeOrganizationId: "org-1" },
       },
     });
@@ -191,6 +217,10 @@ describe("RolesPage", () => {
     render(<RolesPage />);
 
     expect(screen.getByTestId("role-card-test")).toBeVisible();
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledTimes(4);
+    });
   });
 
   it("submits role creation when role:create is granted", async () => {
@@ -226,6 +256,7 @@ describe("RolesPage", () => {
 
     mockUseEffectiveSession.mockReturnValue({
       data: {
+        user: { role: "manager" },
         session: {},
       },
     });
@@ -254,5 +285,57 @@ describe("RolesPage", () => {
     );
 
     consoleErrorSpy.mockRestore();
+  });
+
+  it("defaults superadmin roles view to all organizations", async () => {
+    mockUseEffectiveSession.mockReturnValue({
+      data: {
+        user: { role: "superadmin" },
+        session: {},
+      },
+    });
+    mockUseOrganizations.mockReturnValue({
+      data: {
+        data: [{ id: "org-1", name: "Org One" }],
+      },
+      isLoading: false,
+    });
+
+    render(<RolesPage />);
+
+    await waitFor(() => {
+      expect(mockUseRoles).toHaveBeenLastCalledWith({ activeOrganizationId: null, enabled: true });
+    });
+
+    expect(screen.getByLabelText(/organization/i)).toBeInTheDocument();
+    expect(screen.queryByText(/organization required/i)).not.toBeInTheDocument();
+  });
+
+  it("filters superadmin roles by selected organization", async () => {
+    mockUseEffectiveSession.mockReturnValue({
+      data: {
+        user: { role: "superadmin" },
+        session: {},
+      },
+    });
+    mockUseOrganizations.mockReturnValue({
+      data: {
+        data: [
+          { id: "org-1", name: "Org One" },
+          { id: "org-2", name: "Org Two" },
+        ],
+      },
+      isLoading: false,
+    });
+
+    render(<RolesPage />);
+
+    expect(mockUseRoles).toHaveBeenCalledWith({ activeOrganizationId: null, enabled: true });
+
+    fireEvent.change(screen.getByLabelText(/organization/i), { target: { value: "org-2" } });
+
+    await waitFor(() => {
+      expect(mockUseRoles).toHaveBeenLastCalledWith({ activeOrganizationId: "org-2", enabled: true });
+    });
   });
 });

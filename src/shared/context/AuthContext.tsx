@@ -32,6 +32,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 .map((r) => r.trim())
                 .filter(Boolean);
 
+        if (roles.includes("superadmin")) return "superadmin";
         if (roles.includes("admin")) return "admin";
         if (roles.includes("manager")) return "manager";
         return "member";

@@ -73,6 +73,7 @@ export const adminService = {
         url.searchParams.set("limit", String(params.limit ?? 10));
         url.searchParams.set("offset", String(params.offset ?? 0));
         if (params.searchValue) url.searchParams.set("searchValue", params.searchValue);
+        if (params.organizationId) url.searchParams.set("organizationId", params.organizationId);
 
         const response = await fetchWithAuth(url.toString());
         if (!response.ok) {

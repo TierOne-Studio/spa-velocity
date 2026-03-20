@@ -206,4 +206,27 @@ describe("OrganizationsPage", () => {
     expect(mockListUsers).not.toHaveBeenCalled();
     expect(await screen.findByText(/candidate user \(candidate@example.com\)/i)).toBeVisible();
   });
+
+  it("does not render duplicate role options when metadata contains repeated role names", async () => {
+    mockGetOrganizationRolesMetadata.mockResolvedValue({
+      roles: [
+        { name: "member", displayName: "Member", description: null, color: null, isSystem: true },
+        { name: "member", displayName: "Member", description: null, color: null, isSystem: false },
+        { name: "manager", displayName: "Manager", description: null, color: null, isSystem: true },
+      ],
+      assignableRoles: ["member", "member", "manager"],
+    });
+
+    render(<OrganizationsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /org one/i }));
+    fireEvent.click(screen.getByRole("button", { name: /add member/i }));
+
+    const dialog = await screen.findByRole("dialog");
+
+    await waitFor(() => {
+      expect(dialog.querySelectorAll('[data-value="member"]')).toHaveLength(1);
+      expect(dialog.querySelectorAll('[data-value="manager"]')).toHaveLength(1);
+    });
+  });
 });

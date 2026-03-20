@@ -22,6 +22,7 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
     const queryClient = useQueryClient();
     const activeOrganizationId =
         (session?.session as { activeOrganizationId?: string } | undefined)?.activeOrganizationId ?? null;
+    const isSuperadmin = user?.role === "superadmin";
 
     const { data: permissions = [], isLoading: permissionsLoading } = useQuery({
         queryKey: [...permissionsQueryKey, user?.id ?? "anonymous", activeOrganizationId ?? "no-org"],
@@ -37,9 +38,10 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
         (resource: string, action: string): boolean => {
             if (!isAuthenticated) return false;
             if (permissionsLoading) return false;
+            if (isSuperadmin) return true;
             return permissionSet.has(`${resource}:${action}`);
         },
-        [isAuthenticated, permissionsLoading, permissionSet],
+        [isAuthenticated, isSuperadmin, permissionsLoading, permissionSet],
     );
 
     const refetchPermissions = useCallback(() => {

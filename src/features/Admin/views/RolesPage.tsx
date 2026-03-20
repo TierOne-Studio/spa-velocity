@@ -39,9 +39,11 @@ import { roleColorMap, ROLE_COLORS } from "../types/rbac";
 import type { Role, Permission } from "../types/rbac";
 import { usePermissionsContext } from "@/shared/context/PermissionsContext";
 import { useEffectiveSession } from "@/shared/hooks/useEffectiveSession";
+import { useOrganizations } from "../hooks/useOrganizations";
 
 const EMPTY_ROLES: Role[] = [];
 const EMPTY_PERMISSIONS_GROUPED: Record<string, Permission[]> = {};
+const ALL_ORGANIZATIONS_VALUE = "__all__";
 
 /**
  * Component to display permissions for a role
@@ -76,6 +78,7 @@ function PermissionBadges({ permissions }: { permissions: Permission[] }) {
 function RoleCard({ 
   role,
   permissions,
+  organizationName,
   onEdit,
   onDelete,
   onManagePermissions,
@@ -85,6 +88,7 @@ function RoleCard({
 }: { 
   role: Role;
   permissions: Permission[];
+  organizationName?: string;
   onEdit: () => void;
   onDelete: () => void;
   onManagePermissions: () => void;
@@ -101,6 +105,9 @@ function RoleCard({
             <Badge className={roleColorMap[role.color] || roleColorMap.gray} variant="outline">
               {role.name}
             </Badge>
+            {organizationName && (
+              <Badge variant="outline" className="text-xs">{organizationName}</Badge>
+            )}
             {role.isSystem && (
               <Badge variant="secondary" className="text-xs">System</Badge>
             )}
@@ -152,17 +159,57 @@ function RoleCard({
 export function RolesPage() {
   const { can } = usePermissionsContext();
   const { data: session } = useEffectiveSession();
+  const rawUserRole = (session?.user as { role?: string | string[] } | undefined)?.role;
+  const isSuperadmin = Array.isArray(rawUserRole)
+    ? rawUserRole.includes("superadmin")
+    : String(rawUserRole ?? "")
+        .split(",")
+        .map((role) => role.trim())
+        .filter(Boolean)
+        .includes("superadmin");
   const activeOrganizationId =
     (session?.session as { activeOrganizationId?: string } | undefined)?.activeOrganizationId ?? null;
-  const hasActiveOrganization = Boolean(activeOrganizationId);
+  const { data: organizationsResponse, isLoading: isOrganizationsLoading } = useOrganizations(
+    { page: 1, limit: 100 },
+    { enabled: isSuperadmin },
+  );
+  const organizations = organizationsResponse?.data ?? [];
+  const [selectedOrganizationId, setSelectedOrganizationId] = useState(ALL_ORGANIZATIONS_VALUE);
+
+  useEffect(() => {
+    if (!isSuperadmin) {
+      setSelectedOrganizationId(ALL_ORGANIZATIONS_VALUE);
+      return;
+    }
+
+    setSelectedOrganizationId((current) => {
+      if (current === ALL_ORGANIZATIONS_VALUE) {
+        return current;
+      }
+
+      return organizations.some((organization) => organization.id === current)
+        ? current
+        : ALL_ORGANIZATIONS_VALUE;
+    });
+  }, [isSuperadmin, organizations]);
+
+  const resolvedOrganizationId = isSuperadmin
+    ? selectedOrganizationId === ALL_ORGANIZATIONS_VALUE
+      ? null
+      : selectedOrganizationId
+    : activeOrganizationId;
+  const hasResolvedOrganization = isSuperadmin || Boolean(resolvedOrganizationId);
+  const organizationNamesById = new Map(
+    organizations.map((organization) => [organization.id, organization.name]),
+  );
 
   const { data: rolesData, isLoading } = useRoles({
-    activeOrganizationId,
-    enabled: hasActiveOrganization,
+    activeOrganizationId: resolvedOrganizationId,
+    enabled: hasResolvedOrganization,
   });
   const roles = rolesData ?? EMPTY_ROLES;
   const { data: permissionsGroupedData } = usePermissionsGrouped({
-    enabled: hasActiveOrganization,
+    enabled: hasResolvedOrganization,
   });
   const permissionsGrouped = permissionsGroupedData ?? EMPTY_PERMISSIONS_GROUPED;
   const createRole = useCreateRole();
@@ -200,7 +247,7 @@ export function RolesPage() {
 
   // Fetch role permissions when needed
   const fetchRolePermissions = useCallback(async (roleId: string, force = false) => {
-    if (!hasActiveOrganization) {
+    if (!hasResolvedOrganization) {
       return;
     }
 
@@ -223,11 +270,11 @@ export function RolesPage() {
     } catch (error) {
       console.error("Failed to fetch role permissions", error);
     }
-  }, [hasActiveOrganization]);
+  }, [hasResolvedOrganization]);
 
   // Fetch permissions for all roles when roles change
   useEffect(() => {
-    if (!hasActiveOrganization) {
+    if (!hasResolvedOrganization) {
       fetchedRolesRef.current.clear();
       setRolePermissions((prev) => (Object.keys(prev).length === 0 ? prev : {}));
       return;
@@ -236,7 +283,7 @@ export function RolesPage() {
     roles.forEach((role) => {
       fetchRolePermissions(role.id);
     });
-  }, [hasActiveOrganization, roles, fetchRolePermissions]);
+  }, [hasResolvedOrganization, roles, fetchRolePermissions]);
 
   const handleCreateRole = async () => {
     if (!canCreateRole) {
@@ -244,13 +291,21 @@ export function RolesPage() {
       return;
     }
 
+    if (isSuperadmin && !resolvedOrganizationId) {
+      toast.error("Select an organization to create a role");
+      return;
+    }
+
     try {
-      await createRole.mutateAsync({
+      const payload = {
         name: formData.name,
         displayName: formData.displayName,
         description: formData.description || undefined,
         color: formData.color,
-      });
+        ...(isSuperadmin ? { organizationId: resolvedOrganizationId } : {}),
+      };
+
+      await createRole.mutateAsync(payload);
       toast.success("Role created successfully");
       setCreateDialogOpen(false);
       setFormData({ name: "", displayName: "", description: "", color: "gray" });
@@ -345,11 +400,11 @@ export function RolesPage() {
     setPermissionsDialogOpen(true);
   };
 
-  if (isLoading) {
+  if (isLoading || (isSuperadmin && isOrganizationsLoading)) {
     return <div className="p-4">Loading roles...</div>;
   }
 
-  if (!hasActiveOrganization) {
+  if (!isSuperadmin && !hasResolvedOrganization) {
     return (
       <div className="flex flex-1 flex-col gap-4 p-4 lg:p-6">
         <div>
@@ -380,12 +435,36 @@ export function RolesPage() {
             Manage role-based access control for your application
           </p>
         </div>
-        {canCreateRole && (
-          <Button onClick={() => setCreateDialogOpen(true)}>
-            <IconPlus className="h-4 w-4 mr-2" />
-            Create Role
-          </Button>
-        )}
+        <div className="flex items-center gap-3">
+          {isSuperadmin && (
+            <Select
+              aria-label="Organization"
+              value={selectedOrganizationId}
+              onValueChange={setSelectedOrganizationId}
+            >
+              <SelectTrigger className="w-[220px]">
+                <SelectValue placeholder="All organizations" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_ORGANIZATIONS_VALUE}>All organizations</SelectItem>
+                {organizations.map((organization) => (
+                  <SelectItem key={organization.id} value={organization.id}>
+                    {organization.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {canCreateRole && (
+            <Button
+              onClick={() => setCreateDialogOpen(true)}
+              disabled={isSuperadmin && !resolvedOrganizationId}
+            >
+              <IconPlus className="h-4 w-4 mr-2" />
+              Create Role
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Roles Grid */}
@@ -395,6 +474,11 @@ export function RolesPage() {
             key={role.id} 
             role={role}
             permissions={rolePermissions[role.id] || []}
+            organizationName={
+              isSuperadmin && !resolvedOrganizationId
+                ? organizationNamesById.get(role.organizationId ?? "") ?? undefined
+                : undefined
+            }
             onEdit={() => openEditDialog(role)}
             onDelete={() => { setSelectedRole(role); setDeleteDialogOpen(true); }}
             onManagePermissions={() => openPermissionsDialog(role)}

@@ -80,6 +80,8 @@ interface User {
   image?: string | null
 }
 
+const dedupeRoleNames = (roleNames: string[]) => Array.from(new Set(roleNames))
+
 // Helper to extract members array from response
 const getMembersArray = (data: unknown): Member[] => {
   if (!data) return []
@@ -158,6 +160,9 @@ export function OrganizationsPage() {
   const canUpdateOrg = can('organization', 'update')
   const canDeleteOrg = can('organization', 'delete')
   const canManageMembers = can('organization', 'invite')
+  const roleMetadataByName = new Map(
+    (orgRolesMeta?.roles ?? []).map((role) => [role.name, role]),
+  )
 
   // Check slug availability with debounce
   const handleSlugChange = async (slug: string) => {
@@ -511,11 +516,12 @@ export function OrganizationsPage() {
                                 {(() => {
                                   const isAdmin = member.role === "admin"
                                   const isOnlyAdmin = isAdmin && members.filter(m => m.role === "admin").length === 1
-                                  // Build role options: include current role even if not in assignableRoles
-                                  const assignable = orgRolesMeta?.assignableRoles ?? []
-                                  const allRoleOptions = assignable.includes(member.role)
-                                    ? assignable
-                                    : [member.role, ...assignable]
+                                  const assignable = dedupeRoleNames(orgRolesMeta?.assignableRoles ?? [])
+                                  const allRoleOptions = dedupeRoleNames(
+                                    assignable.includes(member.role)
+                                      ? assignable
+                                      : [member.role, ...assignable],
+                                  )
                                   return (
                                     <Select
                                       value={member.role || undefined}
@@ -531,7 +537,7 @@ export function OrganizationsPage() {
                                       </SelectTrigger>
                                       <SelectContent>
                                         {allRoleOptions.map((roleName) => {
-                                          const role = orgRolesMeta?.roles.find((r) => r.name === roleName)
+                                          const role = roleMetadataByName.get(roleName)
                                           return (
                                             <SelectItem key={roleName} value={roleName}>
                                               {role?.displayName || roleName.charAt(0).toUpperCase() + roleName.slice(1)}
@@ -735,8 +741,8 @@ export function OrganizationsPage() {
                   <SelectValue placeholder="Select role" />
                 </SelectTrigger>
                 <SelectContent>
-                  {(orgRolesMeta?.assignableRoles ?? []).map((roleName) => {
-                    const role = orgRolesMeta?.roles.find((r) => r.name === roleName)
+                  {dedupeRoleNames(orgRolesMeta?.assignableRoles ?? []).map((roleName) => {
+                    const role = roleMetadataByName.get(roleName)
                     return (
                       <SelectItem key={roleName} value={roleName}>
                         {role?.displayName || roleName}

@@ -134,6 +134,21 @@ describe("PermissionsContext", () => {
     });
   });
 
+  it("can() returns true for superadmin even when the fetched permission list is incomplete", async () => {
+    mockUseAuth.mockReturnValue({
+      user: { id: "superadmin-1", role: "superadmin" },
+      isAuthenticated: true,
+      isLoading: false,
+    });
+    mockGetMyPermissions.mockResolvedValue(["user:read"]);
+
+    render(createWrapper(<TestConsumer resource="user" action="delete" />));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("can").textContent).toBe("true");
+    });
+  });
+
   it("refetchPermissions invalidates the permissions query cache", async () => {
     mockUseAuth.mockReturnValue({
       user: { id: "admin-1", role: "admin" },

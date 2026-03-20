@@ -21,8 +21,13 @@ export const rbacService = {
   /**
    * Get all roles
    */
-  async getRoles(): Promise<Role[]> {
-    const response = await fetchWithAuth(`${API_BASE_URL}/api/rbac/roles`);
+  async getRoles(organizationId?: string | null): Promise<Role[]> {
+    const url = new URL(`${API_BASE_URL}/api/rbac/roles`);
+    if (organizationId) {
+      url.searchParams.set("organizationId", organizationId);
+    }
+
+    const response = await fetchWithAuth(url.toString());
     if (!response.ok) {
       throw new Error("Failed to fetch roles");
     }
@@ -45,8 +50,13 @@ export const rbacService = {
   /**
    * Create a new role
    */
-  async createRole(dto: CreateRoleDto): Promise<Role> {
-    const response = await fetchWithAuth(`${API_BASE_URL}/api/rbac/roles`, {
+  async createRole(dto: CreateRoleDto, organizationId?: string | null): Promise<Role> {
+    const url = new URL(`${API_BASE_URL}/api/rbac/roles`);
+    if (organizationId) {
+      url.searchParams.set("organizationId", organizationId);
+    }
+
+    const response = await fetchWithAuth(url.toString(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(dto),

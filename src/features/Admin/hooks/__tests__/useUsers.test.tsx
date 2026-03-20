@@ -342,7 +342,7 @@ describe('useImpersonateUser hook', () => {
     });
   });
 
-  it('should call adminService.impersonateUser without organizationId by default', async () => {
+  it('should default impersonation organizationId from the effective active organization', async () => {
     (adminService.impersonateUser as Mock).mockResolvedValue(undefined);
 
     const { result } = renderHook(() => useImpersonateUser(), {
@@ -352,7 +352,7 @@ describe('useImpersonateUser hook', () => {
     await result.current.mutateAsync({ userId: 'user-1' });
 
     expect(adminService.impersonateUser).toHaveBeenCalledWith('user-1', {
-      organizationId: undefined,
+      organizationId: 'org-1',
     });
   });
 });

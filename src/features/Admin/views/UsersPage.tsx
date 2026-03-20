@@ -55,10 +55,11 @@ import {
   useRemoveUsers,
   useImpersonateUser,
 } from "../hooks/useUsers"
+import { useOrganizations } from "../hooks/useOrganizations"
 import { Checkbox } from "@/shared/components/ui/checkbox"
 import { useAuth } from "@/shared/context/AuthContext"
 import { usePermissionsContext } from "@/shared/context/PermissionsContext"
-import type { AdminUser, UserFilterParams } from "../types"
+import type { AdminUser, AdminUserMembership, UserFilterParams } from "../types"
 import { adminService, type UserCapabilities } from "../services/adminService"
 
 const EMPTY_USER_ACTIONS: UserCapabilities["actions"] = {
@@ -72,11 +73,29 @@ const EMPTY_USER_ACTIONS: UserCapabilities["actions"] = {
   impersonate: false,
 }
 
+const ALL_ORGANIZATIONS_VALUE = "__all__"
+const MEMBERSHIP_PILL_LIMIT = 1
+
+function getMembershipLabel(membership: AdminUserMembership) {
+  return `${membership.organizationName} · ${membership.roleDisplayName ?? membership.roleName}`
+}
+
+function getMemberships(user: AdminUser) {
+  const seen = new Set<string>()
+  return (user.memberships ?? []).filter((membership) => {
+    const key = `${membership.organizationId}:${membership.roleName}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
 export function UsersPage() {
   // Pagination and filter state
   const [pageIndex, setPageIndex] = useState(0)
   const [pageSize, setPageSize] = useState(10)
   const [searchValue, setSearchValue] = useState("")
+  const [selectedOrganizationId, setSelectedOrganizationId] = useState(ALL_ORGANIZATIONS_VALUE)
   // Sorting state - prepared for future use
   const [sortBy] = useState<string | undefined>()
   const [sortDirection] = useState<"asc" | "desc" | undefined>()
@@ -111,6 +130,26 @@ export function UsersPage() {
     allowedRoleNames: Array<'admin' | 'manager' | 'member'>
   }>(null)
 
+  // Auth context
+  const { user: currentUser } = useAuth()
+  const { can } = usePermissionsContext()
+  const rawUserRole = currentUser?.role
+  const isSuperadmin = Array.isArray(rawUserRole)
+    ? rawUserRole.includes("superadmin")
+    : String(rawUserRole ?? "")
+        .split(",")
+        .map((role) => role.trim())
+        .filter(Boolean)
+        .includes("superadmin")
+  const { data: organizationsResponse } = useOrganizations(
+    { page: 1, limit: 100 },
+    { enabled: isSuperadmin },
+  )
+  const organizations = organizationsResponse?.data ?? []
+  const filteredOrganizationId =
+    isSuperadmin && selectedOrganizationId !== ALL_ORGANIZATIONS_VALUE ? selectedOrganizationId : undefined
+  const isAllOrganizationsMode = isSuperadmin && selectedOrganizationId === ALL_ORGANIZATIONS_VALUE
+
   // Build query params
   const queryParams: UserFilterParams = useMemo(() => ({
     limit: pageSize,
@@ -118,13 +157,10 @@ export function UsersPage() {
     sortBy,
     sortDirection,
     searchValue: searchValue || undefined,
+    organizationId: filteredOrganizationId,
     searchField: searchValue ? "name" : undefined,
     searchOperator: searchValue ? "contains" : undefined,
-  }), [pageSize, pageIndex, sortBy, sortDirection, searchValue])
-
-  // Auth context
-  const { user: currentUser } = useAuth()
-  const { can } = usePermissionsContext()
+  }), [pageSize, pageIndex, sortBy, sortDirection, searchValue, filteredOrganizationId])
 
   // DB-backed permission flags
   const canCreateUser = can('user', 'create')
@@ -307,9 +343,11 @@ export function UsersPage() {
       toast.error("You cannot impersonate yourself")
       return
     }
+
     try {
       await impersonateUser.mutateAsync({
         userId: user.id,
+        organizationId: filteredOrganizationId,
       })
       toast.success(`Now impersonating ${user.name}`)
       window.location.href = "/" // Redirect to dashboard
@@ -319,58 +357,101 @@ export function UsersPage() {
   }
 
   // Table columns
-  const columns: ColumnDef<AdminUser>[] = useMemo(() => [
-    {
-      id: "select",
-      header: ({ table }) => (
-        <Checkbox
-          checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && "indeterminate")}
-          onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-          aria-label="Select all"
-        />
-      ),
-      cell: ({ row }) => (
-        <Checkbox
-          checked={row.getIsSelected()}
-          onCheckedChange={(value) => row.toggleSelected(!!value)}
-          aria-label="Select row"
-        />
-      ),
-      enableSorting: false,
-      enableHiding: false,
-    },
-    {
-      accessorKey: "name",
-      header: "User",
-      cell: ({ row }) => {
-        const user = row.original
-        return (
-          <div className="flex items-center gap-3">
-            <Avatar className="h-8 w-8">
-              <AvatarImage src={user.image} alt={user.name} />
-              <AvatarFallback>{user.name?.charAt(0)?.toUpperCase() || "U"}</AvatarFallback>
-            </Avatar>
-            <div className="flex flex-col">
-              <span className="font-medium">{user.name}</span>
-              <span className="text-sm text-muted-foreground">{user.email}</span>
+  const columns: ColumnDef<AdminUser>[] = useMemo(() => {
+    const membershipOrRoleColumn: ColumnDef<AdminUser> = isAllOrganizationsMode
+      ? {
+          id: "memberships",
+          header: "Memberships",
+          cell: ({ row }) => {
+            const memberships = getMemberships(row.original)
+            const visibleMemberships = memberships.slice(0, MEMBERSHIP_PILL_LIMIT)
+            const hiddenMemberships = memberships.slice(MEMBERSHIP_PILL_LIMIT)
+
+            if (memberships.length === 0) {
+              return <Badge variant="outline">No memberships</Badge>
+            }
+
+            return (
+              <div className="flex flex-wrap items-center gap-2">
+                {visibleMemberships.map((membership) => (
+                  <Badge key={`${membership.organizationId}:${membership.roleName}`} variant="secondary">
+                    {getMembershipLabel(membership)}
+                  </Badge>
+                ))}
+                {hiddenMemberships.length > 0 && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-7 px-2">
+                        +{hiddenMemberships.length} more
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                      {hiddenMemberships.map((membership) => (
+                        <DropdownMenuItem key={`${membership.organizationId}:${membership.roleName}`}>
+                          {getMembershipLabel(membership)}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
+            )
+          },
+        }
+      : {
+          accessorKey: "role",
+          header: "Role",
+          cell: ({ row }) => {
+            const role = row.original.role || "member"
+            return (
+              <Badge variant={role === "admin" ? "default" : "secondary"}>
+                {role}
+              </Badge>
+            )
+          },
+        }
+
+    return [
+      {
+        id: "select",
+        header: ({ table }) => (
+          <Checkbox
+            checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && "indeterminate")}
+            onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+            aria-label="Select all"
+          />
+        ),
+        cell: ({ row }) => (
+          <Checkbox
+            checked={row.getIsSelected()}
+            onCheckedChange={(value) => row.toggleSelected(!!value)}
+            aria-label="Select row"
+          />
+        ),
+        enableSorting: false,
+        enableHiding: false,
+      },
+      {
+        accessorKey: "name",
+        header: "User",
+        cell: ({ row }) => {
+          const user = row.original
+          return (
+            <div className="flex items-center gap-3">
+              <Avatar className="h-8 w-8">
+                <AvatarImage src={user.image} alt={user.name} />
+                <AvatarFallback>{user.name?.charAt(0)?.toUpperCase() || "U"}</AvatarFallback>
+              </Avatar>
+              <div className="flex flex-col">
+                <span className="font-medium">{user.name}</span>
+                <span className="text-sm text-muted-foreground">{user.email}</span>
+              </div>
             </div>
-          </div>
-        )
+          )
+        },
       },
-    },
-    {
-      accessorKey: "role",
-      header: "Role",
-      cell: ({ row }) => {
-        const role = row.original.role || "member"
-        return (
-          <Badge variant={role === "admin" ? "default" : "secondary"}>
-            {role}
-          </Badge>
-        )
-      },
-    },
-    {
+      membershipOrRoleColumn,
+      {
       accessorKey: "emailVerified",
       header: "Email Verified",
       cell: ({ row }) => (
@@ -379,7 +460,7 @@ export function UsersPage() {
         </Badge>
       ),
     },
-    {
+      {
       accessorKey: "banned",
       header: "Status",
       cell: ({ row }) => {
@@ -400,15 +481,15 @@ export function UsersPage() {
         )
       },
     },
-    {
+      {
       accessorKey: "createdAt",
       header: "Created",
       cell: ({ row }) => {
         const date = new Date(row.original.createdAt)
         return date.toLocaleDateString()
       },
-    },
-    {
+      },
+      {
       id: "actions",
       cell: ({ row }) => {
         const user = row.original
@@ -522,8 +603,22 @@ export function UsersPage() {
           </DropdownMenu>
         )
       },
-    },
-  ], [currentUser, capabilitiesByUserId, canUpdateUser, canSetRole, canBanUser, canSetPassword, canDeleteUser, canImpersonate])
+      },
+    ]
+  }, [
+    currentUser,
+    capabilitiesByUserId,
+    canUpdateUser,
+    canSetRole,
+    canBanUser,
+    canSetPassword,
+    canDeleteUser,
+    canImpersonate,
+    isAllOrganizationsMode,
+    handleOpenRoleDialog,
+    handleImpersonateUser,
+    handleUnbanUser,
+  ])
 
   return (
     <div className="flex flex-1 flex-col gap-4 p-4 lg:p-6">
@@ -554,6 +649,28 @@ export function UsersPage() {
         onRowSelectionChange={setSelectedUsers}
         toolbar={
           <div className="flex items-center gap-2">
+            {isSuperadmin && (
+              <Select
+                aria-label="Organization"
+                value={selectedOrganizationId}
+                onValueChange={(value) => {
+                  setSelectedOrganizationId(value)
+                  setPageIndex(0)
+                }}
+              >
+                <SelectTrigger className="w-[220px]">
+                  <SelectValue placeholder="All organizations" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_ORGANIZATIONS_VALUE}>All organizations</SelectItem>
+                  {organizations.map((organization) => (
+                    <SelectItem key={organization.id} value={organization.id}>
+                      {organization.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             {selectedUsers.length > 0 && canDeleteUser && (
               <Button
                 variant="destructive"

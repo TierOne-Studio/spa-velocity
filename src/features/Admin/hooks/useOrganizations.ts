@@ -17,10 +17,14 @@ export const organizationKeys = {
 /**
  * Hook to fetch list of organizations with pagination.
  */
-export function useOrganizations(params: OrganizationFilterParams = {}) {
+export function useOrganizations(
+    params: OrganizationFilterParams = {},
+    options?: { enabled?: boolean },
+) {
     return useQuery({
         queryKey: organizationKeys.list(params),
         queryFn: () => organizationService.listOrganizations(params),
+        enabled: options?.enabled ?? true,
     });
 }
 
