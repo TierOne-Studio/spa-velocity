@@ -193,6 +193,18 @@ export function OrganizationSwitcher() {
 
   const [isLoading, setIsLoading] = useState(false)
 
+  useEffect(() => {
+    setActiveMember((current) => {
+      const nextOrganizationId = activeOrganizationId ?? undefined
+
+      if (current?.organizationId === nextOrganizationId) {
+        return current
+      }
+
+      return nextOrganizationId ? { organizationId: nextOrganizationId } : null
+    })
+  }, [activeOrganizationId])
+
   // Find active organization
   const activeOrg = organizations.find(
     (org) => org.id === (activeMember?.organizationId ?? activeOrganizationId ?? undefined)

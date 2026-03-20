@@ -631,9 +631,14 @@ export const organizationService = {
      * Set active organization.
      */
     async setActive(organizationId: string) {
-        const { error } = await organization.setActive({ organizationId });
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/auth/organization/set-active`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ organizationId }),
+        });
 
-        if (error) {
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
             throw new Error(error.message || "Failed to set active organization");
         }
     },

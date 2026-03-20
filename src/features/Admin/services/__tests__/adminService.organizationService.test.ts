@@ -464,15 +464,32 @@ describe("organizationService.setActive", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("succeeds when no error", async () => {
-    mockOrganization.setActive.mockResolvedValue({ error: null });
+    mockFetchWithAuth.mockResolvedValue(okJson({ data: null }));
 
     await expect(organizationService.setActive("org-1")).resolves.toBeUndefined();
+
+    expect(mockFetchWithAuth).toHaveBeenCalledWith(
+      expect.stringContaining("/api/auth/organization/set-active"),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ organizationId: "org-1" }),
+      }),
+    );
   });
 
   it("throws on error — covers if(error) branch", async () => {
-    mockOrganization.setActive.mockResolvedValue({ error: { message: "Set active failed" } });
+    mockFetchWithAuth.mockResolvedValue(errJson("Set active failed"));
 
     await expect(organizationService.setActive("org-1")).rejects.toThrow("Set active failed");
+  });
+
+  it("throws fallback when json parse fails", async () => {
+    mockFetchWithAuth.mockResolvedValue({
+      ok: false,
+      json: () => Promise.reject(new Error("parse error")),
+    });
+
+    await expect(organizationService.setActive("org-1")).rejects.toThrow("Failed to set active organization");
   });
 });
 

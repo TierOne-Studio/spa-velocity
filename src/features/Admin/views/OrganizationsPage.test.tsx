@@ -18,11 +18,15 @@ const {
   mockUseUpdateMemberRole,
   mockUseAddMember,
   mockUseCheckSlug,
+  mockUseSetActiveOrganization,
   mockGetOrganizationRolesMetadata,
   mockListUsers,
   mockListMemberCandidates,
   mockUseAuth,
+  mockUseEffectiveSession,
   mockCan,
+  mockRefetchPermissions,
+  mockSessionRefetch,
   mockToastError,
   mockToastSuccess,
 } = vi.hoisted(() => ({
@@ -35,18 +39,22 @@ const {
   mockUseUpdateMemberRole: vi.fn(),
   mockUseAddMember: vi.fn(),
   mockUseCheckSlug: vi.fn(),
+  mockUseSetActiveOrganization: vi.fn(),
   mockGetOrganizationRolesMetadata: vi.fn(),
   mockListUsers: vi.fn(),
   mockListMemberCandidates: vi.fn(),
   mockUseAuth: vi.fn(),
+  mockUseEffectiveSession: vi.fn(),
   mockCan: vi.fn(),
+  mockRefetchPermissions: vi.fn(),
+  mockSessionRefetch: vi.fn(),
   mockToastError: vi.fn(),
   mockToastSuccess: vi.fn(),
 }));
 
 vi.mock("../hooks/useOrganizations", () => ({
-  useOrganizations: () => mockUseOrganizations(),
-  useOrganizationMembers: () => mockUseOrganizationMembers(),
+  useOrganizations: (...args: unknown[]) => mockUseOrganizations(...args),
+  useOrganizationMembers: (...args: unknown[]) => mockUseOrganizationMembers(...args),
   useCreateOrganization: () => mockUseCreateOrganization(),
   useUpdateOrganization: () => mockUseUpdateOrganization(),
   useDeleteOrganization: () => mockUseDeleteOrganization(),
@@ -54,6 +62,7 @@ vi.mock("../hooks/useOrganizations", () => ({
   useUpdateMemberRole: () => mockUseUpdateMemberRole(),
   useAddMember: () => mockUseAddMember(),
   useCheckSlug: () => mockUseCheckSlug(),
+  useSetActiveOrganization: () => mockUseSetActiveOrganization(),
 }));
 
 vi.mock("../services/adminService", () => ({
@@ -70,8 +79,12 @@ vi.mock("@/shared/context/AuthContext", () => ({
   useAuth: () => mockUseAuth(),
 }));
 
+vi.mock("@/shared/hooks/useEffectiveSession", () => ({
+  useEffectiveSession: () => mockUseEffectiveSession(),
+}));
+
 vi.mock("@/shared/context/PermissionsContext", () => ({
-  usePermissionsContext: () => ({ can: mockCan }),
+  usePermissionsContext: () => ({ can: mockCan, refetchPermissions: mockRefetchPermissions }),
 }));
 
 vi.mock("sonner", () => ({
@@ -125,7 +138,9 @@ vi.mock("@/shared/components/ui/label", () => ({
 }));
 
 vi.mock("@/shared/components/ui/select", () => ({
-  Select: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  Select: ({ children, disabled, value }: { children: ReactNode; disabled?: boolean; value?: string }) => (
+    <div data-disabled={disabled ? "true" : "false"} data-select-value={value}>{children}</div>
+  ),
   SelectContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   SelectItem: ({ children, value }: { children: ReactNode; value: string }) => <div data-value={value}>{children}</div>,
   SelectTrigger: ({ children, ...props }: HTMLAttributes<HTMLDivElement>) => <div {...props}>{children}</div>,
@@ -176,6 +191,7 @@ describe("OrganizationsPage", () => {
     mockUseUpdateMemberRole.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
     mockUseAddMember.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
     mockUseCheckSlug.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
+    mockUseSetActiveOrganization.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
     mockGetOrganizationRolesMetadata.mockResolvedValue({
       roles: [
         { name: "member", displayName: "Member", description: null, color: null, isSystem: true },
@@ -189,6 +205,13 @@ describe("OrganizationsPage", () => {
     ]);
     mockUseAuth.mockReturnValue({
       user: { id: "manager-1", role: "manager" },
+    });
+    mockUseEffectiveSession.mockReturnValue({
+      data: {
+        user: { id: "manager-1", role: "manager" },
+        session: { activeOrganizationId: "org-1" },
+      },
+      refetch: mockSessionRefetch,
     });
     mockCan.mockImplementation((resource: string, action: string) => resource === "organization" && action === "invite");
   });
@@ -227,6 +250,110 @@ describe("OrganizationsPage", () => {
     await waitFor(() => {
       expect(dialog.querySelectorAll('[data-value="member"]')).toHaveLength(1);
       expect(dialog.querySelectorAll('[data-value="manager"]')).toHaveLength(1);
+    });
+  });
+
+  it("auto-switches the active organization when selecting a different organization to manage", async () => {
+    mockUseOrganizations.mockReturnValue({
+      data: {
+        data: [
+          { id: "org-1", name: "Org One", slug: "org-one", createdAt: new Date() },
+          { id: "org-2", name: "Org Two", slug: "org-two", createdAt: new Date() },
+        ],
+        total: 2,
+        totalPages: 1,
+      },
+      isLoading: false,
+    });
+    mockUseOrganizationMembers.mockReturnValue({
+      data: [
+        {
+          id: "member-1",
+          userId: "user-1",
+          role: "member",
+          user: { id: "user-1", name: "Existing User", email: "existing@example.com" },
+        },
+        {
+          id: "member-2",
+          userId: "user-2",
+          role: "manager",
+          user: { id: "user-2", name: "Other User", email: "other@example.com" },
+        },
+      ],
+      isLoading: false,
+    });
+    const setActive = vi.fn().mockResolvedValue(undefined)
+    mockUseSetActiveOrganization.mockReturnValue({ mutateAsync: setActive, isPending: false })
+
+    render(<OrganizationsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /org two/i }));
+
+    await waitFor(() => {
+      expect(setActive).toHaveBeenCalledWith("org-2");
+      expect(mockSessionRefetch).toHaveBeenCalled();
+      expect(mockRefetchPermissions).toHaveBeenCalled();
+      expect(mockToastSuccess).toHaveBeenCalledWith("Switched organization");
+      expect(screen.getByRole("button", { name: /add member/i })).toBeVisible();
+      expect(
+        screen.queryByText(/switch your active organization to manage members for this organization/i),
+      ).not.toBeInTheDocument();
+      expect(screen.getByText(/existing user/i)).toBeVisible();
+      expect(screen.getByText(/other user/i)).toBeVisible();
+      expect(mockUseOrganizationMembers).toHaveBeenLastCalledWith("org-2");
+    });
+  });
+
+  it("lets superadmin manage any organization and keeps the last admin role select enabled", async () => {
+    mockUseOrganizations.mockReturnValue({
+      data: {
+        data: [
+          { id: "org-1", name: "Org One", slug: "org-one", createdAt: new Date() },
+          { id: "org-2", name: "Org Two", slug: "org-two", createdAt: new Date() },
+        ],
+        total: 2,
+        totalPages: 1,
+      },
+      isLoading: false,
+    });
+    mockUseOrganizationMembers.mockReturnValue({
+      data: [
+        {
+          id: "member-1",
+          userId: "user-1",
+          role: "manager",
+          user: { id: "user-1", name: "Manager User", email: "manager@example.com" },
+        },
+        {
+          id: "member-2",
+          userId: "user-2",
+          role: "admin",
+          user: { id: "user-2", name: "Admin User", email: "admin@example.com" },
+        },
+      ],
+      isLoading: false,
+    });
+    mockUseAuth.mockReturnValue({
+      user: { id: "super-1", role: "superadmin" },
+    });
+    mockUseEffectiveSession.mockReturnValue({
+      data: {
+        user: { id: "super-1", role: "superadmin" },
+        session: {},
+      },
+    });
+
+    render(<OrganizationsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /org two/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /add member/i })).toBeVisible();
+      expect(
+        screen.queryByText(/switch your active organization to manage members for this organization/i),
+      ).not.toBeInTheDocument();
+      expect(mockUseOrganizationMembers).toHaveBeenLastCalledWith("org-2");
+      expect(screen.queryAllByText("Admin").some((node) => node.closest('[data-disabled="false"]'))).toBe(true);
     });
   });
 });

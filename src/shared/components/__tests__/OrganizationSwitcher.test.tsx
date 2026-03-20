@@ -155,6 +155,46 @@ describe("OrganizationSwitcher", () => {
     })
   })
 
+  it("syncs the displayed organization when activeOrganizationId changes externally", async () => {
+    let currentSession = {
+      user: { id: "target-1", role: "manager" },
+      session: { activeOrganizationId: "org-1" },
+    }
+
+    mockUseEffectiveSession.mockImplementation(() => ({
+      data: currentSession,
+    }))
+    mockFetchWithAuth.mockImplementation((url: unknown) => {
+      const requestUrl = String(url)
+      if (requestUrl.includes("/api/auth/organization/list")) {
+        return Promise.resolve(buildResponse({ data: [ORG, { id: "org-2", name: "Second Org", slug: "second-org" }] }))
+      }
+      if (requestUrl.includes("/api/auth/organization/get-active-member")) {
+        return Promise.resolve(buildResponse({ data: { organizationId: "org-1" } }))
+      }
+      return Promise.reject(new Error(`Unexpected URL: ${requestUrl}`))
+    })
+
+    const { rerender } = render(<OrganizationSwitcher />)
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /test org/i })).toBeEnabled()
+      expect(mockFetchWithAuth).toHaveBeenCalledTimes(2)
+    })
+
+    currentSession = {
+      user: { id: "target-1", role: "manager" },
+      session: { activeOrganizationId: "org-2" },
+    }
+
+    rerender(<OrganizationSwitcher />)
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /second org/i })).toBeEnabled()
+      expect(mockFetchWithAuth).toHaveBeenCalledTimes(2)
+    })
+  })
+
   it("refetches organizations when the authenticated user changes but the role stays the same", async () => {
     const mockRefreshSession = vi.fn().mockResolvedValue(undefined)
     let currentUser = { id: "user-1", role: "member" }

@@ -47,10 +47,12 @@ import {
   useUpdateMemberRole,
   useAddMember,
   useCheckSlug,
+  useSetActiveOrganization,
 } from "../hooks/useOrganizations"
 import { organizationService } from "../services/adminService"
 import { getOrganizationRolesMetadata } from "../services/adminService"
 import { usePermissionsContext } from "@/shared/context/PermissionsContext"
+import { useEffectiveSession } from "@/shared/hooks/useEffectiveSession"
 
 interface Organization {
   id: string
@@ -94,7 +96,8 @@ const getMembersArray = (data: unknown): Member[] => {
 
 
 export function OrganizationsPage() {
-  const { can } = usePermissionsContext()
+  const { can, refetchPermissions } = usePermissionsContext()
+  const { data: session, refetch: refetchSession } = useEffectiveSession()
 
   // State
   const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null)
@@ -104,6 +107,7 @@ export function OrganizationsPage() {
   const [addMemberDialogOpen, setAddMemberDialogOpen] = useState(false)
   const [removeMemberDialogOpen, setRemoveMemberDialogOpen] = useState(false)
   const [selectedMember, setSelectedMember] = useState<Member | null>(null)
+  const [optimisticActiveOrganizationId, setOptimisticActiveOrganizationId] = useState<string | null>(null)
 
   // Pagination state
   const [page, setPage] = useState(1)
@@ -124,9 +128,27 @@ export function OrganizationsPage() {
     assignableRoles: string[];
   } | null>(null)
 
+  const activeOrganizationId =
+    (session?.session as { activeOrganizationId?: string } | undefined)?.activeOrganizationId ?? null
+  const currentActiveOrganizationId = optimisticActiveOrganizationId ?? activeOrganizationId
+  const rawSessionRole = (session?.user as { role?: string | string[] } | undefined)?.role
+  const isSuperadmin = Array.isArray(rawSessionRole)
+    ? rawSessionRole.includes("superadmin")
+    : String(rawSessionRole ?? "")
+        .split(",")
+        .map((role) => role.trim())
+        .filter(Boolean)
+        .includes("superadmin")
+  const canManageOrganizationFromPage = (organizationId: string) =>
+    isSuperadmin || organizationId === currentActiveOrganizationId
+  const canManageSelectedOrganization =
+    !!selectedOrg && canManageOrganizationFromPage(selectedOrg.id)
+
   // Queries
   const { data: orgsResponse, isLoading: orgsLoading } = useOrganizations({ page, limit: pageSize, search: search || undefined })
-  const { data: membersData, isLoading: membersLoading } = useOrganizationMembers(selectedOrg?.id ?? "")
+  const { data: membersData, isLoading: membersLoading } = useOrganizationMembers(
+    selectedOrg?.id ?? "",
+  )
 
   // Extract arrays from response data
   const organizations = orgsResponse?.data ?? []
@@ -142,6 +164,11 @@ export function OrganizationsPage() {
   const removeMember = useRemoveMember()
   const updateMemberRole = useUpdateMemberRole()
   const checkSlug = useCheckSlug()
+  const setActiveOrganization = useSetActiveOrganization()
+
+  useEffect(() => {
+    setOptimisticActiveOrganizationId(null)
+  }, [activeOrganizationId])
 
   // Fetch organization roles metadata on mount
   useEffect(() => {
@@ -163,6 +190,24 @@ export function OrganizationsPage() {
   const roleMetadataByName = new Map(
     (orgRolesMeta?.roles ?? []).map((role) => [role.name, role]),
   )
+
+  const handleSelectOrganization = async (org: Organization) => {
+    setSelectedOrg(org)
+
+    if (isSuperadmin || org.id === currentActiveOrganizationId || setActiveOrganization.isPending) {
+      return
+    }
+
+    try {
+      await setActiveOrganization.mutateAsync(org.id)
+      setOptimisticActiveOrganizationId(org.id)
+      await refetchSession()
+      refetchPermissions()
+      toast.success("Switched organization")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to switch organization")
+    }
+  }
 
   // Check slug availability with debounce
   const handleSlugChange = async (slug: string) => {
@@ -206,7 +251,7 @@ export function OrganizationsPage() {
 
   const handleUpdateOrg = async () => {
     if (!selectedOrg) return
-    if (!canUpdateOrg) {
+    if (!canUpdateOrg || !canManageSelectedOrganization) {
       toast.error("You do not have permission to update organizations")
       return
     }
@@ -225,7 +270,7 @@ export function OrganizationsPage() {
 
   const handleDeleteOrg = async () => {
     if (!selectedOrg) return
-    if (!canDeleteOrg) {
+    if (!canDeleteOrg || !canManageSelectedOrganization) {
       toast.error("You do not have permission to delete organizations")
       return
     }
@@ -243,7 +288,7 @@ export function OrganizationsPage() {
   const handleOpenAddMemberDialog = async () => {
     if (!selectedOrg) return
 
-    if (!canManageMembers) {
+    if (!canManageMembers || !canManageSelectedOrganization) {
       toast.error("You do not have permission to invite members")
       return
     }
@@ -262,7 +307,7 @@ export function OrganizationsPage() {
 
   const handleAddMember = async () => {
     if (!selectedOrg || !addMemberData.userId) return
-    if (!canManageMembers) {
+    if (!canManageMembers || !canManageSelectedOrganization) {
       toast.error("You do not have permission to invite members")
       return
     }
@@ -283,7 +328,7 @@ export function OrganizationsPage() {
 
   const handleRemoveMember = async () => {
     if (!selectedOrg || !selectedMember) return
-    if (!canManageMembers) {
+    if (!canManageMembers || !canManageSelectedOrganization) {
       toast.error("You do not have permission to remove members")
       return
     }
@@ -303,7 +348,7 @@ export function OrganizationsPage() {
 
   const handleUpdateRole = async (memberId: string, newRole: "admin" | "manager" | "member") => {
     if (!selectedOrg) return
-    if (!canManageMembers) {
+    if (!canManageMembers || !canManageSelectedOrganization) {
       toast.error("You do not have permission to update member roles")
       return
     }
@@ -366,7 +411,7 @@ export function OrganizationsPage() {
                 organizations.map((org: Organization) => (
                   <button
                     key={org.id}
-                    onClick={() => setSelectedOrg(org)}
+                    onClick={() => void handleSelectOrganization(org)}
                     className={`flex items-center gap-3 w-full text-left p-3 rounded-lg transition-colors ${
                       selectedOrg?.id === org.id
                         ? "bg-primary/10 border border-primary"
@@ -388,14 +433,14 @@ export function OrganizationsPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        {canUpdateOrg && (
+                        {canUpdateOrg && canManageOrganizationFromPage(org.id) && (
                           <DropdownMenuItem onClick={() => openEditDialog(org)}>
                             <IconEdit className="mr-2 h-4 w-4" />
                             Edit
                           </DropdownMenuItem>
                         )}
-                        {canUpdateOrg && canDeleteOrg && <DropdownMenuSeparator />}
-                        {canDeleteOrg && (
+                        {canUpdateOrg && canDeleteOrg && canManageOrganizationFromPage(org.id) && <DropdownMenuSeparator />}
+                        {canDeleteOrg && canManageOrganizationFromPage(org.id) && (
                           <DropdownMenuItem
                             className="text-destructive"
                             onClick={() => {
@@ -457,7 +502,7 @@ export function OrganizationsPage() {
                 {selectedOrg ? `Manage members` : "Select an organization"}
               </CardDescription>
             </div>
-            {selectedOrg && canManageMembers && (
+            {selectedOrg && canManageMembers && canManageSelectedOrganization && (
               <Button onClick={handleOpenAddMemberDialog}>
                 <IconUsers className="mr-2 h-4 w-4" />
                 Add Member
@@ -477,6 +522,11 @@ export function OrganizationsPage() {
                     <IconUsers className="h-5 w-5" />
                     Members ({members.length})
                   </h3>
+                  {!canManageSelectedOrganization && (
+                    <div className="text-center py-6 text-muted-foreground border rounded-lg">
+                      Switch your active organization to manage members for this organization
+                    </div>
+                  )}
                   {membersLoading ? (
                     <div className="space-y-2">
                       {Array.from({ length: 3 }).map((_, i) => (
@@ -516,6 +566,7 @@ export function OrganizationsPage() {
                                 {(() => {
                                   const isAdmin = member.role === "admin"
                                   const isOnlyAdmin = isAdmin && members.filter(m => m.role === "admin").length === 1
+                                  const isRoleChangeDisabled = (!isSuperadmin && isOnlyAdmin) || !canManageMembers || !canManageSelectedOrganization
                                   const assignable = dedupeRoleNames(orgRolesMeta?.assignableRoles ?? [])
                                   const allRoleOptions = dedupeRoleNames(
                                     assignable.includes(member.role)
@@ -530,7 +581,7 @@ export function OrganizationsPage() {
                                           handleUpdateRole(member.id, value)
                                         }
                                       }}
-                                      disabled={isOnlyAdmin || !canManageMembers}
+                                      disabled={isRoleChangeDisabled}
                                     >
                                       <SelectTrigger className="w-32">
                                         <SelectValue placeholder="Select role" />
@@ -550,7 +601,7 @@ export function OrganizationsPage() {
                                 })()}
                               </td>
                               <td className="p-3 text-right">
-                                {canManageMembers && (
+                                {canManageMembers && canManageSelectedOrganization && (
                                   <Button
                                     variant="ghost"
                                     size="sm"
