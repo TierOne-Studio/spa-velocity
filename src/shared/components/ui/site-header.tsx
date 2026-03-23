@@ -72,9 +72,9 @@ export function SiteHeader() {
         />
         <Breadcrumb>
           <BreadcrumbList>
-            {breadcrumbs.map((crumb, index) => (
+            {breadcrumbs.flatMap((crumb, index) => [
+              index > 0 ? <BreadcrumbSeparator key={`${crumb.path}-separator`} /> : null,
               <BreadcrumbItem key={crumb.path}>
-                {index > 0 && <BreadcrumbSeparator />}
                 {crumb.isLast ? (
                   <BreadcrumbPage>{crumb.label}</BreadcrumbPage>
                 ) : (
@@ -82,8 +82,8 @@ export function SiteHeader() {
                     <Link to={crumb.path}>{crumb.label}</Link>
                   </BreadcrumbLink>
                 )}
-              </BreadcrumbItem>
-            ))}
+              </BreadcrumbItem>,
+            ])}
           </BreadcrumbList>
         </Breadcrumb>
         <div className="ml-auto flex items-center gap-2">

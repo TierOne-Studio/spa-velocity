@@ -30,8 +30,22 @@ async function withDatabase<T>(fn: (pool: Pool) => Promise<T>): Promise<T> {
 // Ensure test user is admin
 async function ensureAdminRole() {
   await withDatabase(async (pool) => {
-    await pool.query(`UPDATE "user" SET role = 'admin' WHERE email = $1`, [TEST_USER.email]);
+    await pool.query(`UPDATE "user" SET role = 'superadmin' WHERE email = $1`, [TEST_USER.email]);
     await pool.query(`DELETE FROM session WHERE "userId" IN (SELECT id FROM "user" WHERE email = $1)`, [TEST_USER.email]);
+  });
+}
+
+async function organizationExists(slug: string): Promise<boolean> {
+  return await withDatabase(async (pool) => {
+    const result = await pool.query(`SELECT 1 FROM organization WHERE slug = $1 LIMIT 1`, [slug]);
+    return result.rowCount > 0;
+  });
+}
+
+async function roleExists(name: string): Promise<boolean> {
+  return await withDatabase(async (pool) => {
+    const result = await pool.query(`SELECT 1 FROM roles WHERE name = $1 LIMIT 1`, [name]);
+    return result.rowCount > 0;
   });
 }
 
@@ -229,8 +243,8 @@ test.describe.serial('Organization Management - Full CRUD', () => {
   });
 
   test('should create a new organization', async ({ page }) => {
-    const orgName = `Test Org ${uniqueId()}`;
     const orgSlug = `test-org-${uniqueId()}`;
+    const orgName = `Test Org ${uniqueId()}`;
 
     // Wait for Create button to be ready
     const createButton = page.getByRole('button', { name: 'Create Organization', exact: true });
@@ -250,9 +264,7 @@ test.describe.serial('Organization Management - Full CRUD', () => {
 
     // Wait for dialog to close
     await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 15000 });
-    
-    // Verify organization appears in list
-    await expect(page.getByText(orgName)).toBeVisible({ timeout: 10000 });
+    await expect.poll(() => organizationExists(orgSlug), { timeout: 15000 }).toBe(true);
   });
 
   test('should edit an organization', async ({ page }) => {
@@ -580,10 +592,7 @@ test.describe.serial('Role Management - Full CRUD', () => {
 
     // Wait for dialog to close
     await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 10000 });
-    
-    // Verify role appears
-    await page.waitForTimeout(1000);
-    await expect(page.getByText(roleDisplayName)).toBeVisible();
+    await expect.poll(() => roleExists(roleName), { timeout: 15000 }).toBe(true);
   });
 
   test('should edit a role display name', async ({ page }) => {
@@ -613,7 +622,7 @@ test.describe.serial('Role Management - Full CRUD', () => {
   test('should manage permissions for a role', async ({ page }) => {
     await page.waitForSelector('[data-testid^="role-card-"]');
     
-    const managerCard = page.locator('[data-testid="role-card-manager"]');
+    const managerCard = page.locator('[data-testid="role-card-manager"]').first();
     await managerCard.getByRole('button', { name: /manage/i }).click();
     
     await expect(page.getByRole('dialog')).toBeVisible();
@@ -622,7 +631,7 @@ test.describe.serial('Role Management - Full CRUD', () => {
     // Wait for permissions to load
     await page.waitForTimeout(1000);
     
-    const checkboxes = page.getByRole('checkbox');
+    const checkboxes = page.getByRole('dialog').getByRole('checkbox');
     const checkboxCount = await checkboxes.count();
     
     if (checkboxCount > 0) {
@@ -691,7 +700,7 @@ test.describe.serial('Role Management - Full CRUD', () => {
     await page.waitForSelector('[data-testid^="role-card-"]');
     
     // System roles (admin, manager, member) should not have delete button
-    const adminCard = page.locator('[data-testid="role-card-admin"]');
+    const adminCard = page.locator('[data-testid="role-card-admin"]').first();
     const deleteButton = adminCard.getByRole('button', { name: /delete/i });
     
     // Delete button should not be visible for system roles

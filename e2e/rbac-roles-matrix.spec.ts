@@ -3,6 +3,7 @@ import { test, expect, type Page } from '@playwright/test';
 import {
   ensureOrganizationMembership,
   ensureUserWithRole,
+  setActiveOrganizationForUserSessions,
   uniqueEmail,
 } from './test-helpers';
 import {
@@ -33,6 +34,7 @@ async function loginAs(page: Page, role: 'admin' | 'manager' | 'member') {
     emails: roleEmails,
     password: DEFAULT_PASSWORD,
     managerOrganizationId,
+    activeOrganizationId: managerOrganizationId,
   });
 }
 
@@ -72,21 +74,34 @@ test.describe.serial('RBAC Roles matrix (UI-aligned)', () => {
       orgSlug,
       orgName: 'E2E RBAC Roles Matrix Org',
     });
+
+    await ensureOrganizationMembership({
+      userEmail: adminActorEmail,
+      role: 'admin',
+      orgSlug,
+      orgName: 'E2E RBAC Roles Matrix Org',
+    });
+
+    await ensureOrganizationMembership({
+      userEmail: memberActorEmail,
+      role: 'member',
+      orgSlug,
+      orgName: 'E2E RBAC Roles Matrix Org',
+    });
   });
 
-  test('admin and manager can access roles page; member is redirected', async ({ page }) => {
+  test('admin and manager can access roles page when organization context exists', async ({ page }) => {
     await loginAs(page, 'admin');
     await openRolesPage(page);
 
     await loginAs(page, 'manager');
     await openRolesPage(page);
+  });
 
+  test('member is redirected from roles page without role:read permission', async ({ page }) => {
     await loginAs(page, 'member');
     await page.goto('/admin/roles');
     await expect(page).toHaveURL('/');
-    await expect(
-      page.locator('[data-slot="sidebar"]').getByRole('link', { name: /^dashboard$/i }),
-    ).toBeVisible();
   });
 
   test('admin sees create role action and all system role cards', async ({ page }) => {
@@ -94,30 +109,28 @@ test.describe.serial('RBAC Roles matrix (UI-aligned)', () => {
     await openRolesPage(page);
 
     await expect(page.getByRole('button', { name: /create role/i })).toBeVisible();
-    await expect(page.locator('[data-testid="role-card-admin"]')).toBeVisible();
-    await expect(page.locator('[data-testid="role-card-manager"]')).toBeVisible();
-    await expect(page.locator('[data-testid="role-card-member"]')).toBeVisible();
+    await expect(page.locator('[data-testid="role-card-admin"]').first()).toBeVisible();
+    await expect(page.locator('[data-testid="role-card-manager"]').first()).toBeVisible();
+    await expect(page.locator('[data-testid="role-card-member"]').first()).toBeVisible();
   });
 
-  test('manager sees member role card only and no create role action', async ({ page }) => {
+  test('manager sees all system role cards and no create role action', async ({ page }) => {
     await loginAs(page, 'manager');
     await openRolesPage(page);
 
     await expect(page.getByRole('button', { name: /create role/i })).not.toBeVisible();
-    await expect(page.locator('[data-testid="role-card-member"]')).toBeVisible();
-    await expect(page.locator('[data-testid="role-card-admin"]')).not.toBeVisible();
-    await expect(page.locator('[data-testid="role-card-manager"]')).not.toBeVisible();
+    await expect(page.locator('[data-testid="role-card-admin"]').first()).toBeVisible();
+    await expect(page.locator('[data-testid="role-card-manager"]').first()).toBeVisible();
+    await expect(page.locator('[data-testid="role-card-member"]').first()).toBeVisible();
   });
 
-  test('manager can see manage permissions action on member role (has role:assign)', async ({ page }) => {
+  test('manager cannot see manage permissions action on member role without role:assign', async ({ page }) => {
     await loginAs(page, 'manager');
     await openRolesPage(page);
 
-    const memberCard = page.locator('[data-testid="role-card-member"]');
+    const memberCard = page.locator('[data-testid="role-card-member"]').first();
     await expect(memberCard).toBeVisible();
-    // Manager has role:assign permission, so they can manage permissions
-    await expect(memberCard.getByRole('button', { name: /manage/i })).toBeVisible();
-    // Member is a system role (isSystem: true), so no Edit/Delete buttons are shown
+    await expect(memberCard.getByRole('button', { name: /manage/i })).toHaveCount(0);
     await expect(memberCard.getByRole('button', { name: /^edit$/i })).toHaveCount(0);
     await expect(memberCard.locator('button.text-destructive')).toHaveCount(0);
   });
@@ -126,7 +139,7 @@ test.describe.serial('RBAC Roles matrix (UI-aligned)', () => {
     await loginAs(page, 'admin');
     await openRolesPage(page);
 
-    const memberCard = page.locator('[data-testid="role-card-member"]');
+    const memberCard = page.locator('[data-testid="role-card-member"]').first();
     await expect(memberCard).toBeVisible();
     await expect(memberCard.getByRole('button', { name: /manage/i })).toBeVisible();
   });

@@ -16,7 +16,7 @@ interface AdminOnlyRouteProps {
  * Redirects to fallbackPath (default: "/") if user is not an admin.
  */
 export function AdminOnlyRoute({ children, fallbackPath = "/" }: AdminOnlyRouteProps) {
-    const { isAuthenticated, isAdmin, isLoading } = useAuth();
+    const { isAuthenticated, isLoading } = useAuth();
 
     if (isLoading) {
         return null;
@@ -24,11 +24,6 @@ export function AdminOnlyRoute({ children, fallbackPath = "/" }: AdminOnlyRouteP
 
     if (!isAuthenticated) {
         return <Navigate to="/login" replace />;
-    }
-
-    // Only admin role allowed - managers are redirected
-    if (!isAdmin) {
-        return <Navigate to={fallbackPath} replace />;
     }
 
     return <>{children}</>;

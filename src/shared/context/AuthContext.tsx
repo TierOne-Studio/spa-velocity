@@ -1,4 +1,4 @@
-import React, { createContext, useContext } from "react";
+import React, { createContext, useCallback, useContext, useMemo } from "react";
 import type { User, AuthState, LoginCredentials, SignupCredentials } from "@features/Auth/types";
 import { signIn, signUp, signOut } from "@shared/lib/auth-client";
 import { fetchWithAuth } from "@shared/lib/fetch-with-auth";
@@ -23,7 +23,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: session, isPending: isLoading, refetch } = useEffectiveSession();
 
     const rawRole = (session?.user as { role?: string | string[] } | undefined)?.role;
-    const normalizedRole = (() => {
+    const normalizedRole = useMemo(() => {
         if (!rawRole) return "member";
         const roles = Array.isArray(rawRole)
             ? rawRole
@@ -32,31 +32,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 .map((r) => r.trim())
                 .filter(Boolean);
 
+        if (roles.includes("superadmin")) return "superadmin";
         if (roles.includes("admin")) return "admin";
         if (roles.includes("manager")) return "manager";
         return "member";
-    })();
+    }, [rawRole]);
 
-    const user: User | null = session?.user ? {
-        id: session.user.id,
-        name: session.user.name,
-        email: session.user.email,
-        role: normalizedRole,
-        image: session.user.image ?? undefined,
-        emailVerified: session.user.emailVerified,
-        banned: (session.user as { banned?: boolean }).banned,
-        banReason: (session.user as { banReason?: string }).banReason,
-        banExpires: (session.user as { banExpires?: Date }).banExpires,
-        createdAt: session.user.createdAt,
-        updatedAt: session.user.updatedAt,
-    } : null;
+    const user: User | null = useMemo(
+        () =>
+            session?.user
+                ? {
+                      id: session.user.id,
+                      name: session.user.name,
+                      email: session.user.email,
+                      role: normalizedRole,
+                      image: session.user.image ?? undefined,
+                      emailVerified: session.user.emailVerified,
+                      banned: (session.user as { banned?: boolean }).banned,
+                      banReason: (session.user as { banReason?: string }).banReason,
+                      banExpires: (session.user as { banExpires?: Date }).banExpires,
+                      createdAt: session.user.createdAt,
+                      updatedAt: session.user.updatedAt,
+                  }
+                : null,
+        [normalizedRole, session?.user],
+    );
 
     const isAuthenticated = !!session?.user;
-    const isAdmin = normalizedRole === "admin";
-    const isManager = normalizedRole === "manager";
-    const isAdminOrManager = isAdmin || isManager;
 
-    const login = async (credentials: LoginCredentials) => {
+    const login = useCallback(async (credentials: LoginCredentials) => {
         const result = await signIn.email({
             email: credentials.email,
             password: credentials.password,
@@ -68,9 +72,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // Refresh session to update isAuthenticated state
         await refetch();
-    };
+    }, [refetch]);
 
-    const signup = async (credentials: SignupCredentials) => {
+    const signup = useCallback(async (credentials: SignupCredentials) => {
         const result = await signUp.email({
             name: credentials.name,
             email: credentials.email,
@@ -80,16 +84,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (result.error) {
             throw new Error(result.error.message || "Signup failed");
         }
-    };
+    }, []);
 
-    const logout = async () => {
+    const logout = useCallback(async () => {
         await signOut();
         // Clear bearer tokens on logout
         localStorage.removeItem("bearer_token");
         localStorage.removeItem("original_bearer_token");
-    };
+    }, []);
 
-    const forgotPassword = async (email: string) => {
+    const forgotPassword = useCallback(async (email: string) => {
         const response = await fetchWithAuth(`${API_BASE_URL}/api/auth/request-password-reset`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -103,9 +107,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const error = await response.json().catch(() => ({ message: "Request failed" }));
             throw new Error(error.message || "Failed to send reset email");
         }
-    };
+    }, []);
 
-    const resetPassword = async (token: string, newPassword: string) => {
+    const resetPassword = useCallback(async (token: string, newPassword: string) => {
         const response = await fetchWithAuth(`${API_BASE_URL}/api/auth/reset-password`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -116,9 +120,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const error = await response.json().catch(() => ({ message: "Request failed" }));
             throw new Error(error.message || "Failed to reset password");
         }
-    };
+    }, []);
 
-    const sendVerificationEmail = async (email: string) => {
+    const sendVerificationEmail = useCallback(async (email: string) => {
         const response = await fetchWithAuth(`${API_BASE_URL}/api/auth/send-verification-email`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -129,27 +133,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const error = await response.json().catch(() => ({ message: "Request failed" }));
             throw new Error(error.message || "Failed to send verification email");
         }
-    };
+    }, []);
 
-    const refreshSession = async () => {
+    const refreshSession = useCallback(async () => {
         await refetch();
-    };
+    }, [refetch]);
 
-    const value: AuthContextType = {
-        user,
-        isAuthenticated,
-        isAdmin,
-        isManager,
-        isAdminOrManager,
-        isLoading,
-        login,
-        signup,
-        logout,
-        forgotPassword,
-        resetPassword,
-        sendVerificationEmail,
-        refreshSession,
-    };
+    const value: AuthContextType = useMemo(
+        () => ({
+            user,
+            isAuthenticated,
+            isLoading,
+            login,
+            signup,
+            logout,
+            forgotPassword,
+            resetPassword,
+            sendVerificationEmail,
+            refreshSession,
+        }),
+        [
+            user,
+            isAuthenticated,
+            isLoading,
+            login,
+            signup,
+            logout,
+            forgotPassword,
+            resetPassword,
+            sendVerificationEmail,
+            refreshSession,
+        ],
+    );
 
     return (
         <AuthContext.Provider value={value}>

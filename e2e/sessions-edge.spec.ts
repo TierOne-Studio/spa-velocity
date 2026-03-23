@@ -48,7 +48,7 @@ test.describe('Sessions edge behavior', () => {
   test.beforeAll(async () => {
     // Restore test user to admin in case a previous spec left it in another role
     await withDatabase(async (pool) => {
-      await pool.query(`UPDATE "user" SET role = 'admin' WHERE email = $1`, [TEST_USER.email]);
+      await pool.query(`UPDATE "user" SET role = 'superadmin' WHERE email = $1`, [TEST_USER.email]);
     });
 
     // Use direct DB insert to guarantee users exist with correct names

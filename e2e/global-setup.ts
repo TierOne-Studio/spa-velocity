@@ -15,26 +15,28 @@ async function ensureDefaultRolePermissions(pool: Pool): Promise<void> {
   );
 
   const managerPermissions = [
-    ['user', 'read'],
-    ['user', 'update'],
-    ['user', 'ban'],
-    ['session', 'read'],
-    ['session', 'revoke'],
     ['organization', 'read'],
+    ['organization', 'update'],
     ['organization', 'invite'],
     ['role', 'read'],
-    ['role', 'assign'],
-    ['role', 'update'],
+    ['session', 'read'],
+    ['session', 'revoke'],
+    ['user', 'create'],
+    ['user', 'read'],
+    ['user', 'update'],
   ] as const;
+
+  const memberPermissions = [['organization', 'read']] as const;
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    // Clear existing manager permissions to ensure clean state
     await client.query(
-      `DELETE FROM role_permissions
-       WHERE role_id = (SELECT id FROM roles WHERE name = 'manager')`,
+      `DELETE FROM role_permissions rp
+       USING roles r
+       WHERE rp.role_id = r.id
+         AND r.name = 'manager'`,
     );
 
     for (const [resource, action] of managerPermissions) {
@@ -48,30 +50,31 @@ async function ensureDefaultRolePermissions(pool: Pool): Promise<void> {
       );
     }
 
+    await client.query(
+      `DELETE FROM role_permissions rp
+       USING roles r
+       WHERE rp.role_id = r.id
+         AND r.name = 'member'`,
+    );
+
+    for (const [resource, action] of memberPermissions) {
+      await client.query(
+        `INSERT INTO role_permissions (role_id, permission_id)
+         SELECT r.id, p.id
+         FROM roles r
+         JOIN permissions p ON p.resource = $2 AND p.action = $3
+         WHERE r.name = $1
+         ON CONFLICT DO NOTHING`,
+        ['member', resource, action],
+      );
+    }
+
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
   } finally {
     client.release();
-  }
-
-  const memberPermissions = [
-    ['user', 'read'],
-    ['organization', 'read'],
-    ['role', 'read'],
-  ] as const;
-
-  for (const [resource, action] of memberPermissions) {
-    await pool.query(
-      `INSERT INTO role_permissions (role_id, permission_id)
-       SELECT r.id, p.id
-       FROM roles r
-       JOIN permissions p ON p.resource = $2 AND p.action = $3
-       WHERE r.name = $1
-       ON CONFLICT DO NOTHING`,
-      ['member', resource, action],
-    );
   }
 }
 
@@ -135,7 +138,7 @@ async function globalSetup() {
 
     // Set test user as admin with verified email
     const result = await pool.query(
-      `UPDATE "user" SET role = 'admin', "emailVerified" = true WHERE email = $1 RETURNING id, email, role`,
+      `UPDATE "user" SET role = 'superadmin', "emailVerified" = true WHERE email = $1 RETURNING id, email, role`,
       [TEST_USER_EMAIL]
     );
 
@@ -143,7 +146,7 @@ async function globalSetup() {
       console.log('⚠️ Test user not found after creation attempt.');
     } else {
       const userId = result.rows[0].id;
-      console.log(`✅ Set ${result.rows[0].email} as admin (id: ${userId})`);
+      console.log(`✅ Set ${result.rows[0].email} as superadmin (id: ${userId})`);
       
       // Clear all sessions for this user to force fresh login with new role
       const sessionsResult = await pool.query(

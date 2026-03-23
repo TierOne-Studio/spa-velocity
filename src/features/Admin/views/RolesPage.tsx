@@ -38,8 +38,12 @@ import { toast } from "sonner";
 import { roleColorMap, ROLE_COLORS } from "../types/rbac";
 import type { Role, Permission } from "../types/rbac";
 import { usePermissionsContext } from "@/shared/context/PermissionsContext";
-import { useAuth } from "@/shared/context/AuthContext";
-import { filterVisibleRoles } from "../utils/role-hierarchy";
+import { useEffectiveSession } from "@/shared/hooks/useEffectiveSession";
+import { useOrganizations } from "../hooks/useOrganizations";
+
+const EMPTY_ROLES: Role[] = [];
+const EMPTY_PERMISSIONS_GROUPED: Record<string, Permission[]> = {};
+const ALL_ORGANIZATIONS_VALUE = "__all__";
 
 /**
  * Component to display permissions for a role
@@ -74,6 +78,7 @@ function PermissionBadges({ permissions }: { permissions: Permission[] }) {
 function RoleCard({ 
   role,
   permissions,
+  organizationName,
   onEdit,
   onDelete,
   onManagePermissions,
@@ -83,6 +88,7 @@ function RoleCard({
 }: { 
   role: Role;
   permissions: Permission[];
+  organizationName?: string;
   onEdit: () => void;
   onDelete: () => void;
   onManagePermissions: () => void;
@@ -99,6 +105,9 @@ function RoleCard({
             <Badge className={roleColorMap[role.color] || roleColorMap.gray} variant="outline">
               {role.name}
             </Badge>
+            {organizationName && (
+              <Badge variant="outline" className="text-xs">{organizationName}</Badge>
+            )}
             {role.isSystem && (
               <Badge variant="secondary" className="text-xs">System</Badge>
             )}
@@ -110,14 +119,20 @@ function RoleCard({
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-medium text-muted-foreground">Permissions</h4>
-            {canManagePermissions && (
+            {!role.isSystem && canManagePermissions && (
               <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={onManagePermissions}>
                 <IconShield className="h-3 w-3 mr-1" />
                 Manage
               </Button>
             )}
           </div>
-          <PermissionBadges permissions={permissions} />
+          {role.isSystem ? (
+            <span className="text-muted-foreground text-sm italic">
+              Unrestricted — bypasses all permission checks
+            </span>
+          ) : (
+            <PermissionBadges permissions={permissions} />
+          )}
         </div>
 
         {/* Actions */}
@@ -149,11 +164,60 @@ function RoleCard({
  */
 export function RolesPage() {
   const { can } = usePermissionsContext();
-  const { user } = useAuth();
-  const userRole = user?.role ?? "member";
-  
-  const { data: roles = [], isLoading } = useRoles();
-  const { data: permissionsGrouped = {} } = usePermissionsGrouped();
+  const { data: session } = useEffectiveSession();
+  const rawUserRole = (session?.user as { role?: string | string[] } | undefined)?.role;
+  const isSuperadmin = Array.isArray(rawUserRole)
+    ? rawUserRole.includes("superadmin")
+    : String(rawUserRole ?? "")
+        .split(",")
+        .map((role) => role.trim())
+        .filter(Boolean)
+        .includes("superadmin");
+  const activeOrganizationId =
+    (session?.session as { activeOrganizationId?: string } | undefined)?.activeOrganizationId ?? null;
+  const { data: organizationsResponse, isLoading: isOrganizationsLoading } = useOrganizations(
+    { page: 1, limit: 100 },
+    { enabled: isSuperadmin },
+  );
+  const organizations = organizationsResponse?.data ?? [];
+  const [selectedOrganizationId, setSelectedOrganizationId] = useState(ALL_ORGANIZATIONS_VALUE);
+
+  useEffect(() => {
+    if (!isSuperadmin) {
+      setSelectedOrganizationId(ALL_ORGANIZATIONS_VALUE);
+      return;
+    }
+
+    setSelectedOrganizationId((current) => {
+      if (current === ALL_ORGANIZATIONS_VALUE) {
+        return current;
+      }
+
+      return organizations.some((organization) => organization.id === current)
+        ? current
+        : ALL_ORGANIZATIONS_VALUE;
+    });
+  }, [isSuperadmin, organizations]);
+
+  const resolvedOrganizationId = isSuperadmin
+    ? selectedOrganizationId === ALL_ORGANIZATIONS_VALUE
+      ? null
+      : selectedOrganizationId
+    : activeOrganizationId;
+  const hasResolvedOrganization = isSuperadmin || Boolean(resolvedOrganizationId);
+  const organizationNamesById = new Map(
+    organizations.map((organization) => [organization.id, organization.name]),
+  );
+
+  const { data: rolesData, isLoading } = useRoles({
+    activeOrganizationId: resolvedOrganizationId,
+    enabled: hasResolvedOrganization,
+  });
+  const roles = rolesData ?? EMPTY_ROLES;
+  const { data: permissionsGroupedData } = usePermissionsGrouped({
+    enabled: hasResolvedOrganization,
+  });
+  const permissionsGrouped = permissionsGroupedData ?? EMPTY_PERMISSIONS_GROUPED;
   const createRole = useCreateRole();
   const updateRole = useUpdateRole();
   const deleteRole = useDeleteRole();
@@ -164,9 +228,6 @@ export function RolesPage() {
   const canDeleteRole = can("role", "delete");
   const canAssignRolePermissions = can("role", "assign");
 
-  // Filter roles by hierarchy: users see only roles strictly below their level
-  const visibleRoles = filterVisibleRoles(roles, userRole);
-  
   // State for role permissions (fetched individually)
   const [rolePermissions, setRolePermissions] = useState<Record<string, Permission[]>>({});
   
@@ -192,6 +253,10 @@ export function RolesPage() {
 
   // Fetch role permissions when needed
   const fetchRolePermissions = useCallback(async (roleId: string, force = false) => {
+    if (!hasResolvedOrganization) {
+      return;
+    }
+
     // Skip if already fetched (unless forced)
     if (!force && fetchedRolesRef.current.has(roleId)) {
       return;
@@ -211,14 +276,20 @@ export function RolesPage() {
     } catch (error) {
       console.error("Failed to fetch role permissions", error);
     }
-  }, []);
+  }, [hasResolvedOrganization]);
 
   // Fetch permissions for all roles when roles change
   useEffect(() => {
+    if (!hasResolvedOrganization) {
+      fetchedRolesRef.current.clear();
+      setRolePermissions((prev) => (Object.keys(prev).length === 0 ? prev : {}));
+      return;
+    }
+
     roles.forEach((role) => {
       fetchRolePermissions(role.id);
     });
-  }, [roles, fetchRolePermissions]);
+  }, [hasResolvedOrganization, roles, fetchRolePermissions]);
 
   const handleCreateRole = async () => {
     if (!canCreateRole) {
@@ -226,13 +297,21 @@ export function RolesPage() {
       return;
     }
 
+    if (isSuperadmin && !resolvedOrganizationId) {
+      toast.error("Select an organization to create a role");
+      return;
+    }
+
     try {
-      await createRole.mutateAsync({
+      const payload = {
         name: formData.name,
         displayName: formData.displayName,
         description: formData.description || undefined,
         color: formData.color,
-      });
+        ...(isSuperadmin ? { organizationId: resolvedOrganizationId } : {}),
+      };
+
+      await createRole.mutateAsync(payload);
       toast.success("Role created successfully");
       setCreateDialogOpen(false);
       setFormData({ name: "", displayName: "", description: "", color: "gray" });
@@ -327,8 +406,29 @@ export function RolesPage() {
     setPermissionsDialogOpen(true);
   };
 
-  if (isLoading) {
+  if (isLoading || (isSuperadmin && isOrganizationsLoading)) {
     return <div className="p-4">Loading roles...</div>;
+  }
+
+  if (!isSuperadmin && !hasResolvedOrganization) {
+    return (
+      <div className="flex flex-1 flex-col gap-4 p-4 lg:p-6">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Roles & Permissions</h1>
+          <p className="text-muted-foreground">
+            Manage role-based access control for your application
+          </p>
+        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Select an organization</CardTitle>
+            <CardDescription>
+              Choose an active organization from the switcher before managing organization roles and permissions.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
+    );
   }
 
   return (
@@ -341,21 +441,50 @@ export function RolesPage() {
             Manage role-based access control for your application
           </p>
         </div>
-        {canCreateRole && (
-          <Button onClick={() => setCreateDialogOpen(true)}>
-            <IconPlus className="h-4 w-4 mr-2" />
-            Create Role
-          </Button>
-        )}
+        <div className="flex items-center gap-3">
+          {isSuperadmin && (
+            <Select
+              aria-label="Organization"
+              value={selectedOrganizationId}
+              onValueChange={setSelectedOrganizationId}
+            >
+              <SelectTrigger className="w-[220px]">
+                <SelectValue placeholder="All organizations" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_ORGANIZATIONS_VALUE}>All organizations</SelectItem>
+                {organizations.map((organization) => (
+                  <SelectItem key={organization.id} value={organization.id}>
+                    {organization.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {canCreateRole && (
+            <Button
+              onClick={() => setCreateDialogOpen(true)}
+              disabled={isSuperadmin && !resolvedOrganizationId}
+            >
+              <IconPlus className="h-4 w-4 mr-2" />
+              Create Role
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Roles Grid */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {visibleRoles.map((role) => (
+        {roles.map((role) => (
           <RoleCard 
             key={role.id} 
             role={role}
             permissions={rolePermissions[role.id] || []}
+            organizationName={
+              isSuperadmin && !resolvedOrganizationId
+                ? organizationNamesById.get(role.organizationId ?? "") ?? undefined
+                : undefined
+            }
             onEdit={() => openEditDialog(role)}
             onDelete={() => { setSelectedRole(role); setDeleteDialogOpen(true); }}
             onManagePermissions={() => openPermissionsDialog(role)}

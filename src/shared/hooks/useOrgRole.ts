@@ -3,8 +3,6 @@ import { useEffectiveSession } from "@shared/hooks/useEffectiveSession";
 // Unified Role Model - roles that can manage organization settings
 // - 'admin': Global platform administrator (can manage all orgs)
 // - 'manager': Organization manager (can manage their org)
-const MANAGER_ROLES = ['admin', 'manager'];
-
 /**
  * Hook to get the current user's role in the active organization.
  * Returns org role information and helper flags.
@@ -31,11 +29,4 @@ export function useOrgRole() {
     activeOrganizationId,
     isInOrganization: !!activeOrganizationId,
   };
-}
-
-/**
- * Check if a given role is a manager role (can manage org settings)
- */
-export function isManagerRole(role: string): boolean {
-  return MANAGER_ROLES.includes(role);
 }

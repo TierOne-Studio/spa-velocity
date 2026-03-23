@@ -16,8 +16,8 @@ import { AdminOnlyRoute } from "../AdminOnlyRoute";
 describe("AdminOnlyRoute", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("renders children for admin user", () => {
-    mockUseAuth.mockReturnValue({ isAuthenticated: true, isAdmin: true, isLoading: false });
+  it("renders children for authenticated user", () => {
+    mockUseAuth.mockReturnValue({ isAuthenticated: true, isLoading: false });
 
     render(
       <AdminOnlyRoute>
@@ -29,7 +29,7 @@ describe("AdminOnlyRoute", () => {
   });
 
   it("redirects to /login when not authenticated", () => {
-    mockUseAuth.mockReturnValue({ isAuthenticated: false, isAdmin: false, isLoading: false });
+    mockUseAuth.mockReturnValue({ isAuthenticated: false, isLoading: false });
 
     render(
       <AdminOnlyRoute>
@@ -42,8 +42,8 @@ describe("AdminOnlyRoute", () => {
     expect(screen.queryByTestId("child")).toBeNull();
   });
 
-  it("redirects to default fallback '/' for manager user", () => {
-    mockUseAuth.mockReturnValue({ isAuthenticated: true, isAdmin: false, isLoading: false });
+  it("renders children for authenticated non-admin user", () => {
+    mockUseAuth.mockReturnValue({ isAuthenticated: true, isLoading: false });
 
     render(
       <AdminOnlyRoute>
@@ -51,26 +51,11 @@ describe("AdminOnlyRoute", () => {
       </AdminOnlyRoute>,
     );
 
-    const nav = screen.getByTestId("navigate");
-    expect(nav.getAttribute("data-to")).toBe("/");
-    expect(screen.queryByTestId("child")).toBeNull();
-  });
-
-  it("redirects to custom fallbackPath when not admin", () => {
-    mockUseAuth.mockReturnValue({ isAuthenticated: true, isAdmin: false, isLoading: false });
-
-    render(
-      <AdminOnlyRoute fallbackPath="/dashboard">
-        <div data-testid="child">Admin Only Content</div>
-      </AdminOnlyRoute>,
-    );
-
-    const nav = screen.getByTestId("navigate");
-    expect(nav.getAttribute("data-to")).toBe("/dashboard");
+    expect(screen.getByTestId("child")).toBeDefined();
   });
 
   it("renders nothing while loading", () => {
-    mockUseAuth.mockReturnValue({ isAuthenticated: false, isAdmin: false, isLoading: true });
+    mockUseAuth.mockReturnValue({ isAuthenticated: false, isLoading: true });
 
     const { container } = render(
       <AdminOnlyRoute>

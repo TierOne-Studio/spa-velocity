@@ -49,8 +49,10 @@ export type UserCapabilities = {
  * Get organization roles metadata (Better Auth organization roles).
  * Exported separately to fix TypeScript type inference for large object literals.
  */
-export async function getOrganizationRolesMetadata(): Promise<OrgRolesMetadata> {
-    const response = await fetchWithAuth(`${API_BASE_URL}/api/platform-admin/organizations/roles-metadata`);
+export async function getOrganizationRolesMetadata(organizationId?: string): Promise<OrgRolesMetadata> {
+    const url = new URL(`${API_BASE_URL}/api/platform-admin/organizations/roles-metadata`);
+    if (organizationId) url.searchParams.set('organizationId', organizationId);
+    const response = await fetchWithAuth(url.toString());
     if (!response.ok) {
         const error = await response.json().catch(() => ({}));
         throw new Error(error.message || "Failed to get organization roles metadata");
@@ -73,6 +75,7 @@ export const adminService = {
         url.searchParams.set("limit", String(params.limit ?? 10));
         url.searchParams.set("offset", String(params.offset ?? 0));
         if (params.searchValue) url.searchParams.set("searchValue", params.searchValue);
+        if (params.organizationId) url.searchParams.set("organizationId", params.organizationId);
 
         const response = await fetchWithAuth(url.toString());
         if (!response.ok) {
@@ -293,7 +296,7 @@ export const adminService = {
      * Admin uses Better Auth's built-in endpoint.
      * Manager uses org-scoped endpoint which validates org membership.
      */
-    async impersonateUser(userId: string, options?: { role?: string; organizationId?: string }): Promise<void> {
+    async impersonateUser(userId: string, options?: { organizationId?: string }): Promise<void> {
         const orgId = options?.organizationId;
 
         const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/users/${userId}/impersonate`, {
@@ -559,7 +562,7 @@ export const organizationService = {
     /**
      * Update a member's role.
      */
-    async updateMemberRole(params: { organizationId: string; memberId: string; role: "admin" | "manager" | "member" }) {
+    async updateMemberRole(params: { organizationId: string; memberId: string; role: string }) {
         const response = await fetchWithAuth(
             `${API_BASE_URL}/api/platform-admin/organizations/${params.organizationId}/members/${params.memberId}/role`,
             {
@@ -630,9 +633,14 @@ export const organizationService = {
      * Set active organization.
      */
     async setActive(organizationId: string) {
-        const { error } = await organization.setActive({ organizationId });
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/auth/organization/set-active`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ organizationId }),
+        });
 
-        if (error) {
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
             throw new Error(error.message || "Failed to set active organization");
         }
     },

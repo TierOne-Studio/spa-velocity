@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { adminService, type UserCapabilities } from "../services/adminService";
+import { useEffectiveSession } from "@/shared/hooks/useEffectiveSession";
 import type {
     UserFilterParams,
     CreateUserParams,
@@ -9,25 +10,47 @@ import type {
     SetPasswordParams,
 } from "../types";
 
+type UserQueryScope = {
+    activeOrganizationId?: string | null;
+    userId?: string | null;
+};
+
 // Query keys
 export const userKeys = {
     all: ["users"] as const,
     lists: () => [...userKeys.all, "list"] as const,
-    list: (params: UserFilterParams) => [...userKeys.lists(), params] as const,
+    list: (params: UserFilterParams, scope?: UserQueryScope) =>
+        [...userKeys.lists(), scope?.userId ?? "anonymous", scope?.activeOrganizationId ?? "no-org", params] as const,
     details: () => [...userKeys.all, "detail"] as const,
-    detail: (id: string) => [...userKeys.details(), id] as const,
-    sessions: (userId: string) => [...userKeys.all, "sessions", userId] as const,
-    capabilities: (userId: string) => [...userKeys.all, "capabilities", userId] as const,
-    batchCapabilities: (userIds: string[]) => [...userKeys.all, "capabilities", "batch", userIds] as const,
+    detail: (id: string, scope?: UserQueryScope) =>
+        [...userKeys.details(), scope?.userId ?? "anonymous", scope?.activeOrganizationId ?? "no-org", id] as const,
+    sessions: (userId: string, scope?: UserQueryScope) =>
+        [...userKeys.all, "sessions", scope?.userId ?? "anonymous", scope?.activeOrganizationId ?? "no-org", userId] as const,
+    capabilities: (userId: string, scope?: UserQueryScope) =>
+        [...userKeys.all, "capabilities", scope?.userId ?? "anonymous", scope?.activeOrganizationId ?? "no-org", userId] as const,
+    batchCapabilities: (userIds: string[], scope?: UserQueryScope) =>
+        [...userKeys.all, "capabilities", "batch", scope?.userId ?? "anonymous", scope?.activeOrganizationId ?? "no-org", userIds] as const,
 };
+
+function useUserQueryScope(): UserQueryScope {
+    const { data: session } = useEffectiveSession();
+
+    return {
+        userId: session?.user?.id ?? null,
+        activeOrganizationId:
+            (session?.session as { activeOrganizationId?: string } | undefined)?.activeOrganizationId ?? null,
+    };
+}
 
 /**
  * Hook to fetch paginated list of users with server-side filtering.
  */
 export function useUsers(params: UserFilterParams & { enabled?: boolean } = {}) {
     const { enabled = true, ...filterParams } = params;
+    const scope = useUserQueryScope();
+
     return useQuery({
-        queryKey: userKeys.list(filterParams),
+        queryKey: userKeys.list(filterParams, scope),
         queryFn: () => adminService.listUsers(filterParams),
         enabled,
     });
@@ -37,8 +60,10 @@ export function useUsers(params: UserFilterParams & { enabled?: boolean } = {}) 
  * Hook to fetch backend-computed capabilities for a target user.
  */
 export function useUserCapabilities(userId: string) {
+    const scope = useUserQueryScope();
+
     return useQuery<UserCapabilities>({
-        queryKey: userKeys.capabilities(userId),
+        queryKey: userKeys.capabilities(userId, scope),
         queryFn: () => adminService.getUserCapabilities(userId),
         enabled: !!userId,
     });
@@ -49,8 +74,10 @@ export function useUserCapabilities(userId: string) {
  * Replaces N individual useUserCapabilities calls with one batch request.
  */
 export function useUserCapabilitiesBatch(userIds: string[], enabled = true) {
+    const scope = useUserQueryScope();
+
     return useQuery<Record<string, UserCapabilities>>({
-        queryKey: userKeys.batchCapabilities(userIds),
+        queryKey: userKeys.batchCapabilities(userIds, scope),
         queryFn: () => adminService.getBatchCapabilities(userIds),
         enabled: enabled && userIds.length > 0,
         staleTime: 60_000,
@@ -61,8 +88,10 @@ export function useUserCapabilitiesBatch(userIds: string[], enabled = true) {
  * Hook to fetch user sessions.
  */
 export function useUserSessions(userId: string) {
+    const scope = useUserQueryScope();
+
     return useQuery({
-        queryKey: userKeys.sessions(userId),
+        queryKey: userKeys.sessions(userId, scope),
         queryFn: () => adminService.listUserSessions(userId),
         enabled: !!userId,
     });
@@ -207,9 +236,13 @@ export function useRevokeAllSessions() {
  * Hook to impersonate a user.
  */
 export function useImpersonateUser() {
+    const scope = useUserQueryScope();
+
     return useMutation({
-        mutationFn: (params: { userId: string; role?: string; organizationId?: string }) =>
-            adminService.impersonateUser(params.userId, { role: params.role, organizationId: params.organizationId }),
+        mutationFn: (params: { userId: string; organizationId?: string }) =>
+            adminService.impersonateUser(params.userId, {
+                organizationId: params.organizationId ?? scope.activeOrganizationId ?? undefined,
+            }),
     });
 }
 

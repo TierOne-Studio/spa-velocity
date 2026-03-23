@@ -49,6 +49,7 @@ async function loginAs(page: Page, role: 'admin' | 'manager' | 'member') {
     emails: roleEmails,
     password: DEFAULT_PASSWORD,
     managerOrganizationId: organizationId,
+    activeOrganizationId: organizationId,
   });
 }
 
@@ -104,6 +105,13 @@ test.describe.serial('RBAC Sessions matrix (UI-aligned)', () => {
     organizationId = await ensureOrganizationMembership({
       userEmail: managerActorEmail,
       role: 'manager',
+      orgSlug,
+      orgName: 'E2E RBAC Sessions Matrix Org',
+    });
+
+    await ensureOrganizationMembership({
+      userEmail: adminActorEmail,
+      role: 'admin',
       orgSlug,
       orgName: 'E2E RBAC Sessions Matrix Org',
     });

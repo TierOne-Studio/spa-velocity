@@ -75,7 +75,8 @@ describe("useRoles hooks", () => {
   describe("rbacKeys", () => {
     it("should generate correct query keys", () => {
       expect(rbacKeys.all).toEqual(["rbac"]);
-      expect(rbacKeys.roles()).toEqual(["rbac", "roles"]);
+      expect(rbacKeys.roles()).toEqual(["rbac", "roles", "no-org"]);
+      expect(rbacKeys.roles("org-1")).toEqual(["rbac", "roles", "org-1"]);
       expect(rbacKeys.role("role-1")).toEqual(["rbac", "role", "role-1"]);
       expect(rbacKeys.permissions()).toEqual(["rbac", "permissions"]);
       expect(rbacKeys.usersByRole("admin")).toEqual(["rbac", "users", "admin"]);

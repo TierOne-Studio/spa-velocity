@@ -24,6 +24,7 @@ export interface Role {
   description: string | null;
   color: string;
   isSystem: boolean;
+  organizationId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -43,6 +44,10 @@ export interface CreateRoleDto {
   displayName: string;
   description?: string;
   color?: string;
+}
+
+export interface CreateRoleRequest extends CreateRoleDto {
+  organizationId?: string | null;
 }
 
 /**

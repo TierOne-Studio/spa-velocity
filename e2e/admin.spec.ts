@@ -7,6 +7,8 @@ const AUX_ORG_SLUG = 'e2e-admin-org';
 const AUX_MEMBER_EMAIL = resendTestEmail('delivered', 'e2e-admin-member');
 const AUX_MANAGER_EMAIL = resendTestEmail('delivered', 'e2e-admin-manager');
 
+let adminOrganizationId = '';
+
 /**
  * Admin Panel E2E Tests
  * 
@@ -51,7 +53,7 @@ async function ensureAdminFixtures(): Promise<void> {
     const adminId = adminResult.rows[0].id;
 
     await pool.query(
-      `UPDATE "user" SET role = 'admin', "emailVerified" = true WHERE id = $1`,
+      `UPDATE "user" SET role = 'superadmin', "emailVerified" = true WHERE id = $1`,
       [adminId],
     );
 
@@ -74,6 +76,22 @@ async function ensureAdminFixtures(): Promise<void> {
     }
 
     const orgId = orgResult.rows[0].id;
+    adminOrganizationId = orgId;
+
+    await pool.query(
+      `INSERT INTO member (id, "organizationId", "userId", role, "createdAt")
+       SELECT gen_random_uuid()::text, $1, $2, 'admin', NOW()
+       WHERE NOT EXISTS (
+         SELECT 1 FROM member WHERE "organizationId" = $1 AND "userId" = $2
+       )`,
+      [orgId, adminId],
+    );
+
+    await pool.query(
+      `UPDATE member SET role = 'admin'
+       WHERE "organizationId" = $1 AND "userId" = $2`,
+      [orgId, adminId],
+    );
 
     const ensureUser = async (email: string, role: 'manager' | 'member', name: string) => {
       const userResult = await pool.query<{ id: string }>(
@@ -115,6 +133,17 @@ async function login(page: import('@playwright/test').Page) {
   await expect(page).toHaveURL('/', { timeout: 10000 });
 }
 
+async function activateAdminOrganizationSession() {
+  await withDatabase(async (pool) => {
+    await pool.query(
+      `UPDATE session
+       SET "activeOrganizationId" = $1
+       WHERE "userId" IN (SELECT id FROM "user" WHERE email = $2)`,
+      [adminOrganizationId, TEST_USER.email],
+    );
+  });
+}
+
 // Helper to check if Admin group is visible (groups are expanded by default)
 async function isAdminGroupVisible(page: import('@playwright/test').Page) {
   // Groups are expanded by default, so just check if Users link is visible
@@ -125,6 +154,9 @@ async function isAdminGroupVisible(page: import('@playwright/test').Page) {
 // Helper to login as admin and navigate to admin page
 async function loginAsAdmin(page: import('@playwright/test').Page, adminPath: string) {
   await login(page);
+  await activateAdminOrganizationSession();
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
   
   // Wait for sidebar to fully load
   await page.waitForTimeout(1000);
@@ -500,7 +532,9 @@ test.describe('Admin Panel E2E Tests', () => {
     test('should display roles page shell', async ({ page }) => {
       // RBAC visibility and role-card matrix assertions are covered by rbac-*-matrix specs.
       await expect(page).toHaveURL('/admin/roles');
-      await expect(page.getByRole('heading', { name: /roles/i })).toBeVisible();
+      await expect(page.getByRole('heading', { name: /roles & permissions/i })).toBeVisible({
+        timeout: 15000,
+      });
     });
 
     test('should open create role dialog', async ({ page }) => {
@@ -533,11 +567,10 @@ test.describe('Admin Panel E2E Tests', () => {
     });
 
     test('should persist permissions when assigned to a role', async ({ page }) => {
-      // Wait for roles to load
-      await page.waitForSelector('[data-testid^="role-card-"]');
+      const adminCard = page.locator('[data-testid="role-card-admin"]').first();
+      await expect(adminCard).toBeVisible({ timeout: 15000 });
       
       // Find the admin role card and click Manage permissions
-      const adminCard = page.locator('[data-testid="role-card-admin"]');
       await adminCard.getByRole('button', { name: /manage/i }).click();
       
       // Wait for permissions dialog to open

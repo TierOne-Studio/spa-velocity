@@ -14,7 +14,6 @@ vi.mock("@shared/context/AuthContext", () => ({
 
 vi.mock("@shared/hooks/useOrgRole", () => ({
   useOrgRole: () => mockUseOrgRole(),
-  isManagerRole: (role: string) => ["admin", "manager"].includes(role),
 }));
 
 import { OrgManagerRoute } from "../OrgManagerRoute";
@@ -65,40 +64,12 @@ describe("OrgManagerRoute", () => {
     expect(screen.queryByTestId("child")).toBeNull();
   });
 
-  it("redirects when memberRole is not a manager role", () => {
+  it("renders children regardless of memberRole when authenticated user is in organization", () => {
     mockUseAuth.mockReturnValue({ isAuthenticated: true, isLoading: false });
     mockUseOrgRole.mockReturnValue({ isInOrganization: true });
 
     render(
       <OrgManagerRoute memberRole="member">
-        <div data-testid="child">Org Manager Content</div>
-      </OrgManagerRoute>,
-    );
-
-    const nav = screen.getByTestId("navigate");
-    expect(nav.getAttribute("data-to")).toBe("/");
-    expect(screen.queryByTestId("child")).toBeNull();
-  });
-
-  it("renders children when memberRole is manager", () => {
-    mockUseAuth.mockReturnValue({ isAuthenticated: true, isLoading: false });
-    mockUseOrgRole.mockReturnValue({ isInOrganization: true });
-
-    render(
-      <OrgManagerRoute memberRole="manager">
-        <div data-testid="child">Org Manager Content</div>
-      </OrgManagerRoute>,
-    );
-
-    expect(screen.getByTestId("child")).toBeDefined();
-  });
-
-  it("renders children when memberRole is admin", () => {
-    mockUseAuth.mockReturnValue({ isAuthenticated: true, isLoading: false });
-    mockUseOrgRole.mockReturnValue({ isInOrganization: true });
-
-    render(
-      <OrgManagerRoute memberRole="admin">
         <div data-testid="child">Org Manager Content</div>
       </OrgManagerRoute>,
     );

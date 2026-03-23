@@ -15,8 +15,9 @@ const {
   mockUseUpdateRole,
   mockUseDeleteRole,
   mockUseAssignPermissions,
+  mockUseOrganizations,
   mockCan,
-  mockUseAuth,
+  mockUseEffectiveSession,
   mockToastSuccess,
   mockToastError,
 } = vi.hoisted(() => ({
@@ -26,27 +27,32 @@ const {
   mockUseUpdateRole: vi.fn(),
   mockUseDeleteRole: vi.fn(),
   mockUseAssignPermissions: vi.fn(),
+  mockUseOrganizations: vi.fn(),
   mockCan: vi.fn(),
-  mockUseAuth: vi.fn(),
+  mockUseEffectiveSession: vi.fn(),
   mockToastSuccess: vi.fn(),
   mockToastError: vi.fn(),
 }));
 
 vi.mock("../hooks/useRoles", () => ({
-  useRoles: () => mockUseRoles(),
-  usePermissionsGrouped: () => mockUsePermissionsGrouped(),
+  useRoles: (...args: unknown[]) => mockUseRoles(...args),
+  usePermissionsGrouped: (...args: unknown[]) => mockUsePermissionsGrouped(...args),
   useCreateRole: () => mockUseCreateRole(),
   useUpdateRole: () => mockUseUpdateRole(),
   useDeleteRole: () => mockUseDeleteRole(),
   useAssignPermissions: () => mockUseAssignPermissions(),
 }));
 
+vi.mock("../hooks/useOrganizations", () => ({
+  useOrganizations: (...args: unknown[]) => mockUseOrganizations(...args),
+}));
+
 vi.mock("@/shared/context/PermissionsContext", () => ({
   usePermissionsContext: () => ({ can: mockCan }),
 }));
 
-vi.mock("@/shared/context/AuthContext", () => ({
-  useAuth: () => mockUseAuth(),
+vi.mock("@/shared/hooks/useEffectiveSession", () => ({
+  useEffectiveSession: () => mockUseEffectiveSession(),
 }));
 
 vi.mock("sonner", () => ({
@@ -108,11 +114,29 @@ vi.mock("@/shared/components/ui/dialog", () => ({
 }));
 
 vi.mock("@/shared/components/ui/select", () => ({
-  Select: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  SelectContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  SelectItem: ({ children, value }: { children: ReactNode; value: string }) => <div data-value={value}>{children}</div>,
-  SelectTrigger: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  SelectValue: () => <span />,
+  Select: ({
+    children,
+    value,
+    onValueChange,
+    "aria-label": ariaLabel,
+  }: {
+    children: ReactNode;
+    value?: string;
+    onValueChange?: (value: string) => void;
+    "aria-label"?: string;
+  }) => (
+    <select
+      aria-label={ariaLabel ?? "select"}
+      value={value}
+      onChange={(event) => onValueChange?.(event.target.value)}
+    >
+      {children}
+    </select>
+  ),
+  SelectContent: ({ children }: { children: ReactNode }) => <>{children}</>,
+  SelectItem: ({ children, value }: { children: ReactNode; value: string }) => <option value={value}>{children}</option>,
+  SelectTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
+  SelectValue: () => null,
 }));
 
 import { RolesPage } from "./RolesPage";
@@ -139,9 +163,13 @@ describe("RolesPage", () => {
     mockUseUpdateRole.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
     mockUseDeleteRole.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
     mockUseAssignPermissions.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
+    mockUseOrganizations.mockReturnValue({ data: undefined, isLoading: false });
     mockCan.mockReturnValue(false);
-    mockUseAuth.mockReturnValue({
-      user: { role: "member" },
+    mockUseEffectiveSession.mockReturnValue({
+      data: {
+        user: { role: "manager" },
+        session: { activeOrganizationId: "org-1" },
+      },
     });
 
     vi.stubGlobal(
@@ -162,9 +190,6 @@ describe("RolesPage", () => {
       isLoading: false,
     });
     mockCan.mockImplementation((resource: string, action: string) => resource === "role" && action === "create");
-    mockUseAuth.mockReturnValue({
-      user: { role: "admin" },
-    });
 
     render(<RolesPage />);
 
@@ -177,6 +202,27 @@ describe("RolesPage", () => {
     });
   });
 
+  it("shows backend-returned custom roles for managers", async () => {
+    mockUseRoles.mockReturnValue({
+      data: [
+        { id: "role-1", name: "admin", displayName: "Admin", description: "Admin role", color: "red", isSystem: true },
+        { id: "role-2", name: "manager", displayName: "Manager", description: "Manager role", color: "blue", isSystem: true },
+        { id: "role-3", name: "member", displayName: "Member", description: "Member role", color: "gray", isSystem: true },
+        { id: "role-4", name: "test", displayName: "Test", description: "Org custom role", color: "green", isSystem: false },
+      ],
+      isLoading: false,
+    });
+    mockCan.mockImplementation((resource: string, action: string) => resource === "role" && action === "read");
+
+    render(<RolesPage />);
+
+    expect(screen.getByTestId("role-card-test")).toBeVisible();
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledTimes(4);
+    });
+  });
+
   it("submits role creation when role:create is granted", async () => {
     createRoleMutation.mutateAsync.mockResolvedValue({
       id: "role-3",
@@ -185,9 +231,6 @@ describe("RolesPage", () => {
       color: "gray",
     });
     mockCan.mockImplementation((resource: string, action: string) => resource === "role" && action === "create");
-    mockUseAuth.mockReturnValue({
-      user: { role: "admin" },
-    });
 
     render(<RolesPage />);
 
@@ -206,5 +249,93 @@ describe("RolesPage", () => {
     });
 
     expect(mockToastSuccess).toHaveBeenCalledWith("Role created successfully");
+  });
+
+  it("shows an organization prompt and disables org-scoped role queries when no organization is active", () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    mockUseEffectiveSession.mockReturnValue({
+      data: {
+        user: { role: "manager" },
+        session: {},
+      },
+    });
+    mockUseRoles.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+    });
+    mockCan.mockImplementation(
+      (resource: string, action: string) =>
+        resource === "role" && (action === "read" || action === "create"),
+    );
+
+    render(<RolesPage />);
+
+    expect(screen.getByText(/select an organization/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /choose an active organization from the switcher before managing organization roles and permissions/i,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /create role/i })).not.toBeInTheDocument();
+    expect(mockUseRoles).toHaveBeenCalledWith({ activeOrganizationId: null, enabled: false });
+    expect(mockUsePermissionsGrouped).toHaveBeenCalledWith({ enabled: false });
+    expect(consoleErrorSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining("Maximum update depth exceeded"),
+    );
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("defaults superadmin roles view to all organizations", async () => {
+    mockUseEffectiveSession.mockReturnValue({
+      data: {
+        user: { role: "superadmin" },
+        session: {},
+      },
+    });
+    mockUseOrganizations.mockReturnValue({
+      data: {
+        data: [{ id: "org-1", name: "Org One" }],
+      },
+      isLoading: false,
+    });
+
+    render(<RolesPage />);
+
+    await waitFor(() => {
+      expect(mockUseRoles).toHaveBeenLastCalledWith({ activeOrganizationId: null, enabled: true });
+    });
+
+    expect(screen.getByLabelText(/organization/i)).toBeInTheDocument();
+    expect(screen.queryByText(/organization required/i)).not.toBeInTheDocument();
+  });
+
+  it("filters superadmin roles by selected organization", async () => {
+    mockUseEffectiveSession.mockReturnValue({
+      data: {
+        user: { role: "superadmin" },
+        session: {},
+      },
+    });
+    mockUseOrganizations.mockReturnValue({
+      data: {
+        data: [
+          { id: "org-1", name: "Org One" },
+          { id: "org-2", name: "Org Two" },
+        ],
+      },
+      isLoading: false,
+    });
+
+    render(<RolesPage />);
+
+    expect(mockUseRoles).toHaveBeenCalledWith({ activeOrganizationId: null, enabled: true });
+
+    fireEvent.change(screen.getByLabelText(/organization/i), { target: { value: "org-2" } });
+
+    await waitFor(() => {
+      expect(mockUseRoles).toHaveBeenLastCalledWith({ activeOrganizationId: "org-2", enabled: true });
+    });
   });
 });

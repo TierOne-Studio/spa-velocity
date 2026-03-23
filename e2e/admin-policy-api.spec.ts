@@ -3,6 +3,9 @@ import { Pool } from 'pg';
 import { API_BASE_URL, DATABASE_URL, TEST_USER } from './env';
 import { uniqueEmail } from './test-helpers';
 
+const CAPABILITIES_ORG_SLUG = `e2e-policy-api-org-${Date.now()}`;
+const CAPABILITIES_ORG_NAME = 'E2E Policy API Org';
+
 async function withDatabase<T>(fn: (pool: Pool) => Promise<T>): Promise<T> {
   const pool = new Pool({ connectionString: DATABASE_URL });
   try {
@@ -23,6 +26,16 @@ async function signInAndGetHeaders(request: import('@playwright/test').APIReques
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+async function setActiveOrganizationForUserSessions(userEmail: string, organizationId: string): Promise<void> {
+  await withDatabase(async (pool) => {
+    await pool.query(
+      `UPDATE session SET "activeOrganizationId" = $1
+       WHERE "userId" IN (SELECT id FROM "user" WHERE email = $2)`,
+      [organizationId, userEmail],
+    );
+  });
+}
+
 async function ensureAdminActor(): Promise<string> {
   return withDatabase(async (pool) => {
     const userResult = await pool.query<{ id: string }>(
@@ -37,7 +50,7 @@ async function ensureAdminActor(): Promise<string> {
     const userId = userResult.rows[0].id;
 
     await pool.query(
-      `UPDATE "user" SET role = 'admin', "emailVerified" = true, "updatedAt" = NOW() WHERE id = $1`,
+      `UPDATE "user" SET role = 'superadmin', "emailVerified" = true, "updatedAt" = NOW() WHERE id = $1`,
       [userId],
     );
 
@@ -110,8 +123,11 @@ async function ensureMember(organizationId: string, userId: string, role: 'admin
 }
 
 test.describe('Admin policy API coverage', () => {
+  let organizationId = '';
+
   test.beforeAll(async () => {
     await ensureAdminActor();
+    organizationId = await createOrganization(CAPABILITIES_ORG_SLUG, CAPABILITIES_ORG_NAME);
   });
 
   test('GET /api/password-policy should expose backend policy', async ({ request }) => {
@@ -123,8 +139,6 @@ test.describe('Admin policy API coverage', () => {
   });
 
   test('GET /api/admin/users/:id/capabilities should return backend-driven action matrix', async ({ request }) => {
-    const headers = await signInAndGetHeaders(request);
-
     const targetMemberId = await ensureUser(
       uniqueEmail('e2e-cap-member'),
       'E2E Cap Member',
@@ -136,6 +150,15 @@ test.describe('Admin policy API coverage', () => {
       'admin',
     );
 
+    await ensureMember(organizationId, targetMemberId, 'member');
+    await ensureMember(organizationId, targetAdminId, 'admin');
+
+    const adminUserId = await ensureAdminActor();
+    await ensureMember(organizationId, adminUserId, 'admin');
+
+    const headers = await signInAndGetHeaders(request);
+    await setActiveOrganizationForUserSessions(TEST_USER.email, organizationId);
+
     const memberResponse = await request.get(`${API_BASE_URL}/api/admin/users/${targetMemberId}/capabilities`, { headers });
     expect(memberResponse.status()).toBe(200);
     const memberBody = await memberResponse.json();
@@ -146,9 +169,9 @@ test.describe('Admin policy API coverage', () => {
     const adminResponse = await request.get(`${API_BASE_URL}/api/admin/users/${targetAdminId}/capabilities`, { headers });
     expect(adminResponse.status()).toBe(200);
     const adminBody = await adminResponse.json();
-    expect(adminBody.actions.setRole).toBe(false);
-    expect(adminBody.actions.remove).toBe(false);
-    expect(adminBody.actions.impersonate).toBe(false);
+    expect(adminBody.actions.setRole).toBe(true);
+    expect(adminBody.actions.remove).toBe(true);
+    expect(adminBody.actions.impersonate).toBe(true);
   });
 
   test('organization member last-admin protections should be enforced by API', async ({ request }) => {

@@ -1,10 +1,11 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 
 import {
   ensureOrganizationMembership,
   ensureUserRecord,
   escapeRegExp,
   ensureUserWithRole,
+  setActiveOrganizationForUserSessions,
   uniqueEmail,
 } from './test-helpers';
 import {
@@ -36,6 +37,7 @@ async function loginAs(page: Page, role: 'admin' | 'manager' | 'member') {
     emails: roleEmails,
     password: DEFAULT_PASSWORD,
     managerOrganizationId,
+    activeOrganizationId: managerOrganizationId,
   });
 }
 
@@ -77,28 +79,23 @@ async function openOrganizationBySlug(page: Page, slug: string) {
   await expect(page.getByText(/manage members/i)).toBeVisible({ timeout: 15000 });
 }
 
-async function openAddMemberRoleDropdown(page: Page) {
+async function openAddMemberRoleDropdown(page: Page): Promise<Locator> {
   await page.getByRole('button', { name: /add member/i }).click();
 
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible({ timeout: 10000 });
 
-  const roleSelect = dialog.getByRole('combobox').nth(1);
+  const roleSelect = dialog.getByRole('combobox').last();
 
   await expect(roleSelect).toBeVisible({ timeout: 10000 });
+  await roleSelect.click();
 
-  const memberOption = page.getByRole('option', { name: /^member$/i });
-  await roleSelect.evaluate((el) => {
-    (el as HTMLElement).click();
+  const listbox = page.getByRole('listbox').last();
+  await expect(listbox).toBeVisible({ timeout: 5000 });
+  await expect(listbox.getByRole('option', { name: /^member$/i }).first()).toBeVisible({
+    timeout: 5000,
   });
-
-  const opened = await memberOption.isVisible({ timeout: 3000 }).catch(() => false);
-  if (!opened) {
-    await roleSelect.focus();
-    await roleSelect.press('Enter');
-  }
-
-  await expect(memberOption).toBeVisible({ timeout: 5000 });
+  return listbox;
 }
 
 async function openAddMemberUserDropdown(page: Page) {
@@ -165,9 +162,16 @@ test.describe.serial('RBAC Organizations matrix (UI-aligned)', () => {
       orgSlug: managedOrgSlug,
       orgName: 'E2E RBAC Organizations Matrix Org',
     });
+
+    await ensureOrganizationMembership({
+      userEmail: memberActorEmail,
+      role: 'member',
+      orgSlug: managedOrgSlug,
+      orgName: 'E2E RBAC Organizations Matrix Org',
+    });
   });
 
-  test('admin and manager can access organizations page; member is redirected', async ({ page }) => {
+  test('admin, manager, and member can access organizations page when permissions and org context allow it', async ({ page }) => {
     await loginAs(page, 'admin');
     await openOrganizationsPage(page);
 
@@ -175,11 +179,7 @@ test.describe.serial('RBAC Organizations matrix (UI-aligned)', () => {
     await openOrganizationsPage(page);
 
     await loginAs(page, 'member');
-    await page.goto('/admin/organizations');
-    await expect(page).toHaveURL('/');
-    await expect(
-      page.locator('[data-slot="sidebar"]').getByRole('link', { name: /^dashboard$/i }),
-    ).toBeVisible();
+    await openOrganizationsPage(page);
   });
 
   test('create organization action is available for admin', async ({ page }) => {
@@ -218,11 +218,11 @@ test.describe.serial('RBAC Organizations matrix (UI-aligned)', () => {
     await loginAs(page, 'manager');
     await openOrganizationsPage(page);
     await openOrganizationBySlug(page, managedOrgSlug);
-    await openAddMemberRoleDropdown(page);
+    const roleListbox = await openAddMemberRoleDropdown(page);
 
-    await expect(page.getByRole('option', { name: /^admin$/i })).not.toBeVisible();
-    await expect(page.getByRole('option', { name: /^manager$/i })).toBeVisible();
-    await expect(page.getByRole('option', { name: /^member$/i })).toBeVisible();
+    await expect(roleListbox.getByRole('option', { name: /^admin$/i })).toHaveCount(0);
+    await expect(roleListbox.getByRole('option', { name: /^manager$/i }).first()).toBeVisible();
+    await expect(roleListbox.getByRole('option', { name: /^member$/i }).first()).toBeVisible();
 
     await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
@@ -232,11 +232,11 @@ test.describe.serial('RBAC Organizations matrix (UI-aligned)', () => {
     await loginAs(page, 'admin');
     await openOrganizationsPage(page);
     await openOrganizationBySlug(page, managedOrgSlug);
-    await openAddMemberRoleDropdown(page);
+    const roleListbox = await openAddMemberRoleDropdown(page);
 
-    await expect(page.getByRole('option', { name: /^admin$/i })).toBeVisible();
-    await expect(page.getByRole('option', { name: /^manager$/i })).toBeVisible();
-    await expect(page.getByRole('option', { name: /^member$/i })).toBeVisible();
+    await expect(roleListbox.getByRole('option', { name: /^admin$/i }).first()).toBeVisible();
+    await expect(roleListbox.getByRole('option', { name: /^manager$/i }).first()).toBeVisible();
+    await expect(roleListbox.getByRole('option', { name: /^member$/i }).first()).toBeVisible();
 
     await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');

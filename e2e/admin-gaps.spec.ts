@@ -1,5 +1,4 @@
 import { test, expect, type APIRequestContext } from '@playwright/test';
-import { Pool } from 'pg';
 
 import { API_BASE_URL, TEST_USER } from './env';
 import { uniqueEmail, withDatabase } from './test-helpers';
@@ -16,7 +15,7 @@ const THROWAWAY_USER_EMAIL = resendTestEmail('delivered', `e2e-gaps-throwaway-${
 
 async function ensureAdminRole(): Promise<void> {
   await withDatabase(async (pool) => {
-    await pool.query(`UPDATE "user" SET role = 'admin', "emailVerified" = true WHERE email = $1`, [TEST_USER.email]);
+    await pool.query(`UPDATE "user" SET role = 'superadmin', "emailVerified" = true WHERE email = $1`, [TEST_USER.email]);
     await pool.query(`DELETE FROM session WHERE "userId" IN (SELECT id FROM "user" WHERE email = $1)`, [TEST_USER.email]);
   });
 }
@@ -60,8 +59,53 @@ async function createThrowawayUser(orgId: string): Promise<string> {
   });
 }
 
+async function createStandaloneMemberUser(email: string, name: string): Promise<string> {
+  return await withDatabase(async (pool) => {
+    const result = await pool.query<{ id: string }>(
+      `INSERT INTO "user" (id, name, email, role, "emailVerified", "createdAt", "updatedAt")
+       VALUES (gen_random_uuid()::text, $1, $2, 'member', true, NOW(), NOW())
+       ON CONFLICT (email) DO UPDATE
+         SET name = EXCLUDED.name,
+             role = 'member',
+             "emailVerified" = true,
+             "updatedAt" = NOW()
+       RETURNING id`,
+      [name, email],
+    );
+
+    return result.rows[0].id;
+  });
+}
+
 async function loginViaApi(request: APIRequestContext): Promise<Record<string, string>> {
   return signInAndGetAuthHeaders(request, TEST_USER.email, TEST_USER.password);
+}
+
+async function createInvitationViaApi(
+  request: APIRequestContext,
+  organizationId: string,
+  headers?: Record<string, string>,
+): Promise<{ id: string; email: string }> {
+  const authHeaders = headers ?? await loginViaApi(request);
+  const inviteEmail = uniqueEmail('e2e-gaps-invite-target');
+
+  const response = await request.post(
+    `${API_BASE_URL}/api/platform-admin/organizations/${organizationId}/invitations`,
+    {
+      headers: { ...authHeaders, 'Content-Type': 'application/json' },
+      data: { email: inviteEmail, role: 'member' },
+    },
+  );
+
+  expect([200, 201]).toContain(response.status());
+  const body = await response.json();
+  const invitation = body?.data ?? body;
+  expect(invitation?.id).toBeTruthy();
+
+  return {
+    id: invitation.id as string,
+    email: inviteEmail,
+  };
 }
 
 async function login(page: import('@playwright/test').Page): Promise<void> {
@@ -87,7 +131,7 @@ test.describe.serial('User creation — form validation', () => {
     await page.waitForSelector('table tbody tr', { timeout: 15000 });
   });
 
-  test('selecting admin role hides the organization field', async ({ page }) => {
+  test('selecting admin role keeps the organization field available for org-scoped admin role', async ({ page }) => {
     await page.getByRole('button', { name: /add user/i }).click();
     await expect(page.getByRole('dialog')).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Create New User' })).toBeVisible();
@@ -99,14 +143,14 @@ test.describe.serial('User creation — form validation', () => {
     // Switch role to admin
     const roleSelect = dialog.getByRole('combobox').first();
     await roleSelect.click();
-    await page.getByRole('option', { name: /^admin$/i }).click();
+    await page.getByRole('listbox').last().getByRole('option', { name: /^admin$/i }).first().click();
 
-    // Org combobox must be hidden when admin role is selected
-    await expect(dialog.getByRole('combobox')).toHaveCount(1, { timeout: 3000 });
+    // Admin is org-scoped, so the organization combobox remains available
+    await expect(dialog.getByRole('combobox')).toHaveCount(2, { timeout: 3000 });
 
     // Switch back to member — org combobox must reappear
     await roleSelect.click();
-    await page.getByRole('option', { name: /^member$/i }).click();
+    await page.getByRole('listbox').last().getByRole('option', { name: /^member$/i }).first().click();
     await expect(dialog.getByRole('combobox')).toHaveCount(2, { timeout: 3000 });
   });
 
@@ -235,7 +279,6 @@ test.describe.serial('Bulk delete — execution flow', () => {
 
 test.describe.serial('Invitation CRUD — API contract', () => {
   let invitationOrgId: string;
-  let createdInvitationId: string;
 
   test.beforeAll(async () => {
     await ensureAdminRole();
@@ -244,26 +287,13 @@ test.describe.serial('Invitation CRUD — API contract', () => {
 
   test('POST /invitations creates a new pending invitation', async ({ request }) => {
     const headers = await loginViaApi(request);
-    const inviteEmail = uniqueEmail('e2e-gaps-invite-target');
-
-    const response = await request.post(
-      `${API_BASE_URL}/api/platform-admin/organizations/${invitationOrgId}/invitations`,
-      {
-        headers: { ...headers, 'Content-Type': 'application/json' },
-        data: { email: inviteEmail, role: 'member' },
-      },
-    );
-
-    expect([200, 201]).toContain(response.status());
-    const body = await response.json();
-    const invitation = body?.data ?? body;
-    expect(invitation).toBeTruthy();
-    expect(invitation?.id).toBeTruthy();
-    createdInvitationId = invitation.id;
+    const invitation = await createInvitationViaApi(request, invitationOrgId, headers);
+    expect(invitation.id).toBeTruthy();
   });
 
   test('GET /invitations lists the invitation just created', async ({ request }) => {
     const headers = await loginViaApi(request);
+    const { id } = await createInvitationViaApi(request, invitationOrgId, headers);
 
     const response = await request.get(
       `${API_BASE_URL}/api/platform-admin/organizations/${invitationOrgId}/invitations`,
@@ -276,16 +306,16 @@ test.describe.serial('Invitation CRUD — API contract', () => {
       ? body
       : (body?.data ?? []);
     expect(list.length).toBeGreaterThan(0);
-    const found = list.some((inv) => inv.status === 'pending');
+    const found = list.some((inv) => inv.id === id && inv.status === 'pending');
     expect(found).toBe(true);
   });
 
   test('DELETE /invitations/:id cancels the invitation', async ({ request }) => {
-    test.skip(!createdInvitationId, 'invitation was not created in prior step');
     const headers = await loginViaApi(request);
+    const { id } = await createInvitationViaApi(request, invitationOrgId, headers);
 
     const response = await request.delete(
-      `${API_BASE_URL}/api/platform-admin/organizations/${invitationOrgId}/invitations/${createdInvitationId}`,
+      `${API_BASE_URL}/api/platform-admin/organizations/${invitationOrgId}/invitations/${id}`,
       { headers },
     );
 
@@ -293,8 +323,15 @@ test.describe.serial('Invitation CRUD — API contract', () => {
   });
 
   test('GET /invitations after delete shows no pending invitations for that id', async ({ request }) => {
-    test.skip(!createdInvitationId, 'invitation was not created in prior step');
     const headers = await loginViaApi(request);
+    const { id } = await createInvitationViaApi(request, invitationOrgId, headers);
+
+    const deleteResponse = await request.delete(
+      `${API_BASE_URL}/api/platform-admin/organizations/${invitationOrgId}/invitations/${id}`,
+      { headers },
+    );
+
+    expect([200, 204]).toContain(deleteResponse.status());
 
     const response = await request.get(
       `${API_BASE_URL}/api/platform-admin/organizations/${invitationOrgId}/invitations`,
@@ -306,7 +343,7 @@ test.describe.serial('Invitation CRUD — API contract', () => {
     const list: Array<{ id: string; status: string }> = Array.isArray(body)
       ? body
       : (body?.data ?? []);
-    const stillPending = list.find((inv) => inv.id === createdInvitationId && inv.status === 'pending');
+    const stillPending = list.find((inv) => inv.id === id && inv.status === 'pending');
     expect(stillPending).toBeFalsy();
   });
 
@@ -318,23 +355,19 @@ test.describe.serial('Invitation CRUD — API contract', () => {
 // ─── Suite 4: Batch Capabilities — API contract ───────────────────────────────
 
 test.describe.serial('Batch capabilities — API contract', () => {
-  let targetUserId: string;
+  let targetUserIds: string[] = [];
 
   test.beforeAll(async () => {
     await ensureAdminRole();
-    await withDatabase(async (pool) => {
-      const result = await pool.query<{ id: string }>(
-        `SELECT id FROM "user" WHERE email != $1 AND role = 'member' LIMIT 1`,
-        [TEST_USER.email],
-      );
-      if (result.rowCount && result.rowCount > 0) {
-        targetUserId = result.rows[0].id;
-      }
-    });
+    targetUserIds = await Promise.all([
+      createStandaloneMemberUser(uniqueEmail('e2e-gaps-capability-target-1'), 'E2E Capability Target 1'),
+      createStandaloneMemberUser(uniqueEmail('e2e-gaps-capability-target-2'), 'E2E Capability Target 2'),
+      createStandaloneMemberUser(uniqueEmail('e2e-gaps-capability-target-3'), 'E2E Capability Target 3'),
+    ]);
   });
 
   test('POST /capabilities/batch returns 200 with action maps for known user ids', async ({ request }) => {
-    test.skip(!targetUserId, 'no non-admin member user found in DB');
+    const targetUserId = targetUserIds[0];
     const headers = await loginViaApi(request);
 
     const response = await request.post(
@@ -375,15 +408,7 @@ test.describe.serial('Batch capabilities — API contract', () => {
   });
 
   test('POST /capabilities/batch with multiple ids returns one entry per id', async ({ request }) => {
-    const additionalIds = await withDatabase(async (pool: Pool) => {
-      const result = await pool.query<{ id: string }>(
-        `SELECT id FROM "user" WHERE email != $1 LIMIT 3`,
-        [TEST_USER.email],
-      );
-      return result.rows.map((r) => r.id);
-    });
-
-    test.skip(additionalIds.length < 2, 'not enough non-admin users in DB');
+    const additionalIds = targetUserIds;
 
     const headers = await loginViaApi(request);
     const response = await request.post(

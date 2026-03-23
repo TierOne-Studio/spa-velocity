@@ -47,12 +47,12 @@ import {
   useUpdateMemberRole,
   useAddMember,
   useCheckSlug,
+  useSetActiveOrganization,
 } from "../hooks/useOrganizations"
 import { organizationService } from "../services/adminService"
 import { getOrganizationRolesMetadata } from "../services/adminService"
-import { filterAssignableRoles } from "../utils/role-hierarchy"
-import { useAuth } from "@/shared/context/AuthContext"
 import { usePermissionsContext } from "@/shared/context/PermissionsContext"
+import { useEffectiveSession } from "@/shared/hooks/useEffectiveSession"
 
 interface Organization {
   id: string
@@ -82,6 +82,8 @@ interface User {
   image?: string | null
 }
 
+const dedupeRoleNames = (roleNames: string[]) => Array.from(new Set(roleNames))
+
 // Helper to extract members array from response
 const getMembersArray = (data: unknown): Member[] => {
   if (!data) return []
@@ -94,8 +96,8 @@ const getMembersArray = (data: unknown): Member[] => {
 
 
 export function OrganizationsPage() {
-  const { user } = useAuth()
-  const { can } = usePermissionsContext()
+  const { can, refetchPermissions } = usePermissionsContext()
+  const { data: session, refetch: refetchSession } = useEffectiveSession()
 
   // State
   const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null)
@@ -105,6 +107,7 @@ export function OrganizationsPage() {
   const [addMemberDialogOpen, setAddMemberDialogOpen] = useState(false)
   const [removeMemberDialogOpen, setRemoveMemberDialogOpen] = useState(false)
   const [selectedMember, setSelectedMember] = useState<Member | null>(null)
+  const [optimisticActiveOrganizationId, setOptimisticActiveOrganizationId] = useState<string | null>(null)
 
   // Pagination state
   const [page, setPage] = useState(1)
@@ -125,9 +128,27 @@ export function OrganizationsPage() {
     assignableRoles: string[];
   } | null>(null)
 
+  const activeOrganizationId =
+    (session?.session as { activeOrganizationId?: string } | undefined)?.activeOrganizationId ?? null
+  const currentActiveOrganizationId = optimisticActiveOrganizationId ?? activeOrganizationId
+  const rawSessionRole = (session?.user as { role?: string | string[] } | undefined)?.role
+  const isSuperadmin = Array.isArray(rawSessionRole)
+    ? rawSessionRole.includes("superadmin")
+    : String(rawSessionRole ?? "")
+        .split(",")
+        .map((role) => role.trim())
+        .filter(Boolean)
+        .includes("superadmin")
+  const canManageOrganizationFromPage = (organizationId: string) =>
+    isSuperadmin || organizationId === currentActiveOrganizationId
+  const canManageSelectedOrganization =
+    !!selectedOrg && canManageOrganizationFromPage(selectedOrg.id)
+
   // Queries
   const { data: orgsResponse, isLoading: orgsLoading } = useOrganizations({ page, limit: pageSize, search: search || undefined })
-  const { data: membersData, isLoading: membersLoading } = useOrganizationMembers(selectedOrg?.id ?? "")
+  const { data: membersData, isLoading: membersLoading } = useOrganizationMembers(
+    selectedOrg?.id ?? "",
+  )
 
   // Extract arrays from response data
   const organizations = orgsResponse?.data ?? []
@@ -143,24 +164,56 @@ export function OrganizationsPage() {
   const removeMember = useRemoveMember()
   const updateMemberRole = useUpdateMemberRole()
   const checkSlug = useCheckSlug()
+  const setActiveOrganization = useSetActiveOrganization()
 
-  // Fetch organization roles metadata on mount
+  useEffect(() => {
+    if (activeOrganizationId !== null) {
+      setOptimisticActiveOrganizationId(null)
+    }
+  }, [activeOrganizationId])
+
+  // Fetch organization roles metadata whenever the selected org changes
   useEffect(() => {
     const fetchRolesMeta = async () => {
       try {
-        const meta = await getOrganizationRolesMetadata()
+        const meta = await getOrganizationRolesMetadata(selectedOrg?.id)
         setOrgRolesMeta(meta)
       } catch (error) {
         console.error("Failed to fetch organization roles metadata:", error)
       }
     }
-    fetchRolesMeta()
-  }, [])
+    void fetchRolesMeta()
+  }, [selectedOrg?.id])
 
   const canCreateOrg = can('organization', 'create')
   const canUpdateOrg = can('organization', 'update')
   const canDeleteOrg = can('organization', 'delete')
   const canManageMembers = can('organization', 'invite')
+  const roleMetadataByName = new Map(
+    (orgRolesMeta?.roles ?? []).map((role) => [role.name, role]),
+  )
+
+  const handleSelectOrganization = async (org: Organization) => {
+    setSelectedOrg(org)
+
+    if (isSuperadmin || org.id === currentActiveOrganizationId || setActiveOrganization.isPending) {
+      return
+    }
+
+    // Optimistically mark the org as active so the detail panel renders without
+    // showing the "Switch your active organization" warning during the async switch.
+    setOptimisticActiveOrganizationId(org.id)
+
+    try {
+      await setActiveOrganization.mutateAsync(org.id)
+      await refetchSession()
+      refetchPermissions()
+      toast.success("Switched organization")
+    } catch (error) {
+      setOptimisticActiveOrganizationId(null)  // revert on failure
+      toast.error(error instanceof Error ? error.message : "Failed to switch organization")
+    }
+  }
 
   // Check slug availability with debounce
   const handleSlugChange = async (slug: string) => {
@@ -204,7 +257,7 @@ export function OrganizationsPage() {
 
   const handleUpdateOrg = async () => {
     if (!selectedOrg) return
-    if (!canUpdateOrg) {
+    if (!canUpdateOrg || !canManageSelectedOrganization) {
       toast.error("You do not have permission to update organizations")
       return
     }
@@ -223,7 +276,7 @@ export function OrganizationsPage() {
 
   const handleDeleteOrg = async () => {
     if (!selectedOrg) return
-    if (!canDeleteOrg) {
+    if (!canDeleteOrg || !canManageSelectedOrganization) {
       toast.error("You do not have permission to delete organizations")
       return
     }
@@ -241,7 +294,7 @@ export function OrganizationsPage() {
   const handleOpenAddMemberDialog = async () => {
     if (!selectedOrg) return
 
-    if (!canManageMembers) {
+    if (!canManageMembers || !canManageSelectedOrganization) {
       toast.error("You do not have permission to invite members")
       return
     }
@@ -260,7 +313,7 @@ export function OrganizationsPage() {
 
   const handleAddMember = async () => {
     if (!selectedOrg || !addMemberData.userId) return
-    if (!canManageMembers) {
+    if (!canManageMembers || !canManageSelectedOrganization) {
       toast.error("You do not have permission to invite members")
       return
     }
@@ -281,7 +334,7 @@ export function OrganizationsPage() {
 
   const handleRemoveMember = async () => {
     if (!selectedOrg || !selectedMember) return
-    if (!canManageMembers) {
+    if (!canManageMembers || !canManageSelectedOrganization) {
       toast.error("You do not have permission to remove members")
       return
     }
@@ -299,9 +352,9 @@ export function OrganizationsPage() {
     }
   }
 
-  const handleUpdateRole = async (memberId: string, newRole: "admin" | "manager" | "member") => {
+  const handleUpdateRole = async (memberId: string, newRole: string) => {
     if (!selectedOrg) return
-    if (!canManageMembers) {
+    if (!canManageMembers || !canManageSelectedOrganization) {
       toast.error("You do not have permission to update member roles")
       return
     }
@@ -362,10 +415,13 @@ export function OrganizationsPage() {
                 ))
               ) : organizations?.length ? (
                 organizations.map((org: Organization) => (
-                  <button
+                  <div
                     key={org.id}
-                    onClick={() => setSelectedOrg(org)}
-                    className={`flex items-center gap-3 w-full text-left p-3 rounded-lg transition-colors ${
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => void handleSelectOrganization(org)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') void handleSelectOrganization(org) }}
+                    className={`flex items-center gap-3 w-full text-left p-3 rounded-lg transition-colors cursor-pointer ${
                       selectedOrg?.id === org.id
                         ? "bg-primary/10 border border-primary"
                         : "hover:bg-muted border border-transparent"
@@ -386,14 +442,14 @@ export function OrganizationsPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        {canUpdateOrg && (
+                        {canUpdateOrg && canManageOrganizationFromPage(org.id) && (
                           <DropdownMenuItem onClick={() => openEditDialog(org)}>
                             <IconEdit className="mr-2 h-4 w-4" />
                             Edit
                           </DropdownMenuItem>
                         )}
-                        {canUpdateOrg && canDeleteOrg && <DropdownMenuSeparator />}
-                        {canDeleteOrg && (
+                        {canUpdateOrg && canDeleteOrg && canManageOrganizationFromPage(org.id) && <DropdownMenuSeparator />}
+                        {canDeleteOrg && canManageOrganizationFromPage(org.id) && (
                           <DropdownMenuItem
                             className="text-destructive"
                             onClick={() => {
@@ -407,7 +463,7 @@ export function OrganizationsPage() {
                         )}
                       </DropdownMenuContent>
                     </DropdownMenu>
-                  </button>
+                  </div>
                 ))
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
@@ -455,7 +511,7 @@ export function OrganizationsPage() {
                 {selectedOrg ? `Manage members` : "Select an organization"}
               </CardDescription>
             </div>
-            {selectedOrg && canManageMembers && (
+            {selectedOrg && canManageMembers && canManageSelectedOrganization && (
               <Button onClick={handleOpenAddMemberDialog}>
                 <IconUsers className="mr-2 h-4 w-4" />
                 Add Member
@@ -475,6 +531,11 @@ export function OrganizationsPage() {
                     <IconUsers className="h-5 w-5" />
                     Members ({members.length})
                   </h3>
+                  {!canManageSelectedOrganization && (
+                    <div className="text-center py-6 text-muted-foreground border rounded-lg">
+                      Switch your active organization to manage members for this organization
+                    </div>
+                  )}
                   {membersLoading ? (
                     <div className="space-y-2">
                       {Array.from({ length: 3 }).map((_, i) => (
@@ -514,28 +575,27 @@ export function OrganizationsPage() {
                                 {(() => {
                                   const isAdmin = member.role === "admin"
                                   const isOnlyAdmin = isAdmin && members.filter(m => m.role === "admin").length === 1
-                                  // Build role options: include current role even if not in assignableRoles
-                                  const rawAssignable = orgRolesMeta?.assignableRoles ?? []
-                                  const assignable = filterAssignableRoles(rawAssignable, user?.role ?? 'member')
-                                  const allRoleOptions = assignable.includes(member.role)
-                                    ? assignable
-                                    : [member.role, ...assignable]
+                                  const isRoleChangeDisabled = (!isSuperadmin && isOnlyAdmin) || !canManageMembers || !canManageSelectedOrganization
+                                  const assignable = dedupeRoleNames(orgRolesMeta?.assignableRoles ?? [])
+                                  const allRoleOptions = dedupeRoleNames(
+                                    assignable.includes(member.role)
+                                      ? assignable
+                                      : [member.role, ...assignable],
+                                  )
                                   return (
                                     <Select
                                       value={member.role || undefined}
                                       onValueChange={(value) => {
-                                        if (value === "admin" || value === "manager" || value === "member") {
-                                          handleUpdateRole(member.id, value)
-                                        }
+                                        if (value) void handleUpdateRole(member.id, value)
                                       }}
-                                      disabled={isOnlyAdmin || !canManageMembers}
+                                      disabled={isRoleChangeDisabled}
                                     >
                                       <SelectTrigger className="w-32">
                                         <SelectValue placeholder="Select role" />
                                       </SelectTrigger>
                                       <SelectContent>
                                         {allRoleOptions.map((roleName) => {
-                                          const role = orgRolesMeta?.roles.find((r) => r.name === roleName)
+                                          const role = roleMetadataByName.get(roleName)
                                           return (
                                             <SelectItem key={roleName} value={roleName}>
                                               {role?.displayName || roleName.charAt(0).toUpperCase() + roleName.slice(1)}
@@ -548,7 +608,7 @@ export function OrganizationsPage() {
                                 })()}
                               </td>
                               <td className="p-3 text-right">
-                                {canManageMembers && (
+                                {canManageMembers && canManageSelectedOrganization && (
                                   <Button
                                     variant="ghost"
                                     size="sm"
@@ -739,8 +799,8 @@ export function OrganizationsPage() {
                   <SelectValue placeholder="Select role" />
                 </SelectTrigger>
                 <SelectContent>
-                  {filterAssignableRoles(orgRolesMeta?.assignableRoles ?? [], user?.role ?? 'member').map((roleName) => {
-                    const role = orgRolesMeta?.roles.find((r) => r.name === roleName)
+                  {dedupeRoleNames(orgRolesMeta?.assignableRoles ?? []).map((roleName) => {
+                    const role = roleMetadataByName.get(roleName)
                     return (
                       <SelectItem key={roleName} value={roleName}>
                         {role?.displayName || roleName}

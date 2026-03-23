@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { rbacService } from "@features/Admin/services/rbacService";
 import { useAuth } from "./AuthContext";
 import { LoadingOverlay } from "@shared/components/LoadingOverlay";
+import { useEffectiveSession } from "@shared/hooks/useEffectiveSession";
 
 interface PermissionsContextType {
     permissions: string[];
@@ -16,26 +17,36 @@ const PermissionsContext = createContext<PermissionsContextType | undefined>(und
 const permissionsQueryKey = ["rbac", "my-permissions"] as const;
 
 export function PermissionsProvider({ children }: { children: React.ReactNode }) {
-    const { user, isAuthenticated, isAdminOrManager, isLoading: authLoading } = useAuth();
+    const { user, isAuthenticated, isLoading: authLoading } = useAuth();
+    const { data: session } = useEffectiveSession();
     const queryClient = useQueryClient();
+    const activeOrganizationId =
+        (session?.session as { activeOrganizationId?: string } | undefined)?.activeOrganizationId ?? null;
+    const isSuperadmin = user?.role === "superadmin";
 
     const { data: permissions = [], isLoading: permissionsLoading } = useQuery({
-        queryKey: [...permissionsQueryKey, user?.id ?? "anonymous", user?.role ?? "member"],
+        queryKey: [...permissionsQueryKey, user?.id ?? "anonymous", activeOrganizationId ?? "no-org"],
         queryFn: () => rbacService.getMyPermissions(),
-        enabled: isAuthenticated && isAdminOrManager,
+        enabled: isAuthenticated,
         staleTime: 60_000,
         refetchOnWindowFocus: false,
+        // Keep previous permissions while the new org's permissions are loading.
+        // Without this, a query-key change (e.g. org switch / bearer-token rotation)
+        // causes isLoading=true which triggers LoadingOverlay, unmounting the page
+        // and resetting all component state mid-interaction.
+        placeholderData: (prev) => prev,
     });
 
     const permissionSet = useMemo(() => new Set(permissions), [permissions]);
 
     const can = useCallback(
         (resource: string, action: string): boolean => {
-            if (!isAuthenticated || !isAdminOrManager) return false;
+            if (!isAuthenticated) return false;
             if (permissionsLoading) return false;
+            if (isSuperadmin) return true;
             return permissionSet.has(`${resource}:${action}`);
         },
-        [isAuthenticated, isAdminOrManager, permissionsLoading, permissionSet],
+        [isAuthenticated, isSuperadmin, permissionsLoading, permissionSet],
     );
 
     const refetchPermissions = useCallback(() => {
@@ -44,7 +55,7 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
 
     // Single loading gate: block rendering until auth AND permissions are resolved.
     // This prevents cascading loading flickers across route guards and components.
-    const isAppBootstrapping = authLoading || (isAuthenticated && isAdminOrManager && permissionsLoading);
+    const isAppBootstrapping = authLoading || (isAuthenticated && permissionsLoading);
 
     const value: PermissionsContextType = useMemo(
         () => ({ permissions, isLoading: permissionsLoading, can, refetchPermissions }),

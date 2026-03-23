@@ -63,7 +63,7 @@ describe("PermissionsContext", () => {
     mockUseAuth.mockReturnValue({
       user: null,
       isAuthenticated: false,
-      isAdminOrManager: false,
+      isLoading: false,
     });
 
     render(createWrapper(<TestConsumer resource="user" action="read" />));
@@ -73,25 +73,27 @@ describe("PermissionsContext", () => {
     });
   });
 
-  it("provides empty permissions for member (non-admin/manager)", async () => {
+  it("fetches and provides permissions for authenticated member", async () => {
     mockUseAuth.mockReturnValue({
       user: { id: "user-1", role: "member" },
       isAuthenticated: true,
-      isAdminOrManager: false,
+      isLoading: false,
     });
+    mockGetMyPermissions.mockResolvedValue(["user:read"]);
 
     render(createWrapper(<TestConsumer resource="user" action="read" />));
 
     await waitFor(() => {
-      expect(screen.getByTestId("permissions").textContent).toBe("");
+      expect(screen.getByTestId("permissions").textContent).toContain("user:read");
+      expect(screen.getByTestId("can").textContent).toBe("true");
     });
   });
 
-  it("fetches and provides permissions for admin/manager", async () => {
+  it("fetches and provides permissions for authenticated admin", async () => {
     mockUseAuth.mockReturnValue({
       user: { id: "admin-1", role: "admin" },
       isAuthenticated: true,
-      isAdminOrManager: true,
+      isLoading: false,
     });
     mockGetMyPermissions.mockResolvedValue(["user:read", "user:create", "organization:list"]);
 
@@ -106,7 +108,7 @@ describe("PermissionsContext", () => {
     mockUseAuth.mockReturnValue({
       user: { id: "admin-1", role: "admin" },
       isAuthenticated: true,
-      isAdminOrManager: true,
+      isLoading: false,
     });
     mockGetMyPermissions.mockResolvedValue(["user:read", "user:create"]);
 
@@ -121,7 +123,7 @@ describe("PermissionsContext", () => {
     mockUseAuth.mockReturnValue({
       user: { id: "manager-1", role: "manager" },
       isAuthenticated: true,
-      isAdminOrManager: true,
+      isLoading: false,
     });
     mockGetMyPermissions.mockResolvedValue(["user:read"]);
 
@@ -132,11 +134,26 @@ describe("PermissionsContext", () => {
     });
   });
 
+  it("can() returns true for superadmin even when the fetched permission list is incomplete", async () => {
+    mockUseAuth.mockReturnValue({
+      user: { id: "superadmin-1", role: "superadmin" },
+      isAuthenticated: true,
+      isLoading: false,
+    });
+    mockGetMyPermissions.mockResolvedValue(["user:read"]);
+
+    render(createWrapper(<TestConsumer resource="user" action="delete" />));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("can").textContent).toBe("true");
+    });
+  });
+
   it("refetchPermissions invalidates the permissions query cache", async () => {
     mockUseAuth.mockReturnValue({
       user: { id: "admin-1", role: "admin" },
       isAuthenticated: true,
-      isAdminOrManager: true,
+      isLoading: false,
     });
     mockGetMyPermissions.mockResolvedValue(["user:read"]);
 
@@ -163,7 +180,7 @@ describe("PermissionsContext", () => {
     mockUseAuth.mockReturnValue({
       user: null,
       isAuthenticated: false,
-      isAdminOrManager: false,
+      isLoading: false,
     });
 
     render(createWrapper(<TestConsumer resource="user" action="read" />));

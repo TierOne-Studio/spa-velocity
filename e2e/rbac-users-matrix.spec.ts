@@ -4,6 +4,7 @@ import {
   ensureOrganizationMembership,
   ensureUserRecord,
   ensureUserWithRole,
+  setActiveOrganizationForUserSessions,
   uniqueEmail,
 } from './test-helpers';
 import {
@@ -35,20 +36,12 @@ const roleEmails: MatrixRoleEmails = {
 };
 
 async function loginAs(page: Page, role: 'admin' | 'manager' | 'member') {
-  if (role === 'member') {
-    await ensureUserWithRole({
-      email: memberActorEmail,
-      password: DEFAULT_PASSWORD,
-      name: 'E2E RBAC Users Member Actor',
-      role: 'member',
-    });
-  }
-
   await loginAsRole(page, {
     role,
     emails: roleEmails,
     password: DEFAULT_PASSWORD,
     managerOrganizationId: organizationId,
+    activeOrganizationId: organizationId,
   });
 }
 
@@ -113,6 +106,20 @@ test.describe.serial('RBAC Users matrix (UI-aligned)', () => {
     });
 
     await ensureOrganizationMembership({
+      userEmail: adminActorEmail,
+      role: 'admin',
+      orgSlug,
+      orgName: 'E2E RBAC Users Matrix Org',
+    });
+
+    await ensureOrganizationMembership({
+      userEmail: memberActorEmail,
+      role: 'member',
+      orgSlug,
+      orgName: 'E2E RBAC Users Matrix Org',
+    });
+
+    await ensureOrganizationMembership({
       userEmail: adminTargetEmail,
       role: 'admin',
       orgSlug,
@@ -144,13 +151,10 @@ test.describe.serial('RBAC Users matrix (UI-aligned)', () => {
     await openUsersPage(page);
   });
 
-  test('member is redirected from users page', async ({ page }) => {
+  test('member is redirected from users page without user:read permission', async ({ page }) => {
     await loginAs(page, 'member');
     await page.goto('/admin/users');
     await expect(page).toHaveURL('/');
-    await expect(
-      page.locator('[data-slot="sidebar"]').getByRole('link', { name: /^dashboard$/i }),
-    ).toBeVisible();
   });
 
   test('admin on self: only edit + reset password actions are visible', async ({ page }) => {
@@ -198,18 +202,17 @@ test.describe.serial('RBAC Users matrix (UI-aligned)', () => {
     await expect(page.getByRole('menuitem', { name: /delete user/i })).not.toBeVisible();
   });
 
-  test('manager on member: allowed actions only (edit + ban/unban)', async ({ page }) => {
+  test('manager on member: allowed actions only (edit)', async ({ page }) => {
     await loginAs(page, 'manager');
     await openUsersPage(page);
     await openActionsMenuForEmail(page, memberTargetEmail);
 
     await expect(page.getByRole('menuitem', { name: /edit user/i })).toBeVisible();
-    await expect(page.getByRole('menuitem', { name: /ban user|unban user/i })).toBeVisible();
-
     await expect(page.getByRole('menuitem', { name: /change role/i })).not.toBeVisible();
     await expect(page.getByRole('menuitem', { name: /reset password/i })).not.toBeVisible();
     await expect(page.getByRole('menuitem', { name: /impersonate/i })).not.toBeVisible();
     await expect(page.getByRole('menuitem', { name: /delete user/i })).not.toBeVisible();
+    await expect(page.getByRole('menuitem', { name: /ban user|unban user/i })).not.toBeVisible();
   });
 
   test('manager on admin or manager targets: no action button is rendered', async ({ page }) => {

@@ -1,10 +1,8 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import {
   IconBuilding,
   IconCheck,
   IconChevronDown,
-  IconPlus,
-  IconLogout,
 } from "@tabler/icons-react"
 import { toast } from "sonner"
 
@@ -17,23 +15,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/shared/components/ui/dropdown-menu"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/shared/components/ui/dialog"
-import { Input } from "@/shared/components/ui/input"
-import { Label } from "@/shared/components/ui/label"
 import { Skeleton } from "@/shared/components/ui/skeleton"
 
 import { useQueryClient } from "@tanstack/react-query"
-import { organization } from "@/shared/lib/auth-client"
-import { usePermissionsContext } from "@/shared/context/PermissionsContext"
 import { useAuth } from "@/shared/context/AuthContext"
-import { organizationService } from "@/features/Admin/services/adminService"
+import { useEffectiveSession } from "@/shared/hooks/useEffectiveSession"
+import { fetchWithAuth } from "@/shared/lib/fetch-with-auth"
 
 interface Organization {
   id: string
@@ -42,16 +29,71 @@ interface Organization {
   logo?: string | null
 }
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3000"
+
+function readOrganizationsPayload(payload: unknown): Organization[] {
+  if (Array.isArray(payload)) {
+    return payload as Organization[]
+  }
+
+  if (!payload || typeof payload !== "object") {
+    return []
+  }
+
+  const record = payload as { data?: unknown; organizations?: unknown }
+  if (Array.isArray(record.data)) {
+    return record.data as Organization[]
+  }
+
+  if (Array.isArray(record.organizations)) {
+    return record.organizations as Organization[]
+  }
+
+  return []
+}
+
+function readActiveMemberPayload(payload: unknown): { organizationId?: string } | null {
+  if (!payload || typeof payload !== "object") {
+    return null
+  }
+
+  const record = payload as {
+    data?: unknown
+    member?: unknown
+    organizationId?: string
+  }
+
+  const candidate =
+    record.data && typeof record.data === "object"
+      ? record.data
+      : record.member && typeof record.member === "object"
+        ? record.member
+        : record
+
+  if (!candidate || typeof candidate !== "object") {
+    return null
+  }
+
+  const member = candidate as { organizationId?: string }
+  return member.organizationId ? { organizationId: member.organizationId } : null
+}
+
 export function OrganizationSwitcher() {
-  const { can } = usePermissionsContext()
-  const { isAdmin, refreshSession } = useAuth()
+  const { user, refreshSession } = useAuth()
+  const { data: session } = useEffectiveSession()
   const queryClient = useQueryClient()
-  const [createDialogOpen, setCreateDialogOpen] = useState(false)
-  const [newOrgData, setNewOrgData] = useState({ name: "", slug: "" })
   const [organizations, setOrganizations] = useState<Organization[]>([])
   const [activeMember, setActiveMember] = useState<{ organizationId?: string } | null>(null)
   const [orgsLoading, setOrgsLoading] = useState(true)
-  const canCreateOrganization = can("organization", "create")
+  const lastFetchedUserKeyRef = useRef<string | null>(null)
+  const effectiveUser =
+    (session?.user as { id?: string; role?: string | string[] } | undefined) ??
+    (user as { id?: string; role?: string | string[] } | undefined)
+  const effectiveRole = Array.isArray(effectiveUser?.role)
+    ? effectiveUser.role[0] ?? null
+    : effectiveUser?.role ?? null
+  const activeOrganizationId =
+    (session?.session as { activeOrganizationId?: string } | undefined)?.activeOrganizationId ?? null
 
   // Refresh session + invalidate all cached queries after org change.
   // Replaces window.location.reload() to avoid full-page flicker.
@@ -60,28 +102,80 @@ export function OrganizationSwitcher() {
     await queryClient.invalidateQueries()
   }, [refreshSession, queryClient])
 
+  const getActiveMemberSafely = useCallback(async () => {
+    try {
+      const response = await fetchWithAuth(`${API_BASE_URL}/api/auth/organization/get-active-member`)
+      if (!response.ok) {
+        return null
+      }
+
+      const result = await response.json().catch(() => null)
+      return readActiveMemberPayload(result)
+    } catch {
+      return null
+    }
+  }, [])
+
+  const listOrganizationsViaApi = useCallback(async (): Promise<Organization[]> => {
+    const response = await fetchWithAuth(`${API_BASE_URL}/api/auth/organization/list`)
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}))
+      throw new Error((error as { message?: string }).message || "Failed to list organizations")
+    }
+
+    const result = await response.json()
+    return readOrganizationsPayload(result)
+  }, [])
+
+  const setActiveOrganization = useCallback(async (organizationId: string) => {
+    const response = await fetchWithAuth(`${API_BASE_URL}/api/auth/organization/set-active`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ organizationId }),
+    })
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}))
+      throw new Error((error as { message?: string }).message || "Failed to switch organization")
+    }
+  }, [])
+
   // Fetch organizations using Better Auth client
   useEffect(() => {
+    const userKey = effectiveUser
+      ? `${effectiveUser.id ?? "unknown"}:${Array.isArray(effectiveUser.role) ? effectiveUser.role.join(",") : effectiveUser.role ?? "unknown"}`
+      : null
+
+    if (effectiveRole === "superadmin") {
+      lastFetchedUserKeyRef.current = userKey
+      setOrganizations([])
+      setActiveMember(null)
+      setOrgsLoading(false)
+      return
+    }
+
+    if (lastFetchedUserKeyRef.current === userKey) {
+      return
+    }
+
+    lastFetchedUserKeyRef.current = userKey
+    setOrgsLoading(true)
+
     const fetchData = async () => {
       try {
-        // Fetch orgs first; getActiveMember may fail if no org is active
-        const orgsResult = await organization.list()
-        const orgs = (orgsResult.data ?? []) as Organization[]
+        const orgs = await listOrganizationsViaApi()
         setOrganizations(orgs)
 
-        let member: { organizationId?: string } | null = null
-        try {
-          const memberResult = await organization.getActiveMember()
-          member = memberResult.data as { organizationId?: string } | null
-        } catch {
-          // No active org — expected for new users
-        }
-        setActiveMember(member)
+        const member = await getActiveMemberSafely()
+        const resolvedMember = member ?? (activeOrganizationId ? { organizationId: activeOrganizationId } : null)
+        setActiveMember(resolvedMember)
 
         // Auto-activate first org if user has orgs but none is active
-        if (orgs.length > 0 && !member?.organizationId) {
+        if (orgs.length > 0 && !resolvedMember?.organizationId) {
           try {
-            await organization.setActive({ organizationId: orgs[0].id })
+            await setActiveOrganization(orgs[0].id)
             await refreshAfterOrgChange()
             return
           } catch (err) {
@@ -95,32 +189,40 @@ export function OrganizationSwitcher() {
       }
     }
     fetchData()
-  }, [refreshAfterOrgChange])
+  }, [activeOrganizationId, effectiveRole, effectiveUser, getActiveMemberSafely, listOrganizationsViaApi, refreshAfterOrgChange, setActiveOrganization])
 
   const [isLoading, setIsLoading] = useState(false)
 
+  useEffect(() => {
+    setActiveMember((current) => {
+      const nextOrganizationId = activeOrganizationId ?? undefined
+
+      if (current?.organizationId === nextOrganizationId) {
+        return current
+      }
+
+      return nextOrganizationId ? { organizationId: nextOrganizationId } : null
+    })
+  }, [activeOrganizationId])
+
   // Find active organization
   const activeOrg = organizations.find(
-    (org) => org.id === activeMember?.organizationId
+    (org) => org.id === (activeMember?.organizationId ?? activeOrganizationId ?? undefined)
   )
+  const displayedOrg = activeOrg ?? organizations[0] ?? null
 
   const refreshData = async () => {
-    const [orgsResult, memberResult] = await Promise.all([
-      organization.list(),
-      organization.getActiveMember(),
-    ])
-    setOrganizations((orgsResult.data ?? []) as Organization[])
-    setActiveMember(memberResult.data as { organizationId?: string } | null)
+    const [orgs, memberResult] = await Promise.all([listOrganizationsViaApi(), getActiveMemberSafely()])
+    setOrganizations(orgs)
+    setActiveMember(memberResult ?? (activeOrganizationId ? { organizationId: activeOrganizationId } : null))
   }
 
   const handleSetActive = async (orgId: string) => {
     setIsLoading(true)
     try {
-      const result = await organization.setActive({ organizationId: orgId })
-      if (result.error) {
-        throw new Error(result.error.message || "Failed to switch organization")
-      }
+      await setActiveOrganization(orgId)
       toast.success("Switched organization")
+      setActiveMember({ organizationId: orgId })
       await refreshAfterOrgChange()
       await refreshData()
     } catch (error) {
@@ -130,163 +232,58 @@ export function OrganizationSwitcher() {
     }
   }
 
-  const handleCreateOrg = async () => {
-    if (!canCreateOrganization) {
-      toast.error("You do not have permission to create organizations")
-      return
-    }
-
-    setIsLoading(true)
-    try {
-      await organizationService.createOrganization({
-        name: newOrgData.name,
-        slug: newOrgData.slug.toLowerCase().replace(/\s+/g, "-"),
-      })
-      await refreshData()
-      toast.success("Organization created successfully")
-      setCreateDialogOpen(false)
-      setNewOrgData({ name: "", slug: "" })
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to create organization")
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleLeaveOrg = async (orgId: string) => {
-    setIsLoading(true)
-    try {
-      await organization.leave({ organizationId: orgId })
-      await refreshData()
-      toast.success("Left organization")
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to leave organization")
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
   if (orgsLoading) {
     return <Skeleton className="h-9 w-40" />
   }
 
-  if (!isAdmin) {
-    return (
-      <Button variant="outline" className="w-full justify-between" disabled>
-        <div className="flex items-center gap-2">
-          <IconBuilding className="h-4 w-4" />
-          <span className="truncate max-w-[120px]">
-            {activeOrg?.name ?? "Organization"}
-          </span>
-        </div>
-      </Button>
-    )
+  if (effectiveRole === "superadmin") {
+    return null
   }
 
-  return (
-    <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" className="w-full justify-between">
-            <div className="flex items-center gap-2">
-              <IconBuilding className="h-4 w-4" />
-              <span className="truncate max-w-[120px]">
-                {activeOrg?.name ?? "Select Organization"}
-              </span>
-            </div>
-            <IconChevronDown className="h-4 w-4 opacity-50" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-56">
-          <DropdownMenuLabel>Organizations</DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          {organizations.length === 0 ? (
-            <DropdownMenuItem disabled>
-              No organizations
-            </DropdownMenuItem>
-          ) : (
-            organizations.map((org) => (
-              <DropdownMenuItem
-                key={org.id}
-                onClick={() => handleSetActive(org.id)}
-                className="flex items-center justify-between"
-              >
-                <div className="flex items-center gap-2">
-                  <IconBuilding className="h-4 w-4" />
-                  <span className="truncate">{org.name}</span>
-                </div>
-                {activeOrg?.id === org.id && (
-                  <IconCheck className="h-4 w-4 text-primary" />
-                )}
-              </DropdownMenuItem>
-            ))
-          )}
-          {canCreateOrganization && (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setCreateDialogOpen(true)}>
-                <IconPlus className="mr-2 h-4 w-4" />
-                Create Organization
-              </DropdownMenuItem>
-            </>
-          )}
-          {activeOrg && (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => handleLeaveOrg(activeOrg.id)}
-                className="text-destructive"
-              >
-                <IconLogout className="mr-2 h-4 w-4" />
-                Leave {activeOrg.name}
-              </DropdownMenuItem>
-            </>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
+  const isSelectorDisabled = isLoading || organizations.length <= 1
 
-      {/* Create Organization Dialog */}
-      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Create Organization</DialogTitle>
-            <DialogDescription>
-              Create a new organization to collaborate with your team.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="orgName">Name</Label>
-              <Input
-                id="orgName"
-                value={newOrgData.name}
-                onChange={(e) => setNewOrgData({ ...newOrgData, name: e.target.value })}
-                placeholder="My Organization"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="orgSlug">Slug</Label>
-              <Input
-                id="orgSlug"
-                value={newOrgData.slug}
-                onChange={(e) => setNewOrgData({ ...newOrgData, slug: e.target.value })}
-                placeholder="my-organization"
-              />
-              <p className="text-sm text-muted-foreground">
-                This will be used in URLs: /org/{newOrgData.slug || "my-organization"}
-              </p>
-            </div>
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="outline"
+          className="w-full justify-between"
+          disabled={isSelectorDisabled}
+        >
+          <div className="flex items-center gap-2">
+            <IconBuilding className="h-4 w-4" />
+            <span className="truncate max-w-[120px]">
+              {displayedOrg?.name ?? "No Organization"}
+            </span>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleCreateOrg} disabled={isLoading}>
-              {isLoading ? "Creating..." : "Create"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+          <IconChevronDown className="h-4 w-4 opacity-50" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-56">
+        <DropdownMenuLabel>Organizations</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {organizations.length === 0 ? (
+          <DropdownMenuItem disabled>
+            No organizations
+          </DropdownMenuItem>
+        ) : (
+          organizations.map((org) => (
+            <DropdownMenuItem
+              key={org.id}
+              onClick={() => handleSetActive(org.id)}
+              className="flex items-center justify-between"
+            >
+              <div className="flex items-center gap-2">
+                <IconBuilding className="h-4 w-4" />
+                <span className="truncate">{org.name}</span>
+              </div>
+              {displayedOrg?.id === org.id && (
+                <IconCheck className="h-4 w-4 text-primary" />
+              )}
+            </DropdownMenuItem>
+          ))
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }

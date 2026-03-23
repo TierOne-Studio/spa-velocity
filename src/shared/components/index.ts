@@ -2,5 +2,3 @@
 
 export { ProtectedRoute } from "./ProtectedRoute";
 export { AdminRoute } from "./AdminRoute";
-export { AdminOnlyRoute } from "./AdminOnlyRoute";
-export { OrgManagerRoute } from "./OrgManagerRoute";
