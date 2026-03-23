@@ -30,6 +30,11 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
         enabled: isAuthenticated,
         staleTime: 60_000,
         refetchOnWindowFocus: false,
+        // Keep previous permissions while the new org's permissions are loading.
+        // Without this, a query-key change (e.g. org switch / bearer-token rotation)
+        // causes isLoading=true which triggers LoadingOverlay, unmounting the page
+        // and resetting all component state mid-interaction.
+        placeholderData: (prev) => prev,
     });
 
     const permissionSet = useMemo(() => new Set(permissions), [permissions]);

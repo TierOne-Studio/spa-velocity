@@ -143,7 +143,7 @@ export function useUpdateMemberRole() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (params: { organizationId: string; memberId: string; role: 'admin' | 'manager' | 'member' }) =>
+        mutationFn: (params: { organizationId: string; memberId: string; role: string }) =>
             organizationService.updateMemberRole(params),
         onSuccess: (_, variables) => {
             queryClient.invalidateQueries({ queryKey: organizationKeys.members(variables.organizationId) });
@@ -184,7 +184,11 @@ export function useSetActiveOrganization() {
     return useMutation({
         mutationFn: (organizationId: string) => organizationService.setActive(organizationId),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: organizationKeys.all });
+            // Invalidate the org list and active-member state, but NOT member/detail queries
+            // for specific orgs — those don't change just because the active org switched,
+            // and a broad invalidation causes the detail panel to blink on first selection.
+            queryClient.invalidateQueries({ queryKey: organizationKeys.lists() });
+            queryClient.invalidateQueries({ queryKey: organizationKeys.activeMember() });
         },
     });
 }

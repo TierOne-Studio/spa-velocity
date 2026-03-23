@@ -167,21 +167,23 @@ export function OrganizationsPage() {
   const setActiveOrganization = useSetActiveOrganization()
 
   useEffect(() => {
-    setOptimisticActiveOrganizationId(null)
+    if (activeOrganizationId !== null) {
+      setOptimisticActiveOrganizationId(null)
+    }
   }, [activeOrganizationId])
 
-  // Fetch organization roles metadata on mount
+  // Fetch organization roles metadata whenever the selected org changes
   useEffect(() => {
     const fetchRolesMeta = async () => {
       try {
-        const meta = await getOrganizationRolesMetadata()
+        const meta = await getOrganizationRolesMetadata(selectedOrg?.id)
         setOrgRolesMeta(meta)
       } catch (error) {
         console.error("Failed to fetch organization roles metadata:", error)
       }
     }
-    fetchRolesMeta()
-  }, [])
+    void fetchRolesMeta()
+  }, [selectedOrg?.id])
 
   const canCreateOrg = can('organization', 'create')
   const canUpdateOrg = can('organization', 'update')
@@ -198,13 +200,17 @@ export function OrganizationsPage() {
       return
     }
 
+    // Optimistically mark the org as active so the detail panel renders without
+    // showing the "Switch your active organization" warning during the async switch.
+    setOptimisticActiveOrganizationId(org.id)
+
     try {
       await setActiveOrganization.mutateAsync(org.id)
-      setOptimisticActiveOrganizationId(org.id)
       await refetchSession()
       refetchPermissions()
       toast.success("Switched organization")
     } catch (error) {
+      setOptimisticActiveOrganizationId(null)  // revert on failure
       toast.error(error instanceof Error ? error.message : "Failed to switch organization")
     }
   }
@@ -346,7 +352,7 @@ export function OrganizationsPage() {
     }
   }
 
-  const handleUpdateRole = async (memberId: string, newRole: "admin" | "manager" | "member") => {
+  const handleUpdateRole = async (memberId: string, newRole: string) => {
     if (!selectedOrg) return
     if (!canManageMembers || !canManageSelectedOrganization) {
       toast.error("You do not have permission to update member roles")
@@ -409,10 +415,13 @@ export function OrganizationsPage() {
                 ))
               ) : organizations?.length ? (
                 organizations.map((org: Organization) => (
-                  <button
+                  <div
                     key={org.id}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => void handleSelectOrganization(org)}
-                    className={`flex items-center gap-3 w-full text-left p-3 rounded-lg transition-colors ${
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') void handleSelectOrganization(org) }}
+                    className={`flex items-center gap-3 w-full text-left p-3 rounded-lg transition-colors cursor-pointer ${
                       selectedOrg?.id === org.id
                         ? "bg-primary/10 border border-primary"
                         : "hover:bg-muted border border-transparent"
@@ -454,7 +463,7 @@ export function OrganizationsPage() {
                         )}
                       </DropdownMenuContent>
                     </DropdownMenu>
-                  </button>
+                  </div>
                 ))
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
@@ -577,9 +586,7 @@ export function OrganizationsPage() {
                                     <Select
                                       value={member.role || undefined}
                                       onValueChange={(value) => {
-                                        if (value === "admin" || value === "manager" || value === "member") {
-                                          handleUpdateRole(member.id, value)
-                                        }
+                                        if (value) void handleUpdateRole(member.id, value)
                                       }}
                                       disabled={isRoleChangeDisabled}
                                     >

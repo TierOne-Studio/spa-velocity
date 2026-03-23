@@ -119,14 +119,20 @@ function RoleCard({
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-medium text-muted-foreground">Permissions</h4>
-            {canManagePermissions && (
+            {!role.isSystem && canManagePermissions && (
               <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={onManagePermissions}>
                 <IconShield className="h-3 w-3 mr-1" />
                 Manage
               </Button>
             )}
           </div>
-          <PermissionBadges permissions={permissions} />
+          {role.isSystem ? (
+            <span className="text-muted-foreground text-sm italic">
+              Unrestricted — bypasses all permission checks
+            </span>
+          ) : (
+            <PermissionBadges permissions={permissions} />
+          )}
         </div>
 
         {/* Actions */}

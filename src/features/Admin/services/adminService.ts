@@ -49,8 +49,10 @@ export type UserCapabilities = {
  * Get organization roles metadata (Better Auth organization roles).
  * Exported separately to fix TypeScript type inference for large object literals.
  */
-export async function getOrganizationRolesMetadata(): Promise<OrgRolesMetadata> {
-    const response = await fetchWithAuth(`${API_BASE_URL}/api/platform-admin/organizations/roles-metadata`);
+export async function getOrganizationRolesMetadata(organizationId?: string): Promise<OrgRolesMetadata> {
+    const url = new URL(`${API_BASE_URL}/api/platform-admin/organizations/roles-metadata`);
+    if (organizationId) url.searchParams.set('organizationId', organizationId);
+    const response = await fetchWithAuth(url.toString());
     if (!response.ok) {
         const error = await response.json().catch(() => ({}));
         throw new Error(error.message || "Failed to get organization roles metadata");
@@ -560,7 +562,7 @@ export const organizationService = {
     /**
      * Update a member's role.
      */
-    async updateMemberRole(params: { organizationId: string; memberId: string; role: "admin" | "manager" | "member" }) {
+    async updateMemberRole(params: { organizationId: string; memberId: string; role: string }) {
         const response = await fetchWithAuth(
             `${API_BASE_URL}/api/platform-admin/organizations/${params.organizationId}/members/${params.memberId}/role`,
             {
