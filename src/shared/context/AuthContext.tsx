@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useMemo } from "react";
 import type { User, AuthState, LoginCredentials, SignupCredentials } from "@features/Auth/types";
 import { signIn, signUp, signOut } from "@shared/lib/auth-client";
 import { fetchWithAuth } from "@shared/lib/fetch-with-auth";
+import { clearAuthStorage } from "@shared/lib/auth-storage";
 import { useEffectiveSession } from "@shared/hooks/useEffectiveSession";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
@@ -88,7 +89,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const logout = useCallback(async () => {
         await signOut();
-        localStorage.clear();
+        clearAuthStorage();
     }, []);
 
     const forgotPassword = useCallback(async (email: string) => {
