@@ -84,4 +84,41 @@ describe('Select components', () => {
       expect(trigger).toBeInTheDocument();
     });
   });
+
+  describe('SelectGroup standalone rendering', () => {
+    it('renders with data-slot="select-group"', () => {
+      const { container } = render(<SelectGroup />);
+      expect(container.querySelector('[data-slot="select-group"]')).toBeInTheDocument();
+    });
+
+    it('renders children inside the group', () => {
+      const { container } = render(
+        <SelectGroup>
+          <span data-testid="child">child content</span>
+        </SelectGroup>,
+      );
+      expect(container.querySelector('[data-slot="select-group"]')).toBeInTheDocument();
+      expect(screen.getByTestId('child')).toBeInTheDocument();
+    });
+  });
+
+  describe('SelectLabel standalone rendering', () => {
+    it('renders with data-slot="select-label"', () => {
+      const { container } = render(<SelectLabel>My Label</SelectLabel>);
+      expect(container.querySelector('[data-slot="select-label"]')).toBeInTheDocument();
+    });
+
+    it('renders label text content', () => {
+      render(<SelectLabel>Options Group</SelectLabel>);
+      expect(screen.getByText('Options Group')).toBeInTheDocument();
+    });
+
+    it('applies custom className alongside default styles', () => {
+      const { container } = render(
+        <SelectLabel className="custom-class">Label</SelectLabel>,
+      );
+      const el = container.querySelector('[data-slot="select-label"]');
+      expect(el?.classList.contains('custom-class')).toBe(true);
+    });
+  });
 });
