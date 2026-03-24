@@ -15,7 +15,7 @@ interface AdminOnlyRouteProps {
  * 
  * Redirects to fallbackPath (default: "/") if user is not an admin.
  */
-export function AdminOnlyRoute({ children, fallbackPath = "/" }: AdminOnlyRouteProps) {
+export function AdminOnlyRoute({ children }: AdminOnlyRouteProps) {
     const { isAuthenticated, isLoading } = useAuth();
 
     if (isLoading) {
