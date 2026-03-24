@@ -88,9 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const logout = useCallback(async () => {
         await signOut();
-        // Clear bearer tokens on logout
-        localStorage.removeItem("bearer_token");
-        localStorage.removeItem("original_bearer_token");
+        localStorage.clear();
     }, []);
 
     const forgotPassword = useCallback(async (email: string) => {
