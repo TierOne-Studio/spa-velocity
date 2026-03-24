@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@shar
 import { Button } from "@shared/components/ui/button";
 import { IconLoader2, IconCircleCheck, IconCircleX } from "@tabler/icons-react";
 import { fetchWithAuth } from "@shared/lib/fetch-with-auth";
+import { useAuth } from "@shared/context/AuthContext";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
@@ -12,6 +13,7 @@ type VerificationStatus = "loading" | "success" | "error";
 export function VerifyEmailPage() {
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
+    const { refreshSession } = useAuth();
     const [status, setStatus] = useState<VerificationStatus>("loading");
     const [message, setMessage] = useState("");
 
@@ -40,11 +42,18 @@ export function VerifyEmailPage() {
                 throw new Error(error.message || "Verification failed");
             }
 
+            // Capture bearer token issued on successful email verification and refresh session
+            const bearerToken = response.headers.get("set-auth-token");
+            if (bearerToken) {
+                localStorage.setItem("bearer_token", bearerToken);
+            }
+            await refreshSession();
+
             setStatus("success");
             setMessage("Your email has been verified successfully!");
 
-            // Redirect to login after 3 seconds
-            setTimeout(() => navigate("/login"), 3000);
+            // Navigate directly into the app so OrganizationSwitcher can auto-activate the default org
+            setTimeout(() => navigate("/"), 3000);
         } catch (error) {
             setStatus("error");
             setMessage(error instanceof Error ? error.message : "Verification failed");
@@ -72,7 +81,7 @@ export function VerifyEmailPage() {
                             <IconCircleCheck className="h-16 w-16 text-green-500" />
                             <p className="text-center text-muted-foreground">{message}</p>
                             <p className="text-sm text-muted-foreground">
-                                Redirecting to login...
+                                Redirecting to dashboard...
                             </p>
                         </>
                     )}
