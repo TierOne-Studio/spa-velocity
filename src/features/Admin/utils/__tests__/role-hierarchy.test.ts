@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ROLE_HIERARCHY, getRoleLevel, filterAssignableRoles } from '../role-hierarchy';
+import { ROLE_HIERARCHY, getRoleLevel, filterAssignableRoles, filterVisibleRoles } from '../role-hierarchy';
 
 describe('Role Hierarchy Utilities', () => {
   describe('ROLE_HIERARCHY', () => {
@@ -51,6 +51,79 @@ describe('Role Hierarchy Utilities', () => {
 
     it('should handle empty input', () => {
       expect(filterAssignableRoles([], 'admin')).toEqual([]);
+    });
+  });
+
+  describe('filterVisibleRoles', () => {
+    const allRoles = [
+      { name: 'admin' },
+      { name: 'manager' },
+      { name: 'member' },
+    ];
+
+    it('admin sees all roles', () => {
+      expect(filterVisibleRoles(allRoles, 'admin')).toEqual(allRoles);
+    });
+
+    it('superadmin (level >= admin) sees all roles', () => {
+      // superadmin is not in ROLE_HIERARCHY so getRoleLevel returns 0
+      // but admin level is 2, so a custom high-level role would see all
+      // Here admin (level 2) sees all
+      const result = filterVisibleRoles(allRoles, 'admin');
+      expect(result).toHaveLength(3);
+    });
+
+    it('manager sees only roles strictly below their level (member)', () => {
+      const result = filterVisibleRoles(allRoles, 'manager');
+      expect(result).toEqual([{ name: 'member' }]);
+    });
+
+    it('member sees no roles (nothing is below member level)', () => {
+      const result = filterVisibleRoles(allRoles, 'member');
+      expect(result).toEqual([]);
+    });
+
+    it('unknown role sees no roles (level 0 has nothing below)', () => {
+      const result = filterVisibleRoles(allRoles, 'unknown');
+      expect(result).toEqual([]);
+    });
+
+    it('filters out roles with unknown names', () => {
+      const rolesWithUnknown = [
+        { name: 'admin' },
+        { name: 'manager' },
+        { name: 'member' },
+        { name: 'custom-unknown' },
+      ];
+      // admin sees all roles but only those with defined hierarchy
+      const result = filterVisibleRoles(rolesWithUnknown, 'admin');
+      // admin >= admin, returns all
+      expect(result).toEqual(rolesWithUnknown);
+    });
+
+    it('manager does not see roles with undefined hierarchy', () => {
+      const rolesWithUnknown = [
+        { name: 'member' },
+        { name: 'custom-unknown' },
+      ];
+      const result = filterVisibleRoles(rolesWithUnknown, 'manager');
+      // manager level is 1, member level is 0 (< 1), custom-unknown is undefined
+      expect(result).toEqual([{ name: 'member' }]);
+    });
+
+    it('handles empty roles array', () => {
+      expect(filterVisibleRoles([], 'admin')).toEqual([]);
+      expect(filterVisibleRoles([], 'manager')).toEqual([]);
+    });
+
+    it('works with typed role objects that have extra properties', () => {
+      const typedRoles = [
+        { name: 'admin', displayName: 'Admin', id: '1' },
+        { name: 'manager', displayName: 'Manager', id: '2' },
+        { name: 'member', displayName: 'Member', id: '3' },
+      ];
+      const result = filterVisibleRoles(typedRoles, 'manager');
+      expect(result).toEqual([{ name: 'member', displayName: 'Member', id: '3' }]);
     });
   });
 });

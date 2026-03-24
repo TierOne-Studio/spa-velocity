@@ -6,7 +6,7 @@ import type {
   ReactNode,
 } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 
 const {
   mockUseUsers,
@@ -686,5 +686,345 @@ describe("UsersPage", () => {
         organizationId: "org-2",
       })
     })
+  })
+
+  it("editUser flow: opens edit dialog, changes name, submits", async () => {
+    const updateUserMutation = { mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }
+    mockUseUpdateUser.mockReturnValue(updateUserMutation)
+    mockUseUsers.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: "target-1",
+            name: "Target User",
+            email: "target@example.com",
+            role: "member",
+            emailVerified: true,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    })
+    mockUseUserCapabilitiesBatch.mockReturnValue({
+      data: {
+        "target-1": {
+          actions: {
+            update: true,
+            setRole: false,
+            ban: false,
+            unban: false,
+            setPassword: false,
+            remove: false,
+            revokeSessions: false,
+            impersonate: false,
+          },
+        },
+      },
+    })
+    mockCan.mockImplementation((resource: string, action: string) =>
+      resource === "user" && (action === "read" || action === "update"),
+    )
+
+    render(<UsersPage />)
+
+    fireEvent.click(screen.getByRole("button", { name: /edit user/i }))
+    const nameInput = screen.getByLabelText(/^name$/i)
+    fireEvent.change(nameInput, { target: { value: "Updated Name" } })
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }))
+
+    await waitFor(() => {
+      expect(updateUserMutation.mutateAsync).toHaveBeenCalledWith({
+        userId: "target-1",
+        data: { name: "Updated Name" },
+      })
+    })
+    expect(mockToastSuccess).toHaveBeenCalledWith("User updated successfully")
+  })
+
+  it("banUser flow: opens ban dialog and submits ban", async () => {
+    const banUserMutation = { mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }
+    mockUseBanUser.mockReturnValue(banUserMutation)
+    mockUseUsers.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: "target-1",
+            name: "Bad Actor",
+            email: "bad@example.com",
+            role: "member",
+            emailVerified: true,
+            banned: false,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    })
+    mockUseUserCapabilitiesBatch.mockReturnValue({
+      data: {
+        "target-1": {
+          actions: {
+            update: false,
+            setRole: false,
+            ban: true,
+            unban: false,
+            setPassword: false,
+            remove: false,
+            revokeSessions: false,
+            impersonate: false,
+          },
+        },
+      },
+    })
+    mockCan.mockImplementation((resource: string, action: string) =>
+      resource === "user" && (action === "read" || action === "ban"),
+    )
+
+    render(<UsersPage />)
+
+    fireEvent.click(screen.getByRole("button", { name: /ban user/i }))
+    const banDialog = await screen.findByRole("dialog")
+    fireEvent.click(within(banDialog).getByRole("button", { name: /^ban user$/i }))
+
+    await waitFor(() => {
+      expect(banUserMutation.mutateAsync).toHaveBeenCalledWith({
+        userId: "target-1",
+        banReason: "",
+      })
+    })
+    expect(mockToastSuccess).toHaveBeenCalledWith("User banned successfully")
+  })
+
+  it("unbanUser: directly unbans without dialog", async () => {
+    const unbanUserMutation = { mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }
+    mockUseUnbanUser.mockReturnValue(unbanUserMutation)
+    mockUseUsers.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: "target-1",
+            name: "Banned User",
+            email: "banned@example.com",
+            role: "member",
+            emailVerified: true,
+            banned: true,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    })
+    mockUseUserCapabilitiesBatch.mockReturnValue({
+      data: {
+        "target-1": {
+          actions: {
+            update: false,
+            setRole: false,
+            ban: false,
+            unban: true,
+            setPassword: false,
+            remove: false,
+            revokeSessions: false,
+            impersonate: false,
+          },
+        },
+      },
+    })
+    mockCan.mockImplementation((resource: string, action: string) =>
+      resource === "user" && (action === "read" || action === "ban"),
+    )
+
+    render(<UsersPage />)
+
+    fireEvent.click(screen.getByRole("button", { name: /unban user/i }))
+
+    await waitFor(() => {
+      expect(unbanUserMutation.mutateAsync).toHaveBeenCalledWith("target-1")
+    })
+    expect(mockToastSuccess).toHaveBeenCalledWith("User unbanned successfully")
+  })
+
+  it("deleteUser flow: opens delete dialog, confirms deletion", async () => {
+    const removeUserMutation = { mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }
+    mockUseRemoveUser.mockReturnValue(removeUserMutation)
+    mockUseUsers.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: "target-1",
+            name: "Delete Me",
+            email: "delete@example.com",
+            role: "member",
+            emailVerified: true,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    })
+    mockUseUserCapabilitiesBatch.mockReturnValue({
+      data: {
+        "target-1": {
+          actions: {
+            update: false,
+            setRole: false,
+            ban: false,
+            unban: false,
+            setPassword: false,
+            remove: true,
+            revokeSessions: false,
+            impersonate: false,
+          },
+        },
+      },
+    })
+    mockCan.mockImplementation((resource: string, action: string) =>
+      resource === "user" && (action === "read" || action === "delete"),
+    )
+
+    render(<UsersPage />)
+
+    // The delete dropdown item button has aria-hidden icon; find the DropdownMenuItem
+    fireEvent.click(screen.getByRole("button", { name: /delete user/i }))
+    const deleteDialog = await screen.findByRole("dialog")
+    fireEvent.click(within(deleteDialog).getByRole("button", { name: /^delete user$/i }))
+
+    await waitFor(() => {
+      expect(removeUserMutation.mutateAsync).toHaveBeenCalledWith("target-1")
+    })
+    expect(mockToastSuccess).toHaveBeenCalledWith("User deleted successfully")
+  })
+
+  it("setPassword flow: opens password dialog, submits new password", async () => {
+    const setPasswordMutation = { mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }
+    mockUseSetUserPassword.mockReturnValue(setPasswordMutation)
+    mockUseUsers.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: "target-1",
+            name: "User",
+            email: "user@example.com",
+            role: "member",
+            emailVerified: true,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    })
+    mockUseUserCapabilitiesBatch.mockReturnValue({
+      data: {
+        "target-1": {
+          actions: {
+            update: false,
+            setRole: false,
+            ban: false,
+            unban: false,
+            setPassword: true,
+            remove: false,
+            revokeSessions: false,
+            impersonate: false,
+          },
+        },
+      },
+    })
+    mockCan.mockImplementation((resource: string, action: string) =>
+      resource === "user" && (action === "read" || action === "set-password"),
+    )
+
+    render(<UsersPage />)
+
+    fireEvent.click(screen.getByRole("button", { name: /reset password/i }))
+    const passwordInput = screen.getByLabelText(/new password/i)
+    fireEvent.change(passwordInput, { target: { value: "NewPass123!" } })
+    const dialog = await screen.findByRole("dialog")
+    fireEvent.click(within(dialog).getByRole("button", { name: /^reset password$/i }))
+
+    await waitFor(() => {
+      expect(setPasswordMutation.mutateAsync).toHaveBeenCalledWith({
+        userId: "target-1",
+        newPassword: "NewPass123!",
+      })
+    })
+    expect(mockToastSuccess).toHaveBeenCalledWith("Password updated successfully")
+  })
+
+  it("setRole flow: opens role dialog and submits new role", async () => {
+    const setRoleMutation = { mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }
+    mockUseSetUserRole.mockReturnValue(setRoleMutation)
+    mockGetCreateUserMetadata.mockResolvedValue({
+      roles: [
+        { name: "admin", displayName: "Admin" },
+        { name: "member", displayName: "Member" },
+      ],
+      allowedRoleNames: ["admin", "member"],
+      organizations: [],
+    })
+    mockUseUsers.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: "target-1",
+            name: "User",
+            email: "user@example.com",
+            role: "member",
+            emailVerified: true,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    })
+    mockUseUserCapabilitiesBatch.mockReturnValue({
+      data: {
+        "target-1": {
+          actions: {
+            update: false,
+            setRole: true,
+            ban: false,
+            unban: false,
+            setPassword: false,
+            remove: false,
+            revokeSessions: false,
+            impersonate: false,
+          },
+        },
+      },
+    })
+    mockCan.mockImplementation((resource: string, action: string) =>
+      resource === "user" && (action === "read" || action === "set-role"),
+    )
+
+    render(<UsersPage />)
+
+    fireEvent.click(screen.getByRole("button", { name: /change role/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole("dialog")).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole("button", { name: /update role/i }))
+
+    await waitFor(() => {
+      expect(setRoleMutation.mutateAsync).toHaveBeenCalledWith({
+        userId: "target-1",
+        role: "member",
+      })
+    })
+    expect(mockToastSuccess).toHaveBeenCalledWith("Role updated successfully")
   })
 })

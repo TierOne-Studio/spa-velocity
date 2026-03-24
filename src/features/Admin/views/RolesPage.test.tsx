@@ -6,7 +6,7 @@ import type {
   ReactNode,
 } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 const {
   mockUseRoles,
@@ -337,5 +337,116 @@ describe("RolesPage", () => {
     await waitFor(() => {
       expect(mockUseRoles).toHaveBeenLastCalledWith({ activeOrganizationId: "org-2", enabled: true });
     });
+  });
+
+  it("updateRole flow: opens edit dialog, changes display name, submits", async () => {
+    const updateRoleMutation = { mutateAsync: vi.fn().mockResolvedValue({}), isPending: false };
+    mockUseUpdateRole.mockReturnValue(updateRoleMutation);
+    mockUseRoles.mockReturnValue({
+      data: [
+        { id: "role-4", name: "editor", displayName: "Editor", description: "Edit role", color: "blue", isSystem: false },
+      ],
+      isLoading: false,
+    });
+    mockCan.mockImplementation(
+      (resource: string, action: string) =>
+        resource === "role" && (action === "update" || action === "read"),
+    );
+
+    render(<RolesPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /edit/i }));
+
+    const displayNameInput = screen.getByDisplayValue("Editor");
+    fireEvent.change(displayNameInput, { target: { value: "Editor Updated" } });
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+
+    await waitFor(() => {
+      expect(updateRoleMutation.mutateAsync).toHaveBeenCalledWith({
+        id: "role-4",
+        dto: expect.objectContaining({ displayName: "Editor Updated" }),
+      });
+    });
+    expect(mockToastSuccess).toHaveBeenCalledWith("Role updated successfully");
+  });
+
+  it("deleteRole flow: opens delete dialog, confirms deletion", async () => {
+    const deleteRoleMutation = { mutateAsync: vi.fn().mockResolvedValue({}), isPending: false };
+    mockUseDeleteRole.mockReturnValue(deleteRoleMutation);
+    mockUseRoles.mockReturnValue({
+      data: [
+        { id: "role-5", name: "viewer", displayName: "Viewer", description: "View only", color: "gray", isSystem: false },
+      ],
+      isLoading: false,
+    });
+    mockCan.mockImplementation(
+      (resource: string, action: string) =>
+        resource === "role" && (action === "delete" || action === "read"),
+    );
+
+    render(<RolesPage />);
+
+    // The trash button has aria-hidden icon; find it via its text content in DOM
+    const trashButton = screen.getByText("trash").closest("button");
+    expect(trashButton).not.toBeNull();
+    fireEvent.click(trashButton!);
+
+    const dialog = await screen.findByRole("dialog");
+    const confirmButton = within(dialog).getByRole("button", { name: /^delete$/i });
+    fireEvent.click(confirmButton);
+
+    await waitFor(() => {
+      expect(deleteRoleMutation.mutateAsync).toHaveBeenCalledWith("role-5");
+    });
+    expect(mockToastSuccess).toHaveBeenCalledWith("Role deleted successfully");
+  });
+
+  it("permission management dialog: opens and submits permissions", async () => {
+    const assignPermissionsMutation = { mutateAsync: vi.fn().mockResolvedValue({}), isPending: false };
+    mockUseAssignPermissions.mockReturnValue(assignPermissionsMutation);
+    mockUsePermissionsGrouped.mockReturnValue({
+      data: {
+        "user": [
+          { id: "perm-1", resource: "user", action: "read" },
+          { id: "perm-2", resource: "user", action: "write" },
+        ],
+      },
+    });
+    mockUseRoles.mockReturnValue({
+      data: [
+        { id: "role-6", name: "custom", displayName: "Custom", description: "Custom role", color: "green", isSystem: false },
+      ],
+      isLoading: false,
+    });
+    mockCan.mockImplementation(
+      (resource: string, action: string) =>
+        resource === "role" && (action === "assign" || action === "read"),
+    );
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: { permissions: [] } }),
+      }),
+    );
+
+    render(<RolesPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /manage/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /save permissions/i }));
+
+    await waitFor(() => {
+      expect(assignPermissionsMutation.mutateAsync).toHaveBeenCalledWith({
+        roleId: "role-6",
+        dto: expect.objectContaining({ permissionIds: expect.any(Array) }),
+      });
+    });
+    expect(mockToastSuccess).toHaveBeenCalledWith("Permissions updated successfully");
   });
 });
