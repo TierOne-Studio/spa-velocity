@@ -311,7 +311,7 @@ describe("UsersPage", () => {
     fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: "alice@example.com" } })
     fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "SecurePass123!" } })
 
-    fireEvent.click(screen.getByRole("button", { name: /add user/i }))
+    fireEvent.click(screen.getByRole("button", { name: /^create user$/i }))
 
     await waitFor(() => {
       expect(createUserMutation.mutateAsync).toHaveBeenCalledWith({
@@ -1112,6 +1112,41 @@ describe("UsersPage", () => {
   })
 })
 
+describe("UsersPage – additional dialog cancels", () => {
+  const createUserMutation = { mutateAsync: vi.fn(), isPending: false }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockUseUsers.mockReturnValue({ data: { data: [], total: 0 }, isLoading: false })
+    mockUseUserCapabilitiesBatch.mockReturnValue({ data: {} })
+    mockUseCreateUser.mockReturnValue(createUserMutation)
+    mockUseUpdateUser.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+    mockUseBanUser.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+    mockUseUnbanUser.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+    mockUseSetUserRole.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+    mockUseSetUserPassword.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+    mockUseRemoveUser.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+    mockUseRemoveUsers.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+    mockUseImpersonateUser.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+    mockUseOrganizations.mockReturnValue({ data: { data: [] }, isLoading: false })
+    mockUseAuth.mockReturnValue({ user: { id: "actor-1", role: "admin" } })
+    mockUseEffectiveSession.mockReturnValue({
+      data: {
+        user: { id: "actor-1", role: "admin" },
+        session: { activeOrganizationId: "org-1" },
+      },
+    })
+    mockCan.mockReturnValue(false)
+    mockGetCreateUserMetadata.mockResolvedValue({
+      roles: [{ name: "admin", displayName: "Admin" }],
+      allowedRoleNames: ["admin"],
+      organizations: [{ id: "org-1", name: "Org 1", slug: "org-1" }],
+    })
+    createUserMutation.mutateAsync.mockResolvedValue({ id: "user-1" })
+  })
+
+  afterEach(() => { vi.clearAllMocks() })
+
   it("bulk-delete dialog: opens when rows selected and can be cancelled", async () => {
     const removeUsersMutation = { mutateAsync: vi.fn(), isPending: false }
     mockUseRemoveUsers.mockReturnValue(removeUsersMutation)
@@ -1245,3 +1280,5 @@ describe("UsersPage", () => {
     })
     expect(updateMutation.mutateAsync).not.toHaveBeenCalled()
   })
+
+})
