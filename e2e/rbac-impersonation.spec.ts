@@ -1,7 +1,13 @@
 import { test, expect } from '@playwright/test';
 import { Pool } from 'pg';
 import { DATABASE_URL, API_BASE_URL, TEST_USER } from './env';
-import { escapeRegExp, loginWithCredentials, setActiveOrganizationForUserSessions } from './test-helpers';
+import {
+  ensureOrganizationExists,
+  findOrganizationListItemBySlug,
+  escapeRegExp,
+  loginWithCredentials,
+  setActiveOrganizationForUserSessions,
+} from './test-helpers';
 import { resendTestEmail } from '../src/shared/utils/resendTestEmail';
 
 const IMPERSONATION_ORG_SLUG = 'e2e-impersonation-org';
@@ -34,27 +40,10 @@ async function ensureAdminRole() {
     const adminId = adminResult.rows[0].id;
 
     await pool.query(`UPDATE "user" SET role = 'superadmin', "emailVerified" = true WHERE id = $1`, [adminId]);
-
-    await pool.query(
-      `INSERT INTO organization (id, name, slug, "createdAt", metadata)
-       VALUES (gen_random_uuid()::text, $1, $2, NOW(), NULL)
-       ON CONFLICT (slug) DO UPDATE
-         SET name = EXCLUDED.name,
-             "createdAt" = NOW()`,
-      ['E2E Impersonation Org', IMPERSONATION_ORG_SLUG],
-    );
-
-    const orgResult = await pool.query<{ id: string }>(
-      `SELECT id FROM organization WHERE slug = $1`,
-      [IMPERSONATION_ORG_SLUG],
-    );
-
-    if (orgResult.rowCount === 0) {
-      throw new Error(`Failed to ensure impersonation org: ${IMPERSONATION_ORG_SLUG}`);
-    }
-
-    const orgId = orgResult.rows[0].id;
-    impersonationOrgId = orgId;
+    impersonationOrgId = await ensureOrganizationExists({
+      orgSlug: IMPERSONATION_ORG_SLUG,
+      orgName: 'E2E Impersonation Org',
+    });
 
     const targetResult = await pool.query<{ id: string }>(
       `INSERT INTO "user" (id, name, email, role, "emailVerified", "createdAt", "updatedAt")
@@ -73,14 +62,14 @@ async function ensureAdminRole() {
       `INSERT INTO member (id, "organizationId", "userId", role, "createdAt")
        VALUES (gen_random_uuid()::text, $1, $2, $3, NOW())
        ON CONFLICT DO NOTHING`,
-      [orgId, adminId, 'admin'],
+      [impersonationOrgId, adminId, 'admin'],
     );
 
     await pool.query(
       `INSERT INTO member (id, "organizationId", "userId", role, "createdAt")
        VALUES (gen_random_uuid()::text, $1, $2, $3, NOW())
        ON CONFLICT DO NOTHING`,
-      [orgId, targetUserId, 'member'],
+      [impersonationOrgId, targetUserId, 'member'],
     );
 
     await pool.query(
@@ -93,24 +82,7 @@ async function ensureAdminRole() {
 }
 
 async function findOrganizationCardBySlug(page: import('@playwright/test').Page, slug: string) {
-  const searchInput = page.getByPlaceholder(/search organizations/i);
-  await expect(searchInput).toBeVisible({ timeout: 10000 });
-  await searchInput.fill(slug);
-  await page.waitForTimeout(500);
-
-  const allOrgButtons = page.locator('main button').filter({ hasText: /\// });
-  const count = await allOrgButtons.count();
-
-  for (let i = 0; i < count; i += 1) {
-    const button = allOrgButtons.nth(i);
-    const text = await button.textContent();
-    if (text && text.toLowerCase().includes(`/${slug.toLowerCase()}`)) {
-      await expect(button).toBeVisible({ timeout: 15000 });
-      return button;
-    }
-  }
-
-  throw new Error(`Could not find organization card for slug "${slug}"`);
+  return findOrganizationListItemBySlug(page, slug);
 }
 
 // Helper to login

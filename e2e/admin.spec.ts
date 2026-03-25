@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { Pool } from 'pg';
 import { DATABASE_URL, TEST_USER } from './env';
+import { ensureOrganizationExists, findOrganizationListItemBySlug } from './test-helpers';
 import { resendTestEmail } from '../src/shared/utils/resendTestEmail';
 
 const AUX_ORG_SLUG = 'e2e-admin-org';
@@ -25,21 +26,35 @@ async function withDatabase<T>(fn: (pool: Pool) => Promise<T>): Promise<T> {
 }
 
 async function findOrganizationCardBySlug(page: import('@playwright/test').Page, slug: string) {
-  const searchInput = page.getByPlaceholder(/search organizations/i);
-  await expect(searchInput).toBeVisible({ timeout: 10000 });
-  await searchInput.fill(slug);
-  await page.waitForTimeout(800);
+  return findOrganizationListItemBySlug(page, slug);
+}
 
-  const targetOrg = page
-    .locator('button')
-    .filter({ hasText: new RegExp(`/${slug}\\b`, 'i') })
-    .first();
+async function selectOrganizationOnRolesPage(page: import('@playwright/test').Page, organizationName: string) {
+  const organizationSelect = page.getByRole('combobox', { name: /organization/i });
+  const fallbackSelect = page.locator('button').filter({ hasText: /all organizations/i }).first();
+  const trigger = await organizationSelect.isVisible({ timeout: 1000 }).catch(() => false)
+    ? organizationSelect
+    : fallbackSelect;
 
-  await expect(targetOrg).toBeVisible({ timeout: 15000 });
-  return targetOrg;
+  await expect(trigger).toBeVisible({ timeout: 10000 });
+  await trigger.click();
+
+  const targetOption = page.getByRole('option', { name: new RegExp(`^${organizationName}$`, 'i') });
+  const fallbackOption = page.getByRole('option').filter({ hasNotText: /all organizations/i }).first();
+  const option = await targetOption.isVisible({ timeout: 1000 }).catch(() => false)
+    ? targetOption
+    : fallbackOption;
+
+  await expect(option).toBeVisible({ timeout: 10000 });
+  await option.click();
 }
 
 async function ensureAdminFixtures(): Promise<void> {
+  adminOrganizationId = await ensureOrganizationExists({
+    orgSlug: AUX_ORG_SLUG,
+    orgName: 'E2E Admin Organization',
+  });
+
   await withDatabase(async (pool) => {
     const adminResult = await pool.query<{ id: string }>(
       `SELECT id FROM "user" WHERE email = $1`,
@@ -57,26 +72,7 @@ async function ensureAdminFixtures(): Promise<void> {
       [adminId],
     );
 
-    await pool.query(
-      `INSERT INTO organization (id, name, slug, "createdAt", metadata)
-       VALUES (gen_random_uuid()::text, $1, $2, NOW(), NULL)
-       ON CONFLICT (slug) DO UPDATE
-         SET name = EXCLUDED.name,
-             "createdAt" = NOW()`,
-      ['E2E Admin Organization', AUX_ORG_SLUG],
-    );
-
-    const orgResult = await pool.query<{ id: string }>(
-      `SELECT id FROM organization WHERE slug = $1`,
-      [AUX_ORG_SLUG],
-    );
-
-    if (orgResult.rowCount === 0) {
-      throw new Error(`Failed to ensure organization fixture: ${AUX_ORG_SLUG}`);
-    }
-
-    const orgId = orgResult.rows[0].id;
-    adminOrganizationId = orgId;
+    const orgId = adminOrganizationId;
 
     await pool.query(
       `INSERT INTO member (id, "organizationId", "userId", role, "createdAt")
@@ -538,6 +534,7 @@ test.describe('Admin Panel E2E Tests', () => {
     });
 
     test('should open create role dialog', async ({ page }) => {
+      await selectOrganizationOnRolesPage(page, 'E2E Admin Organization');
       await page.getByRole('button', { name: /create role/i }).click();
       await expect(page.getByRole('dialog')).toBeVisible();
       await expect(page.getByText(/create new role/i)).toBeVisible();

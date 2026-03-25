@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 import { Pool } from 'pg';
 
 import { API_BASE_URL, DATABASE_URL } from './env';
@@ -24,7 +24,7 @@ const MEMBER_ROLE_PERMISSIONS = [
 
 async function seedDefaultOrganizationRoles(pool: Pool, organizationId: string): Promise<void> {
   await pool.query(
-    `INSERT INTO roles (name, display_name, description, color, is_system, organization_id)
+    `INSERT INTO roles (name, display_name, description, color, is_default, organization_id)
      VALUES
        ('admin', 'Admin', 'Organization administrator with full access within their organization', 'red', true, $1),
        ('manager', 'Manager', 'Organization manager with elevated operational access within their organization', 'blue', true, $1),
@@ -33,7 +33,7 @@ async function seedDefaultOrganizationRoles(pool: Pool, organizationId: string):
        display_name = EXCLUDED.display_name,
        description = EXCLUDED.description,
        color = EXCLUDED.color,
-       is_system = EXCLUDED.is_system,
+       is_default = EXCLUDED.is_default,
        updated_at = NOW()`,
     [organizationId],
   );
@@ -110,6 +110,25 @@ export function uniqueEmail(prefix: string): string {
 
 export function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+export async function ensureOrganizationExists(params: {
+  orgSlug: string;
+  orgName: string;
+}): Promise<string> {
+  return await withDatabase(async (pool) => {
+    const orgResult = await pool.query<{ id: string }>(
+      `INSERT INTO organization (id, name, slug, "createdAt", metadata)
+       VALUES (gen_random_uuid()::text, $1, $2, NOW(), NULL)
+       ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
+       RETURNING id`,
+      [params.orgName, params.orgSlug],
+    );
+
+    const organizationId = orgResult.rows[0].id;
+    await seedDefaultOrganizationRoles(pool, organizationId);
+    return organizationId;
+  });
 }
 
 export async function ensureUserWithRole(params: {
@@ -236,17 +255,19 @@ export async function ensureOrganizationMembership(params: {
 
     const userId = userResult.rows[0].id;
 
-    const orgResult = await pool.query<{ id: string }>(
-      `INSERT INTO organization (id, name, slug, "createdAt", metadata)
-       VALUES (gen_random_uuid()::text, $1, $2, NOW(), NULL)
-       ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
-       RETURNING id`,
-      [params.orgName, params.orgSlug],
-    );
+    const organizationId = await (async () => {
+      const orgResult = await pool.query<{ id: string }>(
+        `INSERT INTO organization (id, name, slug, "createdAt", metadata)
+         VALUES (gen_random_uuid()::text, $1, $2, NOW(), NULL)
+         ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
+         RETURNING id`,
+        [params.orgName, params.orgSlug],
+      );
 
-    const organizationId = orgResult.rows[0].id;
-
-    await seedDefaultOrganizationRoles(pool, organizationId);
+      const orgId = orgResult.rows[0].id;
+      await seedDefaultOrganizationRoles(pool, orgId);
+      return orgId;
+    })();
 
     await pool.query(
       `INSERT INTO member (id, "organizationId", "userId", role, "createdAt")
@@ -271,4 +292,19 @@ export async function setActiveOrganizationForUserSessions(params: {
       [params.organizationId, params.userEmail],
     );
   });
+}
+
+export async function findOrganizationListItemBySlug(page: Page, slug: string): Promise<Locator> {
+  const searchInput = page.getByPlaceholder(/search organizations/i);
+  await expect(searchInput).toBeVisible({ timeout: 10000 });
+  await searchInput.fill(slug);
+  await page.waitForTimeout(500);
+
+  const targetOrg = page
+    .locator('[role="button"]')
+    .filter({ hasText: new RegExp(`/${escapeRegExp(slug)}\\b`, 'i') })
+    .first();
+
+  await expect(targetOrg).toBeVisible({ timeout: 15000 });
+  return targetOrg;
 }

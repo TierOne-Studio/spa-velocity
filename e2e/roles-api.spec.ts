@@ -13,9 +13,9 @@ test.describe('Unified Roles API - Database-Driven', () => {
     const pool = new Pool({ connectionString: DATABASE_URL });
     try {
       const result = await pool.query(
-        `SELECT name, display_name, description, color, is_system 
+        `SELECT name, display_name, description, color, is_default 
          FROM roles 
-         ORDER BY is_system DESC, name ASC`
+         ORDER BY is_default DESC, name ASC`
       );
       
       const roleNames = result.rows.map(r => r.name);
@@ -29,7 +29,7 @@ test.describe('Unified Roles API - Database-Driven', () => {
       const adminRole = result.rows.find(r => r.name === 'admin');
       expect(adminRole).toBeDefined();
       expect(adminRole.display_name).toBe('Admin');
-      expect(adminRole.is_system).toBe(true);
+      expect(adminRole.is_default).toBe(true);
       
       const managerRole = result.rows.find(r => r.name === 'manager');
       expect(managerRole).toBeDefined();
@@ -50,9 +50,9 @@ test.describe('Unified Roles API - Database-Driven', () => {
     try {
       // This is the exact query used by getRoles()
       const result = await pool.query(
-        `SELECT name, display_name, description, color, is_system 
+        `SELECT name, display_name, description, color, is_default 
          FROM roles 
-         ORDER BY is_system DESC, name ASC`
+         ORDER BY is_default DESC, name ASC`
       );
       
       expect(result.rows.length).toBeGreaterThanOrEqual(3);
@@ -63,7 +63,7 @@ test.describe('Unified Roles API - Database-Driven', () => {
         expect(role).toHaveProperty('display_name');
         expect(role).toHaveProperty('description');
         expect(role).toHaveProperty('color');
-        expect(role).toHaveProperty('is_system');
+        expect(role).toHaveProperty('is_default');
       });
       
       console.log('✅ Roles query returns correct structure');
@@ -77,7 +77,7 @@ test.describe('Unified Roles API - Database-Driven', () => {
     try {
       // Get roles (same query used by both endpoints)
       const result = await pool.query(
-        `SELECT name, display_name FROM roles ORDER BY is_system DESC, name ASC`
+        `SELECT name, display_name FROM roles ORDER BY is_default DESC, name ASC`
       );
       
       const dbRoleNames = result.rows.map(r => r.name);
