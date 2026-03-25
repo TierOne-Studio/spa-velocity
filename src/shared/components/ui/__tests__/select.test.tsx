@@ -104,18 +104,28 @@ describe('Select components', () => {
 
   describe('SelectLabel standalone rendering', () => {
     it('renders with data-slot="select-label"', () => {
-      const { container } = render(<SelectLabel>My Label</SelectLabel>);
+      const { container } = render(
+        <SelectGroup>
+          <SelectLabel>My Label</SelectLabel>
+        </SelectGroup>,
+      );
       expect(container.querySelector('[data-slot="select-label"]')).toBeInTheDocument();
     });
 
     it('renders label text content', () => {
-      render(<SelectLabel>Options Group</SelectLabel>);
+      render(
+        <SelectGroup>
+          <SelectLabel>Options Group</SelectLabel>
+        </SelectGroup>,
+      );
       expect(screen.getByText('Options Group')).toBeInTheDocument();
     });
 
     it('applies custom className alongside default styles', () => {
       const { container } = render(
-        <SelectLabel className="custom-class">Label</SelectLabel>,
+        <SelectGroup>
+          <SelectLabel className="custom-class">Label</SelectLabel>
+        </SelectGroup>,
       );
       const el = container.querySelector('[data-slot="select-label"]');
       expect(el?.classList.contains('custom-class')).toBe(true);

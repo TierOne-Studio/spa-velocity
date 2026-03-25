@@ -176,7 +176,7 @@ vi.mock("@/shared/components/ui/card", () => ({
 }));
 
 vi.mock("@/shared/components/ui/skeleton", () => ({
-  Skeleton: ({ ...props }: HTMLAttributes<HTMLDivElement>) => <div {...props} />,
+  Skeleton: ({ ...props }: HTMLAttributes<HTMLDivElement>) => <div data-slot="skeleton" {...props} />,
 }));
 
 import { OrganizationsPage } from "./OrganizationsPage";
@@ -482,9 +482,9 @@ describe("OrganizationsPage – CRUD and member operations", () => {
 
     render(<OrganizationsPage />);
 
-    // The DropdownMenuItem for "Edit" renders as a div with text "edit Edit"
+    // The DropdownMenuItem for "Edit" renders as a div with direct text "Edit"
     const editMenuItem = screen.getByText((content, el) =>
-      el?.tagName === "DIV" && /^edit\s+Edit$/.test(content.replace(/\s+/g, " ").trim()),
+      el?.tagName === "DIV" && content.trim() === "Edit" && el.querySelector("span") !== null,
     );
     fireEvent.click(editMenuItem);
 
@@ -511,7 +511,7 @@ describe("OrganizationsPage – CRUD and member operations", () => {
     render(<OrganizationsPage />);
 
     const editMenuItem = screen.getByText((content, el) =>
-      el?.tagName === "DIV" && /^edit\s+Edit$/.test(content.replace(/\s+/g, " ").trim()),
+      el?.tagName === "DIV" && content.trim() === "Edit" && el.querySelector("span") !== null,
     );
     fireEvent.click(editMenuItem);
 

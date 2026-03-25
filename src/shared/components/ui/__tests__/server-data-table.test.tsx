@@ -1,7 +1,44 @@
 import { useMemo, useState } from "react"
+import * as React from "react"
 import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import type { ColumnDef } from "@tanstack/react-table"
+import type { ReactNode } from "react"
+
+vi.mock("@/shared/components/ui/select", () => ({
+  Select: ({
+    children,
+    value,
+    onValueChange,
+  }: {
+    children: ReactNode
+    value?: string
+    onValueChange?: (value: string) => void
+  }) => {
+    // Extract id from SelectTrigger child so htmlFor/id label association works
+    let triggerId: string | undefined
+    React.Children.forEach(children as React.ReactElement[], (child) => {
+      if (React.isValidElement(child) && (child.props as { id?: string }).id) {
+        triggerId = (child.props as { id: string }).id
+      }
+    })
+    return (
+      <select
+        id={triggerId}
+        value={value ?? ""}
+        onChange={(e) => onValueChange?.(e.target.value)}
+      >
+        {children}
+      </select>
+    )
+  },
+  SelectContent: ({ children }: { children: ReactNode }) => <>{children}</>,
+  SelectItem: ({ children, value }: { children: ReactNode; value: string }) => (
+    <option value={value}>{children}</option>
+  ),
+  SelectTrigger: ({ children, id }: { children: ReactNode; id?: string }) => <>{children}</>,
+  SelectValue: ({ placeholder }: { placeholder?: string | number }) => null,
+}))
 
 import { ServerDataTable } from "../server-data-table"
 
