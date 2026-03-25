@@ -709,3 +709,26 @@ describe("RolesPage", () => {
     });
   });
 });
+
+  it("cancels the create role dialog without submitting", async () => {
+    mockCan.mockImplementation((resource: string, action: string) =>
+      resource === "role" && action === "create",
+    );
+
+    render(<RolesPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /create role/i }));
+    const dialog = await screen.findByRole("dialog");
+
+    // Type in the name and description to cover form onChange handlers
+    fireEvent.change(screen.getByLabelText(/name \(identifier\)/i), { target: { value: "test-role" } });
+    fireEvent.change(screen.getByLabelText(/^display name$/i), { target: { value: "Test Role" } });
+    fireEvent.change(screen.getByLabelText(/description/i), { target: { value: "A test role" } });
+
+    // Cancel instead of submitting
+    fireEvent.click(within(dialog).getByRole("button", { name: /cancel/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+  });

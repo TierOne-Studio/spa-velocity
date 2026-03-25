@@ -814,3 +814,103 @@ describe("OrganizationsPage – CRUD and member operations", () => {
     expect(removeMutate).not.toHaveBeenCalled();
   });
 });
+
+  it("opens the edit dialog and cancels without saving", async () => {
+    const updateMutate = vi.fn();
+    mockUseUpdateOrganization.mockReturnValue({ mutateAsync: updateMutate, isPending: false });
+    mockCan.mockImplementation((resource: string, action: string) =>
+      resource === "organization",
+    );
+
+    render(<OrganizationsPage />);
+
+    const editMenuItem = screen.getByText((content, el) =>
+      el?.tagName === "DIV" && content.trim() === "Edit" && el.querySelector("span") !== null,
+    );
+    fireEvent.click(editMenuItem);
+
+    const dialog = await screen.findByRole("dialog");
+    // Change the slug field to cover the onChange handler for slug
+    const slugInput = within(dialog).getByDisplayValue("org-one");
+    fireEvent.change(slugInput, { target: { value: "org-one-updated" } });
+
+    // Cancel instead of saving
+    fireEvent.click(within(dialog).getByRole("button", { name: /cancel/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    expect(updateMutate).not.toHaveBeenCalled();
+  });
+
+  it("shows slug status as available when checkSlug returns true", async () => {
+    const checkSlugMutate = vi.fn().mockResolvedValue({ status: true });
+    mockUseCheckSlug.mockReturnValue({ mutateAsync: checkSlugMutate, isPending: false });
+    mockCan.mockImplementation((resource: string, action: string) =>
+      resource === "organization" && action === "create",
+    );
+
+    render(<OrganizationsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /create organization/i }));
+    const dialog = await screen.findByRole("dialog");
+
+    const slugInput = within(dialog).getByPlaceholderText(/my-organization/i);
+    fireEvent.change(slugInput, { target: { value: "good-slug" } });
+
+    await waitFor(() => {
+      expect(checkSlugMutate).toHaveBeenCalledWith("good-slug");
+    });
+
+    await waitFor(() => {
+      expect(within(dialog).getByText(/✓ available/i)).toBeInTheDocument();
+    });
+  });
+
+  it("shows slug status as taken when checkSlug returns false", async () => {
+    const checkSlugMutate = vi.fn().mockResolvedValue({ status: false });
+    mockUseCheckSlug.mockReturnValue({ mutateAsync: checkSlugMutate, isPending: false });
+    mockCan.mockImplementation((resource: string, action: string) =>
+      resource === "organization" && action === "create",
+    );
+
+    render(<OrganizationsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /create organization/i }));
+    const dialog = await screen.findByRole("dialog");
+
+    const slugInput = within(dialog).getByPlaceholderText(/my-organization/i);
+    fireEvent.change(slugInput, { target: { value: "taken-slug" } });
+
+    await waitFor(() => {
+      expect(checkSlugMutate).toHaveBeenCalledWith("taken-slug");
+    });
+
+    await waitFor(() => {
+      expect(within(dialog).getByText(/✗ taken/i)).toBeInTheDocument();
+    });
+  });
+
+  it("cancels the create organization dialog without creating", async () => {
+    const createMutate = vi.fn();
+    mockUseCreateOrganization.mockReturnValue({ mutateAsync: createMutate, isPending: false });
+    mockCan.mockImplementation((resource: string, action: string) =>
+      resource === "organization" && action === "create",
+    );
+
+    render(<OrganizationsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /create organization/i }));
+    const dialog = await screen.findByRole("dialog");
+
+    // Also type in the name field to cover that onChange
+    const nameInput = within(dialog).getByLabelText(/name/i);
+    fireEvent.change(nameInput, { target: { value: "My New Org" } });
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /cancel/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    expect(createMutate).not.toHaveBeenCalled();
+  });
