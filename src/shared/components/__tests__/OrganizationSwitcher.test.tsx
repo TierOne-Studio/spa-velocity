@@ -484,4 +484,135 @@ describe("OrganizationSwitcher", () => {
       )
     })
   })
+
+  it("shows 'No Organization' when the list API returns a non-ok response", async () => {
+    mockUseEffectiveSession.mockReturnValue({ data: { session: {} } })
+    mockFetchWithAuth.mockReset()
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => undefined)
+    mockFetchWithAuth.mockImplementation((url: unknown) => {
+      const requestUrl = String(url)
+      if (requestUrl.includes("/api/auth/organization/list")) {
+        return Promise.resolve(buildResponse({ message: "Unauthorized" }, false))
+      }
+      return Promise.resolve(buildResponse({ data: null }))
+    })
+
+    render(<OrganizationSwitcher />)
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /no organization/i })).toBeDisabled()
+    })
+
+    consoleSpy.mockRestore()
+  })
+
+  it("auto-activates the first organization when user has orgs but none is active", async () => {
+    const mockRefreshSession = vi.fn().mockResolvedValue(undefined)
+    mockUseAuth.mockReturnValue({ user: { id: "u-1", role: "member" }, refreshSession: mockRefreshSession })
+    mockUseEffectiveSession.mockReturnValue({ data: { user: { id: "u-1", role: "member" }, session: {} } })
+
+    mockFetchWithAuth.mockImplementation((url: unknown, options?: RequestInit) => {
+      const requestUrl = String(url)
+      if (requestUrl.includes("/api/auth/organization/list")) {
+        return Promise.resolve(buildResponse({ data: [ORG] }))
+      }
+      if (requestUrl.includes("/api/auth/organization/get-active-member")) {
+        return Promise.resolve(buildResponse({ data: null }))
+      }
+      if (requestUrl.includes("/api/auth/organization/set-active")) {
+        expect(options?.method).toBe("POST")
+        return Promise.resolve(buildResponse({ data: null }))
+      }
+      return Promise.reject(new Error(`Unexpected URL: ${requestUrl}`))
+    })
+
+    render(<OrganizationSwitcher />)
+
+    await waitFor(() => {
+      expect(mockFetchWithAuth).toHaveBeenCalledWith(
+        expect.stringContaining("/api/auth/organization/set-active"),
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ organizationId: ORG.id }),
+        }),
+      )
+      expect(mockRefreshSession).toHaveBeenCalled()
+    })
+  })
+
+  it("logs error and continues when auto-activation fails", async () => {
+    const mockRefreshSession = vi.fn().mockResolvedValue(undefined)
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => undefined)
+    mockUseAuth.mockReturnValue({ user: { id: "u-2", role: "member" }, refreshSession: mockRefreshSession })
+    mockUseEffectiveSession.mockReturnValue({ data: { user: { id: "u-2", role: "member" }, session: {} } })
+
+    mockFetchWithAuth.mockImplementation((url: unknown) => {
+      const requestUrl = String(url)
+      if (requestUrl.includes("/api/auth/organization/list")) {
+        return Promise.resolve(buildResponse({ data: [ORG] }))
+      }
+      if (requestUrl.includes("/api/auth/organization/get-active-member")) {
+        return Promise.resolve(buildResponse({ data: null }))
+      }
+      if (requestUrl.includes("/api/auth/organization/set-active")) {
+        return Promise.resolve(buildResponse({ message: "Auto-activate failed" }, false))
+      }
+      return Promise.reject(new Error(`Unexpected URL: ${requestUrl}`))
+    })
+
+    render(<OrganizationSwitcher />)
+
+    await waitFor(() => {
+      expect(consoleSpy).toHaveBeenCalledWith(
+        "Failed to auto-activate organization:",
+        expect.any(Error),
+      )
+    })
+
+    consoleSpy.mockRestore()
+  })
+
+  it("reads organizations from a payload.organizations array", async () => {
+    mockUseEffectiveSession.mockReturnValue({
+      data: {
+        session: { activeOrganizationId: "org-1" },
+        user: { role: "admin" },
+      },
+    });
+    mockFetchWithAuth.mockImplementation((url: unknown) => {
+      const requestUrl = String(url)
+      if (requestUrl.includes("/api/auth/organization/list")) {
+        return Promise.resolve({ ok: true, json: async () => ({ organizations: [{ id: "org-a", name: "Org A", slug: "org-a" }] }) })
+      }
+      if (requestUrl.includes("/api/auth/organization/get-active-member")) {
+        return Promise.resolve({ ok: true, json: async () => ({ data: { organizationId: "org-a" } }) })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    })
+
+    render(<OrganizationSwitcher />)
+
+    await waitFor(() => {
+      expect(screen.getByText("Org A")).toBeInTheDocument()
+    })
+  })
+
+  it("handles getActiveMember returning null gracefully", async () => {
+    mockFetchWithAuth.mockImplementation((url: unknown) => {
+      const requestUrl = String(url)
+      if (requestUrl.includes("/api/auth/organization/list")) {
+        return Promise.resolve({ ok: true, json: async () => ({ data: [{ id: "org-1", name: "Org One", slug: "org-1" }] }) })
+      }
+      if (requestUrl.includes("/api/auth/organization/get-active-member")) {
+        return Promise.resolve({ ok: false })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    })
+
+    render(<OrganizationSwitcher />)
+
+    await waitFor(() => {
+      expect(screen.getByText("Org One")).toBeInTheDocument()
+    })
+  })
 })

@@ -1,7 +1,44 @@
 import { useMemo, useState } from "react"
+import * as React from "react"
 import { fireEvent, render, screen } from "@testing-library/react"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import type { ColumnDef } from "@tanstack/react-table"
+import type { ReactNode } from "react"
+
+vi.mock("@/shared/components/ui/select", () => ({
+  Select: ({
+    children,
+    value,
+    onValueChange,
+  }: {
+    children: ReactNode
+    value?: string
+    onValueChange?: (value: string) => void
+  }) => {
+    // Extract id from SelectTrigger child so htmlFor/id label association works
+    let triggerId: string | undefined
+    React.Children.forEach(children as React.ReactElement[], (child) => {
+      if (React.isValidElement(child) && (child.props as { id?: string }).id) {
+        triggerId = (child.props as { id: string }).id
+      }
+    })
+    return (
+      <select
+        id={triggerId}
+        value={value ?? ""}
+        onChange={(e) => onValueChange?.(e.target.value)}
+      >
+        {children}
+      </select>
+    )
+  },
+  SelectContent: ({ children }: { children: ReactNode }) => <>{children}</>,
+  SelectItem: ({ children, value }: { children: ReactNode; value: string }) => (
+    <option value={value}>{children}</option>
+  ),
+  SelectTrigger: ({ children, id }: { children: ReactNode; id?: string }) => <>{children}</>,
+  SelectValue: ({ placeholder }: { placeholder?: string | number }) => null,
+}))
 
 import { ServerDataTable } from "../server-data-table"
 
@@ -87,5 +124,209 @@ describe("ServerDataTable", () => {
     fireEvent.click(screen.getByRole("button", { name: "toggle-user-3" }))
 
     expect(screen.getByRole("button", { name: "Delete (1)" })).toBeInTheDocument()
+  })
+})
+
+// ── Simple column fixture used by the additional tests ──────────────────────
+const simpleColumns: ColumnDef<TestRow>[] = [
+  { accessorKey: "id", header: "ID" },
+  { accessorKey: "name", header: "Name" },
+]
+
+const threeRows: TestRow[] = [
+  { id: "1", name: "Alice" },
+  { id: "2", name: "Bob" },
+  { id: "3", name: "Carol" },
+]
+
+describe("ServerDataTable – additional coverage", () => {
+  it("renders 'No results.' when data array is empty", () => {
+    render(
+      <ServerDataTable
+        columns={simpleColumns}
+        data={[]}
+        total={0}
+        pageSize={10}
+        pageIndex={0}
+        onPageChange={() => {}}
+        onPageSizeChange={() => {}}
+      />,
+    )
+    expect(screen.getByText("No results.")).toBeInTheDocument()
+  })
+
+  it("renders skeleton rows instead of data rows while isLoading is true", () => {
+    const { container } = render(
+      <ServerDataTable
+        columns={simpleColumns}
+        data={threeRows}
+        total={3}
+        pageSize={5}
+        pageIndex={0}
+        isLoading
+        onPageChange={() => {}}
+        onPageSizeChange={() => {}}
+      />,
+    )
+    // Skeleton elements should be present
+    expect(container.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(0)
+    // Actual data should NOT be rendered
+    expect(screen.queryByText("Alice")).not.toBeInTheDocument()
+  })
+
+  it("calls onSearchChange when user types in the search input", () => {
+    let captured = ""
+    render(
+      <ServerDataTable
+        columns={simpleColumns}
+        data={threeRows}
+        total={3}
+        pageSize={10}
+        pageIndex={0}
+        searchPlaceholder="Find…"
+        searchValue=""
+        onSearchChange={(v) => { captured = v }}
+        onPageChange={() => {}}
+        onPageSizeChange={() => {}}
+      />,
+    )
+    const input = screen.getByPlaceholderText("Find…")
+    fireEvent.change(input, { target: { value: "Bo" } })
+    expect(captured).toBe("Bo")
+  })
+
+  it("calls onPageChange with pageIndex+1 when next-page button is clicked", () => {
+    const onPageChange = vi.fn()
+    render(
+      <ServerDataTable
+        columns={simpleColumns}
+        data={threeRows}
+        total={30}
+        pageSize={10}
+        pageIndex={0}
+        onPageChange={onPageChange}
+        onPageSizeChange={() => {}}
+      />,
+    )
+    fireEvent.click(screen.getByRole("button", { name: /go to next page/i }))
+    expect(onPageChange).toHaveBeenCalledWith(1)
+  })
+
+  it("calls onPageChange with pageIndex-1 when previous-page button is clicked", () => {
+    const onPageChange = vi.fn()
+    render(
+      <ServerDataTable
+        columns={simpleColumns}
+        data={threeRows}
+        total={30}
+        pageSize={10}
+        pageIndex={2}
+        onPageChange={onPageChange}
+        onPageSizeChange={() => {}}
+      />,
+    )
+    fireEvent.click(screen.getByRole("button", { name: /go to previous page/i }))
+    expect(onPageChange).toHaveBeenCalledWith(1)
+  })
+
+  it("calls onPageChange(0) when first-page button is clicked", () => {
+    const onPageChange = vi.fn()
+    render(
+      <ServerDataTable
+        columns={simpleColumns}
+        data={threeRows}
+        total={30}
+        pageSize={10}
+        pageIndex={2}
+        onPageChange={onPageChange}
+        onPageSizeChange={() => {}}
+      />,
+    )
+    fireEvent.click(screen.getByRole("button", { name: /go to first page/i }))
+    expect(onPageChange).toHaveBeenCalledWith(0)
+  })
+
+  it("calls onPageChange(last) when last-page button is clicked", () => {
+    const onPageChange = vi.fn()
+    render(
+      <ServerDataTable
+        columns={simpleColumns}
+        data={threeRows}
+        total={30}
+        pageSize={10}
+        pageIndex={0}
+        onPageChange={onPageChange}
+        onPageSizeChange={() => {}}
+      />,
+    )
+    fireEvent.click(screen.getByRole("button", { name: /go to last page/i }))
+    expect(onPageChange).toHaveBeenCalledWith(2) // pageCount - 1 = 3 - 1 = 2
+  })
+
+  it("calls onPageSizeChange when rows-per-page select changes", () => {
+    const onPageSizeChange = vi.fn()
+    render(
+      <ServerDataTable
+        columns={simpleColumns}
+        data={threeRows}
+        total={100}
+        pageSize={10}
+        pageIndex={0}
+        onPageChange={() => {}}
+        onPageSizeChange={onPageSizeChange}
+      />,
+    )
+    // The rows-per-page select has id "rows-per-page"
+    const select = screen.getByRole("combobox", { name: /rows per page/i })
+    fireEvent.change(select, { target: { value: "20" } })
+    expect(onPageSizeChange).toHaveBeenCalledWith(20)
+  })
+
+  it("renders toolbar when provided", () => {
+    render(
+      <ServerDataTable
+        columns={simpleColumns}
+        data={threeRows}
+        total={3}
+        pageSize={10}
+        pageIndex={0}
+        onPageChange={() => {}}
+        onPageSizeChange={() => {}}
+        toolbar={<button type="button">Custom Action</button>}
+      />,
+    )
+    expect(screen.getByRole("button", { name: "Custom Action" })).toBeInTheDocument()
+  })
+
+  it("disables previous/first page buttons on first page", () => {
+    render(
+      <ServerDataTable
+        columns={simpleColumns}
+        data={threeRows}
+        total={30}
+        pageSize={10}
+        pageIndex={0}
+        onPageChange={() => {}}
+        onPageSizeChange={() => {}}
+      />,
+    )
+    expect(screen.getByRole("button", { name: /go to previous page/i })).toBeDisabled()
+    expect(screen.getByRole("button", { name: /go to first page/i })).toBeDisabled()
+  })
+
+  it("disables next/last page buttons on last page", () => {
+    render(
+      <ServerDataTable
+        columns={simpleColumns}
+        data={threeRows}
+        total={10}
+        pageSize={10}
+        pageIndex={0}
+        onPageChange={() => {}}
+        onPageSizeChange={() => {}}
+      />,
+    )
+    expect(screen.getByRole("button", { name: /go to next page/i })).toBeDisabled()
+    expect(screen.getByRole("button", { name: /go to last page/i })).toBeDisabled()
   })
 })

@@ -291,6 +291,15 @@ export function RolesPage() {
     });
   }, [hasResolvedOrganization, roles, fetchRolePermissions]);
 
+  // Sync selected permission IDs when permissions load asynchronously while dialog is open
+  useEffect(() => {
+    if (permissionsDialogOpen && selectedRole) {
+      setSelectedPermissionIds(
+        (rolePermissions[selectedRole.id] ?? []).map((p) => p.id),
+      );
+    }
+  }, [rolePermissions, permissionsDialogOpen, selectedRole]);
+
   const handleCreateRole = async () => {
     if (!canCreateRole) {
       toast.error("You do not have permission to create roles");
@@ -395,7 +404,7 @@ export function RolesPage() {
   };
 
   const openPermissionsDialog = (role: Role) => {
-    if (!canAssignRolePermissions) {
+    if (!can("role", "assign")) {
       toast.error("You do not have permission to manage role permissions");
       return;
     }

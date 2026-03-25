@@ -6,7 +6,7 @@ import type {
   ReactNode,
 } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 const {
   mockUseOrganizations,
@@ -138,13 +138,33 @@ vi.mock("@/shared/components/ui/label", () => ({
 }));
 
 vi.mock("@/shared/components/ui/select", () => ({
-  Select: ({ children, disabled, value }: { children: ReactNode; disabled?: boolean; value?: string }) => (
-    <div data-disabled={disabled ? "true" : "false"} data-select-value={value}>{children}</div>
+  Select: ({
+    children,
+    disabled,
+    value,
+    onValueChange,
+  }: {
+    children: ReactNode;
+    disabled?: boolean;
+    value?: string;
+    onValueChange?: (value: string) => void;
+  }) => (
+    <select
+      data-disabled={disabled ? "true" : "false"}
+      data-select-value={value}
+      value={value ?? ""}
+      disabled={disabled}
+      onChange={(e) => onValueChange?.(e.target.value)}
+    >
+      {children}
+    </select>
   ),
-  SelectContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  SelectItem: ({ children, value }: { children: ReactNode; value: string }) => <div data-value={value}>{children}</div>,
-  SelectTrigger: ({ children, ...props }: HTMLAttributes<HTMLDivElement>) => <div {...props}>{children}</div>,
-  SelectValue: ({ placeholder }: { placeholder?: string }) => <span>{placeholder}</span>,
+  SelectContent: ({ children }: { children: ReactNode }) => <>{children}</>,
+  SelectItem: ({ children, value }: { children: ReactNode; value: string }) => (
+    <option data-value={value} value={value}>{children}</option>
+  ),
+  SelectTrigger: ({ children, ...props }: HTMLAttributes<HTMLDivElement>) => <>{children}</>,
+  SelectValue: ({ placeholder }: { placeholder?: string }) => null,
 }));
 
 vi.mock("@/shared/components/ui/card", () => ({
@@ -156,7 +176,7 @@ vi.mock("@/shared/components/ui/card", () => ({
 }));
 
 vi.mock("@/shared/components/ui/skeleton", () => ({
-  Skeleton: ({ ...props }: HTMLAttributes<HTMLDivElement>) => <div {...props} />,
+  Skeleton: ({ ...props }: HTMLAttributes<HTMLDivElement>) => <div data-slot="skeleton" {...props} />,
 }));
 
 import { OrganizationsPage } from "./OrganizationsPage";
@@ -357,3 +377,540 @@ describe("OrganizationsPage", () => {
     });
   });
 });
+
+describe("OrganizationsPage – CRUD and member operations", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    mockUseOrganizations.mockReturnValue({
+      data: {
+        data: [{ id: "org-1", name: "Org One", slug: "org-one", createdAt: new Date() }],
+        total: 1,
+        totalPages: 1,
+      },
+      isLoading: false,
+    });
+    mockUseOrganizationMembers.mockReturnValue({
+      data: [
+        {
+          id: "member-1",
+          userId: "user-1",
+          role: "member",
+          user: { id: "user-1", name: "Existing User", email: "existing@example.com" },
+        },
+      ],
+      isLoading: false,
+    });
+    mockUseCreateOrganization.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
+    mockUseUpdateOrganization.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
+    mockUseDeleteOrganization.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
+    mockUseRemoveMember.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
+    mockUseUpdateMemberRole.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
+    mockUseAddMember.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
+    mockUseCheckSlug.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
+    mockUseSetActiveOrganization.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
+    mockGetOrganizationRolesMetadata.mockResolvedValue({
+      roles: [
+        { name: "member", displayName: "Member", description: null, color: null, isSystem: true },
+        { name: "manager", displayName: "Manager", description: null, color: null, isSystem: true },
+      ],
+      assignableRoles: ["member", "manager"],
+    });
+    mockListMemberCandidates.mockResolvedValue([
+      { id: "user-2", name: "Candidate User", email: "candidate@example.com", role: "member", image: null },
+    ]);
+    mockListUsers.mockResolvedValue({ data: [] });
+    mockUseAuth.mockReturnValue({ user: { id: "mgr-1", role: "manager" } });
+    mockUseEffectiveSession.mockReturnValue({
+      data: {
+        user: { id: "mgr-1", role: "manager" },
+        session: { activeOrganizationId: "org-1" },
+      },
+      refetch: mockSessionRefetch,
+    });
+    // grant all org permissions by default for these tests
+    mockCan.mockImplementation((resource: string, action: string) =>
+      resource === "organization",
+    );
+  });
+
+  it("shows loading skeletons when organizations are loading", () => {
+    mockUseOrganizations.mockReturnValue({ data: undefined, isLoading: true });
+    render(<OrganizationsPage />);
+    // Skeleton elements should be in the DOM
+    expect(document.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(0);
+  });
+
+  it("creates an organization successfully", async () => {
+    const createMutate = vi.fn().mockResolvedValue({ id: "org-new" });
+    mockUseCreateOrganization.mockReturnValue({ mutateAsync: createMutate, isPending: false });
+
+    render(<OrganizationsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /create organization/i }));
+    const dialog = await screen.findByRole("dialog");
+
+    fireEvent.change(within(dialog).getByLabelText(/name/i), { target: { value: "New Org" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: /^create$/i }));
+
+    await waitFor(() => {
+      expect(createMutate).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "New Org" }),
+      );
+      expect(mockToastSuccess).toHaveBeenCalledWith("Organization created successfully");
+    });
+  });
+
+  it("shows error toast when creating an organization fails", async () => {
+    const createMutate = vi.fn().mockRejectedValue(new Error("Create failed"));
+    mockUseCreateOrganization.mockReturnValue({ mutateAsync: createMutate, isPending: false });
+
+    render(<OrganizationsPage />);
+    fireEvent.click(screen.getByRole("button", { name: /create organization/i }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText(/name/i), { target: { value: "Bad Org" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: /^create$/i }));
+
+    await waitFor(() => {
+      expect(mockToastError).toHaveBeenCalledWith("Create failed");
+    });
+  });
+
+  it("opens the edit dialog and saves changes successfully", async () => {
+    const updateMutate = vi.fn().mockResolvedValue({});
+    mockUseUpdateOrganization.mockReturnValue({ mutateAsync: updateMutate, isPending: false });
+
+    render(<OrganizationsPage />);
+
+    // The DropdownMenuItem for "Edit" renders as a div with direct text "Edit"
+    const editMenuItem = screen.getByText((content, el) =>
+      el?.tagName === "DIV" && content.trim() === "Edit" && el.querySelector("span") !== null,
+    );
+    fireEvent.click(editMenuItem);
+
+    const dialog = await screen.findByRole("dialog");
+    const nameInput = within(dialog).getByDisplayValue("Org One");
+    fireEvent.change(nameInput, { target: { value: "Org One Updated" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(updateMutate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          organizationId: "org-1",
+          data: expect.objectContaining({ name: "Org One Updated" }),
+        }),
+      );
+      expect(mockToastSuccess).toHaveBeenCalledWith("Organization updated successfully");
+    });
+  });
+
+  it("shows error toast when updating an organization fails", async () => {
+    const updateMutate = vi.fn().mockRejectedValue(new Error("Update failed"));
+    mockUseUpdateOrganization.mockReturnValue({ mutateAsync: updateMutate, isPending: false });
+
+    render(<OrganizationsPage />);
+
+    const editMenuItem = screen.getByText((content, el) =>
+      el?.tagName === "DIV" && content.trim() === "Edit" && el.querySelector("span") !== null,
+    );
+    fireEvent.click(editMenuItem);
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(mockToastError).toHaveBeenCalledWith("Update failed");
+    });
+  });
+
+  it("opens the delete dialog and deletes the organization successfully", async () => {
+    const deleteMutate = vi.fn().mockResolvedValue({});
+    mockUseDeleteOrganization.mockReturnValue({ mutateAsync: deleteMutate, isPending: false });
+
+    render(<OrganizationsPage />);
+
+    // The Delete DropdownMenuItem has class "text-destructive"
+    const deleteMenuItem = screen.getByText((content, el) =>
+      el?.tagName === "DIV" &&
+      el?.classList?.contains("text-destructive") &&
+      /Delete/.test(content),
+    );
+    fireEvent.click(deleteMenuItem);
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /^delete$/i }));
+
+    await waitFor(() => {
+      expect(deleteMutate).toHaveBeenCalledWith("org-1");
+      expect(mockToastSuccess).toHaveBeenCalledWith("Organization deleted successfully");
+    });
+  });
+
+  it("shows error toast when deleting an organization fails", async () => {
+    const deleteMutate = vi.fn().mockRejectedValue(new Error("Delete failed"));
+    mockUseDeleteOrganization.mockReturnValue({ mutateAsync: deleteMutate, isPending: false });
+
+    render(<OrganizationsPage />);
+
+    const deleteMenuItem = screen.getByText((content, el) =>
+      el?.tagName === "DIV" &&
+      el?.classList?.contains("text-destructive") &&
+      /Delete/.test(content),
+    );
+    fireEvent.click(deleteMenuItem);
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /^delete$/i }));
+
+    await waitFor(() => {
+      expect(mockToastError).toHaveBeenCalledWith("Delete failed");
+    });
+  });
+
+  it("shows error toast when loading member candidates fails", async () => {
+    mockListMemberCandidates.mockRejectedValue(new Error("Load failed"));
+
+    render(<OrganizationsPage />);
+    fireEvent.click(screen.getByRole("button", { name: /org one/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /add member/i })).toBeVisible();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /add member/i }));
+
+    await waitFor(() => {
+      expect(mockToastError).toHaveBeenCalledWith("Failed to load users");
+    });
+  });
+
+  it("adds a member successfully", async () => {
+    const addMutate = vi.fn().mockResolvedValue({});
+    mockUseAddMember.mockReturnValue({ mutateAsync: addMutate, isPending: false });
+
+    render(<OrganizationsPage />);
+    fireEvent.click(screen.getByRole("button", { name: /org one/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /add member/i })).toBeVisible();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /add member/i }));
+
+    const dialog = await screen.findByRole("dialog");
+
+    // Wait for candidates to load, then select a user
+    await waitFor(() => expect(mockListMemberCandidates).toHaveBeenCalled());
+
+    const selects = within(dialog).getAllByRole("combobox");
+    fireEvent.change(selects[0], { target: { value: "user-2" } }); // User select
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /add member/i }));
+
+    await waitFor(() => {
+      expect(addMutate).toHaveBeenCalledWith({
+        organizationId: "org-1",
+        userId: "user-2",
+        role: "member",
+      });
+      expect(mockToastSuccess).toHaveBeenCalledWith("Member added successfully");
+    });
+  });
+
+  it("shows error toast when adding a member fails", async () => {
+    const addMutate = vi.fn().mockRejectedValue(new Error("Add failed"));
+    mockUseAddMember.mockReturnValue({ mutateAsync: addMutate, isPending: false });
+
+    render(<OrganizationsPage />);
+    fireEvent.click(screen.getByRole("button", { name: /org one/i }));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /add member/i })).toBeVisible());
+    fireEvent.click(screen.getByRole("button", { name: /add member/i }));
+
+    const dialog = await screen.findByRole("dialog");
+    await waitFor(() => expect(mockListMemberCandidates).toHaveBeenCalled());
+
+    const selects = within(dialog).getAllByRole("combobox");
+    fireEvent.change(selects[0], { target: { value: "user-2" } });
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /add member/i }));
+
+    await waitFor(() => {
+      expect(mockToastError).toHaveBeenCalledWith("Add failed");
+    });
+  });
+
+  it("removes a member successfully", async () => {
+    const removeMutate = vi.fn().mockResolvedValue({});
+    mockUseRemoveMember.mockReturnValue({ mutateAsync: removeMutate, isPending: false });
+
+    render(<OrganizationsPage />);
+    fireEvent.click(screen.getByRole("button", { name: /org one/i }));
+
+    await waitFor(() => expect(screen.getByText("Existing User")).toBeVisible());
+
+    // The remove member button is the button with class text-destructive (inside member table)
+    const removeBtn = screen.getAllByRole("button").find((btn) =>
+      btn.classList.contains("text-destructive"),
+    )!;
+    fireEvent.click(removeBtn);
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /^remove member$/i }));
+
+    await waitFor(() => {
+      expect(removeMutate).toHaveBeenCalledWith({
+        organizationId: "org-1",
+        memberId: "member-1",
+      });
+      expect(mockToastSuccess).toHaveBeenCalledWith("Member removed successfully");
+    });
+  });
+
+  it("shows error toast when removing a member fails", async () => {
+    const removeMutate = vi.fn().mockRejectedValue(new Error("Remove failed"));
+    mockUseRemoveMember.mockReturnValue({ mutateAsync: removeMutate, isPending: false });
+
+    render(<OrganizationsPage />);
+    fireEvent.click(screen.getByRole("button", { name: /org one/i }));
+    await waitFor(() => expect(screen.getByText("Existing User")).toBeVisible());
+
+    const removeBtn = screen.getAllByRole("button").find((btn) =>
+      btn.classList.contains("text-destructive"),
+    )!;
+    fireEvent.click(removeBtn);
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /^remove member$/i }));
+
+    await waitFor(() => {
+      expect(mockToastError).toHaveBeenCalledWith("Remove failed");
+    });
+  });
+
+  it("updates a member role successfully via select change", async () => {
+    const updateRoleMutate = vi.fn().mockResolvedValue({});
+    mockUseUpdateMemberRole.mockReturnValue({ mutateAsync: updateRoleMutate, isPending: false });
+
+    render(<OrganizationsPage />);
+    fireEvent.click(screen.getByRole("button", { name: /org one/i }));
+    await waitFor(() => expect(screen.getByText("Existing User")).toBeVisible());
+
+    // The role select is the only combobox in the members section
+    const roleSelect = screen.getByRole("combobox");
+    fireEvent.change(roleSelect, { target: { value: "manager" } });
+
+    await waitFor(() => {
+      expect(updateRoleMutate).toHaveBeenCalledWith({
+        organizationId: "org-1",
+        memberId: "member-1",
+        role: "manager",
+      });
+      expect(mockToastSuccess).toHaveBeenCalledWith("Role updated successfully");
+    });
+  });
+
+  it("shows error toast when updating a member role fails", async () => {
+    const updateRoleMutate = vi.fn().mockRejectedValue(new Error("Role update failed"));
+    mockUseUpdateMemberRole.mockReturnValue({ mutateAsync: updateRoleMutate, isPending: false });
+
+    render(<OrganizationsPage />);
+    fireEvent.click(screen.getByRole("button", { name: /org one/i }));
+    await waitFor(() => expect(screen.getByText("Existing User")).toBeVisible());
+
+    const roleSelect = screen.getByRole("combobox");
+    fireEvent.change(roleSelect, { target: { value: "manager" } });
+
+    await waitFor(() => {
+      expect(mockToastError).toHaveBeenCalledWith("Role update failed");
+    });
+  });
+
+  it("shows error toast when switching the active organization fails", async () => {
+    mockUseOrganizations.mockReturnValue({
+      data: {
+        data: [
+          { id: "org-1", name: "Org One", slug: "org-one", createdAt: new Date() },
+          { id: "org-2", name: "Org Two", slug: "org-two", createdAt: new Date() },
+        ],
+        total: 2,
+        totalPages: 1,
+      },
+      isLoading: false,
+    });
+    const setActive = vi.fn().mockRejectedValue(new Error("Switch failed"));
+    mockUseSetActiveOrganization.mockReturnValue({ mutateAsync: setActive, isPending: false });
+
+    render(<OrganizationsPage />);
+    fireEvent.click(screen.getByRole("button", { name: /org two/i }));
+
+    await waitFor(() => {
+      expect(mockToastError).toHaveBeenCalledWith("Switch failed");
+    });
+  });
+
+  it("cancels the delete dialog without deleting", async () => {
+    const deleteMutate = vi.fn();
+    mockUseDeleteOrganization.mockReturnValue({ mutateAsync: deleteMutate, isPending: false });
+
+    render(<OrganizationsPage />);
+
+    const deleteMenuItem = screen.getByText((content, el) =>
+      el?.tagName === "DIV" &&
+      el?.classList?.contains("text-destructive") &&
+      /Delete/.test(content),
+    );
+    fireEvent.click(deleteMenuItem);
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /cancel/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    expect(deleteMutate).not.toHaveBeenCalled();
+  });
+
+  it("cancels the add member dialog without adding", async () => {
+    const addMutate = vi.fn();
+    mockUseAddMember.mockReturnValue({ mutateAsync: addMutate, isPending: false });
+
+    render(<OrganizationsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /org one/i }));
+
+    const addBtn = await screen.findByRole("button", { name: /add member/i });
+    fireEvent.click(addBtn);
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /cancel/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    expect(addMutate).not.toHaveBeenCalled();
+  });
+
+  it("cancels the remove member dialog without removing", async () => {
+    const removeMutate = vi.fn();
+    mockUseRemoveMember.mockReturnValue({ mutateAsync: removeMutate, isPending: false });
+
+    render(<OrganizationsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /org one/i }));
+    await waitFor(() => expect(screen.getByText("Existing User")).toBeVisible());
+
+    const removeBtn = screen.getAllByRole("button").find((btn) =>
+      btn.classList.contains("text-destructive"),
+    )!;
+    fireEvent.click(removeBtn);
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /cancel/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    expect(removeMutate).not.toHaveBeenCalled();
+  });
+});
+
+  it("opens the edit dialog and cancels without saving", async () => {
+    const updateMutate = vi.fn();
+    mockUseUpdateOrganization.mockReturnValue({ mutateAsync: updateMutate, isPending: false });
+    mockCan.mockImplementation((resource: string, action: string) =>
+      resource === "organization",
+    );
+
+    render(<OrganizationsPage />);
+
+    const editMenuItem = screen.getByText((content, el) =>
+      el?.tagName === "DIV" && content.trim() === "Edit" && el.querySelector("span") !== null,
+    );
+    fireEvent.click(editMenuItem);
+
+    const dialog = await screen.findByRole("dialog");
+    // Change the slug field to cover the onChange handler for slug
+    const slugInput = within(dialog).getByDisplayValue("org-one");
+    fireEvent.change(slugInput, { target: { value: "org-one-updated" } });
+
+    // Cancel instead of saving
+    fireEvent.click(within(dialog).getByRole("button", { name: /cancel/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    expect(updateMutate).not.toHaveBeenCalled();
+  });
+
+  it("shows slug status as available when checkSlug returns true", async () => {
+    const checkSlugMutate = vi.fn().mockResolvedValue({ status: true });
+    mockUseCheckSlug.mockReturnValue({ mutateAsync: checkSlugMutate, isPending: false });
+    mockCan.mockImplementation((resource: string, action: string) =>
+      resource === "organization" && action === "create",
+    );
+
+    render(<OrganizationsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /create organization/i }));
+    const dialog = await screen.findByRole("dialog");
+
+    const slugInput = within(dialog).getByPlaceholderText(/my-organization/i);
+    fireEvent.change(slugInput, { target: { value: "good-slug" } });
+
+    await waitFor(() => {
+      expect(checkSlugMutate).toHaveBeenCalledWith("good-slug");
+    });
+
+    await waitFor(() => {
+      expect(within(dialog).getByText(/✓ available/i)).toBeInTheDocument();
+    });
+  });
+
+  it("shows slug status as taken when checkSlug returns false", async () => {
+    const checkSlugMutate = vi.fn().mockResolvedValue({ status: false });
+    mockUseCheckSlug.mockReturnValue({ mutateAsync: checkSlugMutate, isPending: false });
+    mockCan.mockImplementation((resource: string, action: string) =>
+      resource === "organization" && action === "create",
+    );
+
+    render(<OrganizationsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /create organization/i }));
+    const dialog = await screen.findByRole("dialog");
+
+    const slugInput = within(dialog).getByPlaceholderText(/my-organization/i);
+    fireEvent.change(slugInput, { target: { value: "taken-slug" } });
+
+    await waitFor(() => {
+      expect(checkSlugMutate).toHaveBeenCalledWith("taken-slug");
+    });
+
+    await waitFor(() => {
+      expect(within(dialog).getByText(/✗ taken/i)).toBeInTheDocument();
+    });
+  });
+
+  it("cancels the create organization dialog without creating", async () => {
+    const createMutate = vi.fn();
+    mockUseCreateOrganization.mockReturnValue({ mutateAsync: createMutate, isPending: false });
+    mockCan.mockImplementation((resource: string, action: string) =>
+      resource === "organization" && action === "create",
+    );
+
+    render(<OrganizationsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /create organization/i }));
+    const dialog = await screen.findByRole("dialog");
+
+    // Also type in the name field to cover that onChange
+    const nameInput = within(dialog).getByLabelText(/name/i);
+    fireEvent.change(nameInput, { target: { value: "My New Org" } });
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /cancel/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    expect(createMutate).not.toHaveBeenCalled();
+  });
