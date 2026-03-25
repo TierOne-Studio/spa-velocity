@@ -571,4 +571,48 @@ describe("OrganizationSwitcher", () => {
 
     consoleSpy.mockRestore()
   })
+
+  it("reads organizations from a payload.organizations array", async () => {
+    mockUseEffectiveSession.mockReturnValue({
+      data: {
+        session: { activeOrganizationId: "org-1" },
+        user: { role: "admin" },
+      },
+    });
+    mockFetchWithAuth.mockImplementation((url: unknown) => {
+      const requestUrl = String(url)
+      if (requestUrl.includes("/api/auth/organization/list")) {
+        return Promise.resolve({ ok: true, json: async () => ({ organizations: [{ id: "org-a", name: "Org A", slug: "org-a" }] }) })
+      }
+      if (requestUrl.includes("/api/auth/organization/get-active-member")) {
+        return Promise.resolve({ ok: true, json: async () => ({ data: { organizationId: "org-a" } }) })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    })
+
+    render(<OrganizationSwitcher />)
+
+    await waitFor(() => {
+      expect(screen.getByText("Org A")).toBeInTheDocument()
+    })
+  })
+
+  it("handles getActiveMember returning null gracefully", async () => {
+    mockFetchWithAuth.mockImplementation((url: unknown) => {
+      const requestUrl = String(url)
+      if (requestUrl.includes("/api/auth/organization/list")) {
+        return Promise.resolve({ ok: true, json: async () => ({ data: [{ id: "org-1", name: "Org One", slug: "org-1" }] }) })
+      }
+      if (requestUrl.includes("/api/auth/organization/get-active-member")) {
+        return Promise.resolve({ ok: false })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    })
+
+    render(<OrganizationSwitcher />)
+
+    await waitFor(() => {
+      expect(screen.getByText("Org One")).toBeInTheDocument()
+    })
+  })
 })

@@ -636,4 +636,76 @@ describe("RolesPage", () => {
       });
     });
   });
+
+  it("cancels the edit dialog without saving", async () => {
+    mockUseRoles.mockReturnValue({
+      data: [{ id: "r-6", name: "editor", displayName: "Editor", description: "", color: "gray", isSystem: false }],
+      isLoading: false,
+    });
+    mockCan.mockImplementation((resource: string, action: string) =>
+      resource === "role" && action === "update",
+    );
+
+    render(<RolesPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /edit/i }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /cancel/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+  });
+
+  it("cancels the delete dialog without deleting", async () => {
+    const deleteRoleMutation = { mutateAsync: vi.fn(), isPending: false };
+    mockUseDeleteRole.mockReturnValue(deleteRoleMutation);
+    mockUseRoles.mockReturnValue({
+      data: [{ id: "r-7", name: "viewer", displayName: "Viewer", description: "", color: "gray", isSystem: false }],
+      isLoading: false,
+    });
+    mockCan.mockImplementation((resource: string, action: string) =>
+      resource === "role" && action === "delete",
+    );
+
+    render(<RolesPage />);
+
+    const trashBtn = screen.getByText("trash").closest("button")!;
+    fireEvent.click(trashBtn);
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /cancel/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    expect(deleteRoleMutation.mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("cancels the permissions dialog without saving", async () => {
+    mockUsePermissionsGrouped.mockReturnValue({
+      data: { "user": [{ id: "p-x", resource: "user", action: "read" }] },
+    });
+    mockUseRoles.mockReturnValue({
+      data: [{ id: "r-8", name: "custom", displayName: "Custom", description: "", color: "blue", isSystem: false }],
+      isLoading: false,
+    });
+    mockCan.mockImplementation((resource: string, action: string) =>
+      resource === "role" && action === "assign",
+    );
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { permissions: [] } }),
+    }));
+
+    render(<RolesPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /manage/i }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /cancel/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+  });
 });

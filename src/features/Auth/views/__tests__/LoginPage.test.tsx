@@ -158,4 +158,25 @@ describe("LoginPage", () => {
 
     sessionStorage.removeItem("pendingInvitationId");
   });
+
+  it("removes pendingInvitationId and navigates after successful form submit with pending invitation", async () => {
+    const user = userEvent.setup();
+    sessionStorage.setItem("pendingInvitationId", "inv-456");
+
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>,
+    );
+
+    await user.type(screen.getByLabelText(/email/i), "user@example.com");
+    await user.type(screen.getByLabelText(/password/i), "password123");
+    await user.click(screen.getByRole("button", { name: /^login$/i }));
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith("/accept-invitation/inv-456", { replace: true });
+    });
+
+    expect(sessionStorage.getItem("pendingInvitationId")).toBeNull();
+  });
 });

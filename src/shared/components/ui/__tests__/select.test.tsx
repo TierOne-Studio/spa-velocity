@@ -8,6 +8,10 @@ import {
   SelectTrigger,
   SelectLabel,
   SelectSeparator,
+  SelectContent,
+  SelectItem,
+  SelectScrollUpButton,
+  SelectScrollDownButton,
 } from '../select';
 
 describe('Select components', () => {
@@ -129,6 +133,53 @@ describe('Select components', () => {
       );
       const el = container.querySelector('[data-slot="select-label"]');
       expect(el?.classList.contains('custom-class')).toBe(true);
+    });
+  });
+
+  describe('Select open with content', () => {
+    it('renders SelectContent and SelectItem when Select is open', () => {
+      render(
+        <Select open>
+          <SelectTrigger aria-label="open-select">
+            <SelectValue placeholder="Pick" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="one">One</SelectItem>
+            <SelectItem value="two">Two</SelectItem>
+          </SelectContent>
+        </Select>,
+      );
+      expect(document.body.querySelector('[data-slot="select-content"]')).toBeInTheDocument();
+      expect(document.body.querySelector('[data-slot="select-item"]')).toBeInTheDocument();
+    });
+
+    it('SelectScrollUpButton and SelectScrollDownButton are in the content', () => {
+      render(
+        <Select open>
+          <SelectTrigger aria-label="scroll-select">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="a">A</SelectItem>
+          </SelectContent>
+        </Select>,
+      );
+      expect(document.body.querySelector('[data-slot="select-scroll-up-button"]')).toBeInTheDocument();
+      expect(document.body.querySelector('[data-slot="select-scroll-down-button"]')).toBeInTheDocument();
+    });
+
+    it('SelectContent with position="item-aligned" skips popper class', () => {
+      render(
+        <Select open>
+          <SelectTrigger aria-label="aligned-select">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent position="item-aligned">
+            <SelectItem value="x">X</SelectItem>
+          </SelectContent>
+        </Select>,
+      );
+      expect(document.body.querySelector('[data-slot="select-content"]')).toBeInTheDocument();
     });
   });
 });

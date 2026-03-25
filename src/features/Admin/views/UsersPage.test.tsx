@@ -1027,4 +1027,87 @@ describe("UsersPage", () => {
     })
     expect(mockToastSuccess).toHaveBeenCalledWith("Role updated successfully")
   })
+
+  it("closes the change-role dialog when cancel is clicked", async () => {
+    mockGetCreateUserMetadata.mockResolvedValue({
+      roles: [{ name: "member", displayName: "Member" }],
+      allowedRoleNames: ["member"],
+      organizations: [],
+    })
+    mockUseUsers.mockReturnValue({
+      data: {
+        data: [{ id: "target-1", name: "User", email: "user@example.com", role: "member", emailVerified: true, createdAt: new Date(), updatedAt: new Date() }],
+        total: 1,
+      },
+      isLoading: false,
+    })
+    mockUseUserCapabilitiesBatch.mockReturnValue({
+      data: { "target-1": { actions: { update: false, setRole: true, ban: false, unban: false, setPassword: false, remove: false, revokeSessions: false, impersonate: false } } },
+    })
+    mockCan.mockImplementation((resource: string, action: string) =>
+      resource === "user" && (action === "read" || action === "set-role"),
+    )
+
+    render(<UsersPage />)
+
+    fireEvent.click(screen.getByRole("button", { name: /change role/i }))
+    const dialog = await screen.findByRole("dialog")
+    fireEvent.click(within(dialog).getByRole("button", { name: /cancel/i }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    })
+  })
+
+  it("closes the set-password dialog when cancel is clicked", async () => {
+    mockUseUsers.mockReturnValue({
+      data: {
+        data: [{ id: "target-1", name: "User", email: "user@example.com", role: "member", emailVerified: true, createdAt: new Date(), updatedAt: new Date() }],
+        total: 1,
+      },
+      isLoading: false,
+    })
+    mockUseUserCapabilitiesBatch.mockReturnValue({
+      data: { "target-1": { actions: { update: false, setRole: false, ban: false, unban: false, setPassword: true, remove: false, revokeSessions: false, impersonate: false } } },
+    })
+    mockCan.mockImplementation((resource: string, action: string) =>
+      resource === "user" && (action === "read" || action === "set-password"),
+    )
+
+    render(<UsersPage />)
+
+    fireEvent.click(screen.getByRole("button", { name: /reset password/i }))
+    const dialog = await screen.findByRole("dialog")
+    fireEvent.click(within(dialog).getByRole("button", { name: /cancel/i }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    })
+  })
+
+  it("closes the delete-user dialog when cancel is clicked", async () => {
+    mockUseUsers.mockReturnValue({
+      data: {
+        data: [{ id: "target-1", name: "User", email: "user@example.com", role: "member", emailVerified: true, createdAt: new Date(), updatedAt: new Date() }],
+        total: 1,
+      },
+      isLoading: false,
+    })
+    mockUseUserCapabilitiesBatch.mockReturnValue({
+      data: { "target-1": { actions: { update: false, setRole: false, ban: false, unban: false, setPassword: false, remove: true, revokeSessions: false, impersonate: false } } },
+    })
+    mockCan.mockImplementation((resource: string, action: string) =>
+      resource === "user" && (action === "read" || action === "delete"),
+    )
+
+    render(<UsersPage />)
+
+    fireEvent.click(screen.getByRole("button", { name: /delete user/i }))
+    const dialog = await screen.findByRole("dialog")
+    fireEvent.click(within(dialog).getByRole("button", { name: /cancel/i }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    })
+  })
 })

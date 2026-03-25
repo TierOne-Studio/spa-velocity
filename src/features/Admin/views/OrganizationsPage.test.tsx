@@ -748,4 +748,69 @@ describe("OrganizationsPage – CRUD and member operations", () => {
       expect(mockToastError).toHaveBeenCalledWith("Switch failed");
     });
   });
+
+  it("cancels the delete dialog without deleting", async () => {
+    const deleteMutate = vi.fn();
+    mockUseDeleteOrganization.mockReturnValue({ mutateAsync: deleteMutate, isPending: false });
+
+    render(<OrganizationsPage />);
+
+    const deleteMenuItem = screen.getByText((content, el) =>
+      el?.tagName === "DIV" &&
+      el?.classList?.contains("text-destructive") &&
+      /Delete/.test(content),
+    );
+    fireEvent.click(deleteMenuItem);
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /cancel/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    expect(deleteMutate).not.toHaveBeenCalled();
+  });
+
+  it("cancels the add member dialog without adding", async () => {
+    const addMutate = vi.fn();
+    mockUseAddMember.mockReturnValue({ mutateAsync: addMutate, isPending: false });
+
+    render(<OrganizationsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /org one/i }));
+
+    const addBtn = await screen.findByRole("button", { name: /add member/i });
+    fireEvent.click(addBtn);
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /cancel/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    expect(addMutate).not.toHaveBeenCalled();
+  });
+
+  it("cancels the remove member dialog without removing", async () => {
+    const removeMutate = vi.fn();
+    mockUseRemoveMember.mockReturnValue({ mutateAsync: removeMutate, isPending: false });
+
+    render(<OrganizationsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /org one/i }));
+    await waitFor(() => expect(screen.getByText("Existing User")).toBeVisible());
+
+    const removeBtn = screen.getAllByRole("button").find((btn) =>
+      btn.classList.contains("text-destructive"),
+    )!;
+    fireEvent.click(removeBtn);
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /cancel/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    expect(removeMutate).not.toHaveBeenCalled();
+  });
 });
