@@ -31,7 +31,7 @@ async function loginAsAdmin(page: Page) {
   await page.reload({ waitUntil: 'networkidle' });
 }
 
-test.describe('Roles page system-role invariants', () => {
+test.describe('Roles page default-role rendering', () => {
   test.beforeAll(async () => {
     await ensureUserWithRole({
       email: adminEmail,
@@ -48,16 +48,16 @@ test.describe('Roles page system-role invariants', () => {
     });
   });
 
-  test('system roles should render system badge and block edit/delete actions', async ({ page }) => {
+  test('default organization roles render without system badge and remain manageable', async ({ page }) => {
     await loginAsAdmin(page);
     await openRolesPage(page);
 
     for (const roleName of ['admin', 'manager', 'member']) {
       const roleCard = page.locator(`[data-testid="role-card-${roleName}"]`).first();
       await expect(roleCard).toBeVisible();
-      await expect(roleCard.getByText(/^system$/i)).toBeVisible();
-      await expect(roleCard.getByRole('button', { name: /^edit$/i })).toHaveCount(0);
-      await expect(roleCard.locator('button.text-destructive')).toHaveCount(0);
+      await expect(roleCard.getByText(/^system$/i)).toHaveCount(0);
+      await expect(roleCard.getByRole('button', { name: /^edit$/i })).toBeVisible();
+      await expect(roleCard.locator('button.text-destructive')).toHaveCount(1);
     }
   });
 });

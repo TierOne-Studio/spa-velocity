@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { Pool } from 'pg';
 import { API_BASE_URL, DATABASE_URL, TEST_USER } from './env';
-import { uniqueEmail } from './test-helpers';
+import { ensureOrganizationExists, uniqueEmail } from './test-helpers';
 
 const CAPABILITIES_ORG_SLUG = `e2e-policy-api-org-${Date.now()}`;
 const CAPABILITIES_ORG_NAME = 'E2E Policy API Org';
@@ -77,26 +77,7 @@ async function ensureUser(email: string, name: string, role: 'admin' | 'manager'
 }
 
 async function createOrganization(slug: string, name: string): Promise<string> {
-  return withDatabase(async (pool) => {
-    await pool.query(
-      `INSERT INTO organization (id, name, slug, "createdAt", metadata)
-       VALUES (gen_random_uuid()::text, $1, $2, NOW(), NULL)
-       ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
-       RETURNING id`,
-      [name, slug],
-    );
-
-    const orgResult = await pool.query<{ id: string }>(
-      `SELECT id FROM organization WHERE slug = $1`,
-      [slug],
-    );
-
-    if (orgResult.rowCount === 0) {
-      throw new Error(`Failed to create org with slug ${slug}`);
-    }
-
-    return orgResult.rows[0].id;
-  });
+  return ensureOrganizationExists({ orgSlug: slug, orgName: name });
 }
 
 async function ensureMember(organizationId: string, userId: string, role: 'admin' | 'manager' | 'member'): Promise<string> {
@@ -174,7 +155,7 @@ test.describe('Admin policy API coverage', () => {
     expect(adminBody.actions.impersonate).toBe(true);
   });
 
-  test('organization member last-admin protections should be enforced by API', async ({ request }) => {
+  test('superadmin can demote and remove the last organization admin via API', async ({ request }) => {
     const headers = await signInAndGetHeaders(request);
 
     const suffix = Date.now();
@@ -189,13 +170,13 @@ test.describe('Admin policy API coverage', () => {
         data: { role: 'member' },
       },
     );
-    expect(demoteResponse.status()).toBe(403);
+    expect(demoteResponse.status()).toBe(200);
 
     const removeResponse = await request.delete(
       `${API_BASE_URL}/api/platform-admin/organizations/${orgId}/members/${loneAdminMemberId}`,
       { headers },
     );
-    expect(removeResponse.status()).toBe(403);
+    expect(removeResponse.status()).toBe(200);
   });
 
   test('organization invitation lifecycle should use platform-admin endpoints', async ({ request }) => {

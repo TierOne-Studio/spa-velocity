@@ -59,6 +59,25 @@ async function login(page: Page) {
   await page.waitForLoadState('networkidle');
 }
 
+async function selectFirstOrganizationOnRolesPage(page: Page) {
+  const organizationSelect = page.getByRole('combobox', { name: /organization/i });
+  const fallbackSelect = page.locator('button').filter({ hasText: /all organizations/i }).first();
+  const trigger = await organizationSelect.isVisible({ timeout: 1000 }).catch(() => false)
+    ? organizationSelect
+    : fallbackSelect;
+
+  await expect(trigger).toBeVisible({ timeout: 10000 });
+  await trigger.click();
+
+  const firstOrganizationOption = page
+    .getByRole('option')
+    .filter({ hasNotText: /all organizations/i })
+    .first();
+
+  await expect(firstOrganizationOption).toBeVisible({ timeout: 10000 });
+  await firstOrganizationOption.click();
+}
+
 // Generate unique identifiers for test data
 function uniqueId() {
   return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
@@ -576,6 +595,7 @@ test.describe.serial('Role Management - Full CRUD', () => {
 
     // Wait for page to fully load
     await page.waitForSelector('[data-testid^="role-card-"]');
+    await selectFirstOrganizationOnRolesPage(page);
     
     await page.getByRole('button', { name: /create role/i }).click();
     await expect(page.getByRole('dialog')).toBeVisible();
@@ -665,6 +685,7 @@ test.describe.serial('Role Management - Full CRUD', () => {
     const roleName = `delete-role-${uniqueId()}`;
     const roleDisplayName = `Delete Role ${uniqueId()}`;
 
+    await selectFirstOrganizationOnRolesPage(page);
     await page.getByRole('button', { name: /create role/i }).click();
     await expect(page.getByRole('dialog')).toBeVisible();
 

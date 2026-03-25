@@ -1,7 +1,7 @@
 import { test, expect, type APIRequestContext } from '@playwright/test';
 
 import { API_BASE_URL, TEST_USER } from './env';
-import { uniqueEmail, withDatabase } from './test-helpers';
+import { ensureOrganizationExists, uniqueEmail, withDatabase } from './test-helpers';
 import { signInAndGetAuthHeaders } from './rbac-matrix.helpers';
 import { resendTestEmail } from '../src/shared/utils/resendTestEmail';
 
@@ -27,16 +27,7 @@ async function restoreUser(): Promise<void> {
 }
 
 async function createOrganizationFixture(slug: string, name: string): Promise<string> {
-  return await withDatabase(async (pool) => {
-    const result = await pool.query<{ id: string }>(
-      `INSERT INTO organization (id, name, slug, "createdAt", metadata)
-       VALUES (gen_random_uuid()::text, $1, $2, NOW(), NULL)
-       ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
-       RETURNING id`,
-      [name, slug],
-    );
-    return result.rows[0].id;
-  });
+  return ensureOrganizationExists({ orgSlug: slug, orgName: name });
 }
 
 async function createThrowawayUser(orgId: string): Promise<string> {

@@ -2,8 +2,10 @@ import { test, expect, type Page } from '@playwright/test';
 
 import { TEST_USER } from './env';
 import {
+  ensureOrganizationMembership,
   ensureUserRecord,
   escapeRegExp,
+  findOrganizationListItemBySlug,
   loginWithCredentials,
   setActiveOrganizationForUserSessions,
   withDatabase,
@@ -16,36 +18,11 @@ const MANAGE_MEMBER_EMAIL = resendTestEmail('delivered', `e2e-org-member-${Date.
 const ADD_MEMBER_CANDIDATE_EMAIL = resendTestEmail('delivered', `e2e-org-candidate-${Date.now()}`);
 
 async function ensureOrganization(slug: string, name: string): Promise<void> {
-  await withDatabase(async (pool) => {
-    await pool.query(
-      `INSERT INTO organization (id, name, slug, "createdAt", metadata)
-       VALUES (gen_random_uuid()::text, $1, $2, NOW(), NULL)
-       ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name`,
-      [name, slug],
-    );
-
-    const userResult = await pool.query<{ id: string }>(
-      `SELECT id FROM "user" WHERE email = $1`,
-      [TEST_USER.email],
-    );
-
-    if (userResult.rowCount === 0) {
-      throw new Error(`Missing seeded user ${TEST_USER.email}`);
-    }
-    const orgResult = await pool.query<{ id: string }>(
-      `SELECT id FROM organization WHERE slug = $1`,
-      [slug],
-    );
-
-    const userId = userResult.rows[0].id;
-    const organizationId = orgResult.rows[0].id;
-
-    await pool.query(
-      `INSERT INTO member (id, "organizationId", "userId", role, "createdAt")
-       VALUES (gen_random_uuid()::text, $1, $2, 'admin', NOW())
-       ON CONFLICT DO NOTHING`,
-      [organizationId, userId],
-    );
+  await ensureOrganizationMembership({
+    userEmail: TEST_USER.email,
+    role: 'admin',
+    orgSlug: slug,
+    orgName: name,
   });
 }
 
@@ -101,24 +78,8 @@ async function loginAsAdmin(page: Page) {
 }
 
 async function openOrganizationBySlug(page: Page, slug: string) {
-  const searchInput = page.getByPlaceholder(/search organizations/i);
-  await expect(searchInput).toBeVisible({ timeout: 10000 });
-  await searchInput.fill(slug);
-  await page.waitForTimeout(500);
-
-  const allOrgButtons = page.locator('main button').filter({ hasText: /\// });
-  const count = await allOrgButtons.count();
-
-  for (let i = 0; i < count; i += 1) {
-    const button = allOrgButtons.nth(i);
-    const text = await button.textContent();
-    if (text && text.toLowerCase().includes(`/${slug.toLowerCase()}`)) {
-      await button.click();
-      return;
-    }
-  }
-
-  throw new Error(`Could not find organization button for slug "${slug}"`);
+  const orgRow = await findOrganizationListItemBySlug(page, slug);
+  await orgRow.click();
 }
 
 async function openAddMemberUserDropdown(page: Page) {
