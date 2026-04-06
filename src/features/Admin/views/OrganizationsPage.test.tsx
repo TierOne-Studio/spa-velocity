@@ -19,6 +19,7 @@ const {
   mockUseAddMember,
   mockUseCheckSlug,
   mockUseSetActiveOrganization,
+  mockUseAvailableCollections,
   mockGetOrganizationRolesMetadata,
   mockListUsers,
   mockListMemberCandidates,
@@ -40,6 +41,7 @@ const {
   mockUseAddMember: vi.fn(),
   mockUseCheckSlug: vi.fn(),
   mockUseSetActiveOrganization: vi.fn(),
+  mockUseAvailableCollections: vi.fn(),
   mockGetOrganizationRolesMetadata: vi.fn(),
   mockListUsers: vi.fn(),
   mockListMemberCandidates: vi.fn(),
@@ -63,6 +65,10 @@ vi.mock("../hooks/useOrganizations", () => ({
   useAddMember: () => mockUseAddMember(),
   useCheckSlug: () => mockUseCheckSlug(),
   useSetActiveOrganization: () => mockUseSetActiveOrganization(),
+}));
+
+vi.mock("../hooks/useAirweaveCollections", () => ({
+  useAirweaveCollections: (...args: unknown[]) => mockUseAvailableCollections(...args),
 }));
 
 vi.mock("../services/adminService", () => ({
@@ -163,8 +169,8 @@ vi.mock("@/shared/components/ui/select", () => ({
   SelectItem: ({ children, value }: { children: ReactNode; value: string }) => (
     <option data-value={value} value={value}>{children}</option>
   ),
-  SelectTrigger: ({ children, ...props }: HTMLAttributes<HTMLDivElement>) => <>{children}</>,
-  SelectValue: ({ placeholder }: { placeholder?: string }) => null,
+  SelectTrigger: ({ children }: HTMLAttributes<HTMLDivElement>) => <>{children}</>,
+  SelectValue: () => null,
 }));
 
 vi.mock("@/shared/components/ui/card", () => ({
@@ -187,7 +193,7 @@ describe("OrganizationsPage", () => {
 
     mockUseOrganizations.mockReturnValue({
       data: {
-        data: [{ id: "org-1", name: "Org One", slug: "org-one", createdAt: new Date() }],
+        data: [{ id: "org-1", name: "Org One", slug: "org-one", createdAt: new Date(), metadata: { airweaveCollectionId: "collection-1", retained: "value" } }],
         total: 1,
         totalPages: 1,
       },
@@ -212,6 +218,32 @@ describe("OrganizationsPage", () => {
     mockUseAddMember.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
     mockUseCheckSlug.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
     mockUseSetActiveOrganization.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
+    mockUseAvailableCollections.mockReturnValue({
+      data: [
+        {
+          id: "collection-1-id",
+          name: "TierOne Collection",
+          readableId: "collection-1",
+          organizationId: "org-1",
+          createdAt: "2026-04-01T00:00:00.000Z",
+          updatedAt: "2026-04-01T00:00:00.000Z",
+          status: "ready",
+          sourceConnectionCount: 2,
+        },
+        {
+          id: "collection-2-id",
+          name: "TierTwo Collection",
+          readableId: "collection-2",
+          organizationId: "org-2",
+          createdAt: "2026-04-02T00:00:00.000Z",
+          updatedAt: "2026-04-02T00:00:00.000Z",
+          status: "ready",
+          sourceConnectionCount: 1,
+        },
+      ],
+      isLoading: false,
+      error: null,
+    });
     mockGetOrganizationRolesMetadata.mockResolvedValue({
       roles: [
         { name: "member", displayName: "Member", description: null, color: null, isSystem: true },
@@ -233,7 +265,10 @@ describe("OrganizationsPage", () => {
       },
       refetch: mockSessionRefetch,
     });
-    mockCan.mockImplementation((resource: string, action: string) => resource === "organization" && action === "invite");
+    mockCan.mockImplementation((resource: string, action: string) =>
+      (resource === "organization" && action === "invite") ||
+      (resource === "project" && action === "read"),
+    );
   });
 
   it("loads add-member candidates from organizationService instead of the global users list", async () => {
@@ -384,7 +419,7 @@ describe("OrganizationsPage – CRUD and member operations", () => {
 
     mockUseOrganizations.mockReturnValue({
       data: {
-        data: [{ id: "org-1", name: "Org One", slug: "org-one", createdAt: new Date() }],
+        data: [{ id: "org-1", name: "Org One", slug: "org-one", createdAt: new Date(), metadata: { airweaveCollectionId: "collection-1", retained: "value" } }],
         total: 1,
         totalPages: 1,
       },
@@ -409,6 +444,32 @@ describe("OrganizationsPage – CRUD and member operations", () => {
     mockUseAddMember.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
     mockUseCheckSlug.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
     mockUseSetActiveOrganization.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
+    mockUseAvailableCollections.mockReturnValue({
+      data: [
+        {
+          id: "collection-1-id",
+          name: "TierOne Collection",
+          readableId: "collection-1",
+          organizationId: "org-1",
+          createdAt: "2026-04-01T00:00:00.000Z",
+          updatedAt: "2026-04-01T00:00:00.000Z",
+          status: "ready",
+          sourceConnectionCount: 2,
+        },
+        {
+          id: "collection-2-id",
+          name: "TierTwo Collection",
+          readableId: "collection-2",
+          organizationId: "org-2",
+          createdAt: "2026-04-02T00:00:00.000Z",
+          updatedAt: "2026-04-02T00:00:00.000Z",
+          status: "ready",
+          sourceConnectionCount: 1,
+        },
+      ],
+      isLoading: false,
+      error: null,
+    })
     mockGetOrganizationRolesMetadata.mockResolvedValue({
       roles: [
         { name: "member", displayName: "Member", description: null, color: null, isSystem: true },
@@ -430,12 +491,13 @@ describe("OrganizationsPage – CRUD and member operations", () => {
     });
     // grant all org permissions by default for these tests
     mockCan.mockImplementation((resource: string, action: string) =>
-      resource === "organization",
+      resource === "organization" || (resource === "project" && action === "read"),
     );
   });
 
   it("shows loading skeletons when organizations are loading", () => {
     mockUseOrganizations.mockReturnValue({ data: undefined, isLoading: true });
+    mockGetOrganizationRolesMetadata.mockImplementation(() => new Promise(() => {}));
     render(<OrganizationsPage />);
     // Skeleton elements should be in the DOM
     expect(document.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(0);
@@ -443,7 +505,9 @@ describe("OrganizationsPage – CRUD and member operations", () => {
 
   it("creates an organization successfully", async () => {
     const createMutate = vi.fn().mockResolvedValue({ id: "org-new" });
+    const setActiveMutate = vi.fn().mockResolvedValue(undefined)
     mockUseCreateOrganization.mockReturnValue({ mutateAsync: createMutate, isPending: false });
+    mockUseSetActiveOrganization.mockReturnValue({ mutateAsync: setActiveMutate, isPending: false })
 
     render(<OrganizationsPage />);
 
@@ -457,9 +521,59 @@ describe("OrganizationsPage – CRUD and member operations", () => {
       expect(createMutate).toHaveBeenCalledWith(
         expect.objectContaining({ name: "New Org" }),
       );
+      expect(setActiveMutate).toHaveBeenCalledWith("org-new")
+      expect(mockSessionRefetch).toHaveBeenCalled()
+      expect(mockRefetchPermissions).toHaveBeenCalled()
       expect(mockToastSuccess).toHaveBeenCalledWith("Organization created successfully");
     });
   });
+
+  it("includes the linked Airweave collection when creating an organization", async () => {
+    const createMutate = vi.fn().mockResolvedValue({ id: "org-new" })
+    mockUseCreateOrganization.mockReturnValue({ mutateAsync: createMutate, isPending: false })
+
+    render(<OrganizationsPage />)
+
+    fireEvent.click(screen.getByRole("button", { name: /create organization/i }))
+    const dialog = await screen.findByRole("dialog")
+
+    fireEvent.change(within(dialog).getByLabelText(/name/i), { target: { value: "TierOne" } })
+    fireEvent.change(within(dialog).getByRole("combobox"), { target: { value: "collection-2" } })
+    fireEvent.click(within(dialog).getByRole("button", { name: /^create$/i }))
+
+    await waitFor(() => {
+      expect(createMutate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "TierOne",
+          metadata: { airweaveCollectionId: "collection-2" },
+        }),
+      )
+    })
+  })
+
+  it("shows a partial-success error when org creation succeeds but active-org switching fails", async () => {
+    const createMutate = vi.fn().mockResolvedValue({ id: "org-new", name: "New Org", slug: "new-org" })
+    const setActiveMutate = vi.fn().mockRejectedValue(new Error("Switch failed"))
+    mockUseCreateOrganization.mockReturnValue({ mutateAsync: createMutate, isPending: false })
+    mockUseSetActiveOrganization.mockReturnValue({ mutateAsync: setActiveMutate, isPending: false })
+
+    render(<OrganizationsPage />)
+
+    fireEvent.click(screen.getByRole("button", { name: /create organization/i }))
+    const dialog = await screen.findByRole("dialog")
+
+    fireEvent.change(within(dialog).getByLabelText(/name/i), { target: { value: "New Org" } })
+    fireEvent.click(within(dialog).getByRole("button", { name: /^create$/i }))
+
+    await waitFor(() => {
+      expect(createMutate).toHaveBeenCalled()
+      expect(setActiveMutate).toHaveBeenCalledWith("org-new")
+      expect(mockToastError).toHaveBeenCalledWith(
+        "Organization created but failed to switch active organization: Switch failed",
+      )
+      expect(mockToastSuccess).toHaveBeenCalledWith("Organization created successfully")
+    })
+  })
 
   it("shows error toast when creating an organization fails", async () => {
     const createMutate = vi.fn().mockRejectedValue(new Error("Create failed"));
@@ -503,6 +617,36 @@ describe("OrganizationsPage – CRUD and member operations", () => {
       expect(mockToastSuccess).toHaveBeenCalledWith("Organization updated successfully");
     });
   });
+
+  it("preserves existing metadata while updating the linked Airweave collection", async () => {
+    const updateMutate = vi.fn().mockResolvedValue({})
+    mockUseUpdateOrganization.mockReturnValue({ mutateAsync: updateMutate, isPending: false })
+
+    render(<OrganizationsPage />)
+
+    const editMenuItem = screen.getByText((content, el) =>
+      el?.tagName === "DIV" && content.trim() === "Edit" && el.querySelector("span") !== null,
+    )
+    fireEvent.click(editMenuItem)
+
+    const dialog = await screen.findByRole("dialog")
+    fireEvent.change(within(dialog).getByRole("combobox"), { target: { value: "collection-2" } })
+    fireEvent.click(within(dialog).getByRole("button", { name: /save changes/i }))
+
+    await waitFor(() => {
+      expect(updateMutate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          organizationId: "org-1",
+          data: expect.objectContaining({
+            metadata: {
+              airweaveCollectionId: "collection-2",
+              retained: "value",
+            },
+          }),
+        }),
+      )
+    })
+  })
 
   it("shows error toast when updating an organization fails", async () => {
     const updateMutate = vi.fn().mockRejectedValue(new Error("Update failed"));
@@ -696,8 +840,8 @@ describe("OrganizationsPage – CRUD and member operations", () => {
     fireEvent.click(screen.getByRole("button", { name: /org one/i }));
     await waitFor(() => expect(screen.getByText("Existing User")).toBeVisible());
 
-    // The role select is the only combobox in the members section
-    const roleSelect = screen.getByRole("combobox");
+    const membersTable = screen.getByRole("table")
+    const roleSelect = within(membersTable).getByRole("combobox");
     fireEvent.change(roleSelect, { target: { value: "manager" } });
 
     await waitFor(() => {
@@ -718,10 +862,19 @@ describe("OrganizationsPage – CRUD and member operations", () => {
     fireEvent.click(screen.getByRole("button", { name: /org one/i }));
     await waitFor(() => expect(screen.getByText("Existing User")).toBeVisible());
 
-    const roleSelect = screen.getByRole("combobox");
+    const membersTable = screen.getByRole("table")
+    const roleSelect = within(membersTable).getByRole("combobox");
+    await waitFor(() => {
+      expect(screen.getByRole("option", { name: "Manager" })).toBeInTheDocument();
+    });
     fireEvent.change(roleSelect, { target: { value: "manager" } });
 
     await waitFor(() => {
+      expect(updateRoleMutate).toHaveBeenCalledWith({
+        organizationId: "org-1",
+        memberId: "member-1",
+        role: "manager",
+      });
       expect(mockToastError).toHaveBeenCalledWith("Role update failed");
     });
   });
@@ -818,7 +971,7 @@ describe("OrganizationsPage – CRUD and member operations", () => {
   it("opens the edit dialog and cancels without saving", async () => {
     const updateMutate = vi.fn();
     mockUseUpdateOrganization.mockReturnValue({ mutateAsync: updateMutate, isPending: false });
-    mockCan.mockImplementation((resource: string, action: string) =>
+    mockCan.mockImplementation((resource: string) =>
       resource === "organization",
     );
 

@@ -3,32 +3,6 @@ import { API_BASE_URL, TEST_USER } from './env';
 import { uniqueEmail, withDatabase } from './test-helpers';
 import { resendTestEmail } from '../src/shared/utils/resendTestEmail';
 
-// Helper to create a verified user directly via API
-async function createVerifiedUser(email: string, password: string, name: string) {
-  // Create user via API
-  const signupResponse = await fetch(`${API_BASE_URL}/api/auth/sign-up/email`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password, name }),
-  });
-
-  if (!signupResponse.ok) {
-    const error = await signupResponse.json().catch(() => ({}));
-    throw new Error(`Signup failed: ${error.message || signupResponse.statusText}`);
-  }
-
-  // Verify email directly in database (test mode bypass)
-  // In production, this would be done via email verification link
-  const verifyResponse = await fetch(`${API_BASE_URL}/api/auth/admin/set-user-verified`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email }),
-  }).catch(() => null);
-
-  // If admin endpoint doesn't exist, try direct DB update via test endpoint
-  // For now, we'll use the test user that's already verified in the database
-}
-
 test.describe('Authentication E2E Tests', () => {
   test.describe('Signup Flow', () => {
     test('should display signup page correctly', async ({ page }) => {

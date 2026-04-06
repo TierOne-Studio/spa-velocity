@@ -49,10 +49,12 @@ import {
   useCheckSlug,
   useSetActiveOrganization,
 } from "../hooks/useOrganizations"
+import { useAirweaveCollections } from "../hooks/useAirweaveCollections"
 import { organizationService } from "../services/adminService"
 import { getOrganizationRolesMetadata } from "../services/adminService"
 import { usePermissionsContext } from "@/shared/context/PermissionsContext"
 import { useEffectiveSession } from "@/shared/hooks/useEffectiveSession"
+import type { AirweaveCollection } from "../types"
 
 interface Organization {
   id: string
@@ -82,6 +84,12 @@ interface User {
   image?: string | null
 }
 
+type OrganizationFormState = {
+  name: string
+  slug: string
+  airweaveCollectionId: string
+}
+
 const dedupeRoleNames = (roleNames: string[]) => Array.from(new Set(roleNames))
 
 // Helper to extract members array from response
@@ -92,6 +100,35 @@ const getMembersArray = (data: unknown): Member[] => {
     return (data as { members: Member[] }).members
   }
   return []
+}
+
+const readOrganizationMetadata = (metadata: unknown): Record<string, unknown> => {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return {}
+  }
+
+  return { ...(metadata as Record<string, unknown>) }
+}
+
+const readOrganizationCollectionId = (metadata: unknown): string => {
+  const value = readOrganizationMetadata(metadata).airweaveCollectionId
+  return typeof value === "string" ? value.trim() : ""
+}
+
+const buildOrganizationMetadata = (
+  metadata: unknown,
+  airweaveCollectionId: string,
+): Record<string, unknown> | undefined => {
+  const nextMetadata = readOrganizationMetadata(metadata)
+  const trimmedCollectionId = airweaveCollectionId.trim()
+
+  if (trimmedCollectionId) {
+    nextMetadata.airweaveCollectionId = trimmedCollectionId
+  } else {
+    delete nextMetadata.airweaveCollectionId
+  }
+
+  return Object.keys(nextMetadata).length > 0 ? nextMetadata : undefined
 }
 
 
@@ -115,8 +152,16 @@ export function OrganizationsPage() {
   const pageSize = 10
 
   // Form state
-  const [newOrgData, setNewOrgData] = useState({ name: "", slug: "" })
-  const [editOrgData, setEditOrgData] = useState({ name: "", slug: "" })
+  const [newOrgData, setNewOrgData] = useState<OrganizationFormState>({
+    name: "",
+    slug: "",
+    airweaveCollectionId: "",
+  })
+  const [editOrgData, setEditOrgData] = useState<OrganizationFormState>({
+    name: "",
+    slug: "",
+    airweaveCollectionId: "",
+  })
   const [addMemberData, setAddMemberData] = useState({ userId: "", role: "member" })
   const [availableUsers, setAvailableUsers] = useState<User[]>([])
   const [usersLoading, setUsersLoading] = useState(false)
@@ -143,18 +188,27 @@ export function OrganizationsPage() {
     isSuperadmin || organizationId === currentActiveOrganizationId
   const canManageSelectedOrganization =
     !!selectedOrg && canManageOrganizationFromPage(selectedOrg.id)
+  const canReadOrganizations = can('organization', 'read')
 
   // Queries
   const { data: orgsResponse, isLoading: orgsLoading } = useOrganizations({ page, limit: pageSize, search: search || undefined })
-  const { data: membersData, isLoading: membersLoading } = useOrganizationMembers(
+  const { data: membersData, isLoading: membersLoading, refetch: refetchMembers } = useOrganizationMembers(
     selectedOrg?.id ?? "",
   )
+  const {
+    data: availableCollections = [],
+    isLoading: collectionsLoading,
+    error: collectionsError,
+  } = useAirweaveCollections({ enabled: canReadOrganizations })
 
   // Extract arrays from response data
   const organizations = orgsResponse?.data ?? []
   const totalPages = orgsResponse?.totalPages ?? 1
   const total = orgsResponse?.total ?? 0
   const members = getMembersArray(membersData)
+  const selectedOrgCollectionId = readOrganizationCollectionId(selectedOrg?.metadata)
+  const selectedOrgCollection =
+    availableCollections.find((collection) => collection.readableId === selectedOrgCollectionId) ?? null
 
   // Mutations
   const createOrg = useCreateOrganization()
@@ -171,6 +225,15 @@ export function OrganizationsPage() {
       setOptimisticActiveOrganizationId(null)
     }
   }, [activeOrganizationId])
+
+  useEffect(() => {
+    setAvailableUsers([])
+    setAddMemberData({ userId: "", role: "member" })
+
+    if (selectedOrg?.id && typeof refetchMembers === "function") {
+      void refetchMembers()
+    }
+  }, [refetchMembers, selectedOrg?.id])
 
   // Fetch organization roles metadata whenever the selected org changes
   useEffect(() => {
@@ -243,13 +306,33 @@ export function OrganizationsPage() {
     }
 
     try {
-      await createOrg.mutateAsync({
+      const createdOrganization = await createOrg.mutateAsync({
         name: newOrgData.name,
         slug: newOrgData.slug.toLowerCase().replace(/\s+/g, "-"),
+        metadata: buildOrganizationMetadata(undefined, newOrgData.airweaveCollectionId),
       })
+
+      if (createdOrganization?.id) {
+        setOptimisticActiveOrganizationId(createdOrganization.id)
+        setSelectedOrg(createdOrganization)
+
+        try {
+          await setActiveOrganization.mutateAsync(createdOrganization.id)
+          await refetchSession()
+          refetchPermissions()
+        } catch (error) {
+          setOptimisticActiveOrganizationId(null)
+          toast.error(
+            error instanceof Error
+              ? `Organization created but failed to switch active organization: ${error.message}`
+              : "Organization created but failed to switch active organization",
+          )
+        }
+      }
+
       toast.success("Organization created successfully")
       setCreateDialogOpen(false)
-      setNewOrgData({ name: "", slug: "" })
+      setNewOrgData({ name: "", slug: "", airweaveCollectionId: "" })
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to create organization")
     }
@@ -265,7 +348,11 @@ export function OrganizationsPage() {
     try {
       await updateOrg.mutateAsync({
         organizationId: selectedOrg.id,
-        data: { name: editOrgData.name, slug: editOrgData.slug },
+        data: {
+          name: editOrgData.name,
+          slug: editOrgData.slug,
+          metadata: buildOrganizationMetadata(selectedOrg.metadata, editOrgData.airweaveCollectionId),
+        },
       })
       toast.success("Organization updated successfully")
       setEditDialogOpen(false)
@@ -372,7 +459,11 @@ export function OrganizationsPage() {
   }
 
   const openEditDialog = (org: Organization) => {
-    setEditOrgData({ name: org.name, slug: org.slug })
+    setEditOrgData({
+      name: org.name,
+      slug: org.slug,
+      airweaveCollectionId: readOrganizationCollectionId(org.metadata),
+    })
     setEditDialogOpen(true)
   }
 
@@ -525,6 +616,20 @@ export function OrganizationsPage() {
               </div>
             ) : (
               <div className="space-y-6">
+                <div className="rounded-lg border p-4">
+                  <div className="text-sm font-medium text-muted-foreground">Linked Airweave collection</div>
+                  <div className="mt-1 font-medium">
+                    {selectedOrgCollection?.name ?? (selectedOrgCollectionId || "Not configured")}
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    {selectedOrgCollectionId
+                      ? selectedOrgCollection
+                        ? `${selectedOrgCollection.readableId} · ${selectedOrgCollection.sourceConnectionCount} source${selectedOrgCollection.sourceConnectionCount === 1 ? "" : "s"}`
+                        : selectedOrgCollectionId
+                      : "Configure this on the organization to enable organization-scoped chat."}
+                  </div>
+                </div>
+
                 {/* Members Section */}
                 <div>
                   <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
@@ -687,6 +792,39 @@ export function OrganizationsPage() {
                 URL: /{newOrgData.slug || "my-organization"}
               </p>
             </div>
+            <div className="grid gap-2">
+              <Label htmlFor="org-airweave-collection">Airweave Collection</Label>
+              <Select
+                value={newOrgData.airweaveCollectionId}
+                disabled={!canReadOrganizations || collectionsLoading || availableCollections.length === 0}
+                onValueChange={(value) => setNewOrgData({ ...newOrgData, airweaveCollectionId: value })}
+              >
+                <SelectTrigger id="org-airweave-collection">
+                  <SelectValue placeholder={collectionsLoading ? "Loading collections..." : "Select a collection"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableCollections.map((collection: AirweaveCollection) => (
+                    <SelectItem key={collection.id} value={collection.readableId}>
+                      {collection.name}
+                    </SelectItem>
+                  ))}
+                  {availableCollections.length === 0 && !collectionsLoading && (
+                    <SelectItem value="__no_collections__" disabled>
+                      No collections available
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+              <p className="text-sm text-muted-foreground">
+                {collectionsError instanceof Error
+                  ? collectionsError.message
+                  : !canReadOrganizations
+                    ? "You need project read access to browse available collections."
+                    : newOrgData.airweaveCollectionId
+                      ? `Chat will use collection ${newOrgData.airweaveCollectionId}.`
+                      : "Optional, but required for organization-scoped chat."}
+              </p>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>
@@ -725,6 +863,44 @@ export function OrganizationsPage() {
                 value={editOrgData.slug}
                 onChange={(e) => setEditOrgData({ ...editOrgData, slug: e.target.value })}
               />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-org-airweave-collection">Airweave Collection</Label>
+              <Select
+                value={editOrgData.airweaveCollectionId}
+                disabled={!canReadOrganizations || collectionsLoading || availableCollections.length === 0}
+                onValueChange={(value) => setEditOrgData({ ...editOrgData, airweaveCollectionId: value })}
+              >
+                <SelectTrigger id="edit-org-airweave-collection">
+                  <SelectValue placeholder={collectionsLoading ? "Loading collections..." : "Select a collection"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {editOrgData.airweaveCollectionId && !availableCollections.some((collection) => collection.readableId === editOrgData.airweaveCollectionId) && (
+                    <SelectItem value={editOrgData.airweaveCollectionId}>
+                      {editOrgData.airweaveCollectionId} (currently linked)
+                    </SelectItem>
+                  )}
+                  {availableCollections.map((collection: AirweaveCollection) => (
+                    <SelectItem key={collection.id} value={collection.readableId}>
+                      {collection.name}
+                    </SelectItem>
+                  ))}
+                  {availableCollections.length === 0 && !collectionsLoading && (
+                    <SelectItem value="__no_collections__" disabled>
+                      No collections available
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+              <p className="text-sm text-muted-foreground">
+                {collectionsError instanceof Error
+                  ? collectionsError.message
+                  : !canReadOrganizations
+                    ? "You need project read access to browse available collections."
+                    : editOrgData.airweaveCollectionId
+                      ? `Chat will use collection ${editOrgData.airweaveCollectionId}.`
+                      : "Optional, but required for organization-scoped chat."}
+              </p>
             </div>
           </div>
           <DialogFooter>

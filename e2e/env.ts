@@ -6,9 +6,14 @@ import { DEFAULT_E2E_TEST_USER_EMAIL } from '../src/shared/utils/resendTestEmail
 /**
  * Shared E2E environment configuration.
  *
- * Reads values from nestjs-api-starter/.env.test so that every E2E spec,
+ * Reads values from the backend's .env.test so that every E2E spec,
  * global-setup, and global-teardown use the same test credentials and
  * database without hard-coding them.
+ *
+ * IMPORTANT: The .env.test file is the single source of truth for the test
+ * database URL. Ambient environment variables (e.g. DATABASE_URL from a shell
+ * profile) are intentionally ignored to prevent tests from accidentally
+ * running against the development database.
  */
 
 const __filename = fileURLToPath(import.meta.url);
@@ -32,6 +37,7 @@ function parseEnvFile(filePath: string): Record<string, string> {
 function resolveBackendProjectRoot(): string {
   const candidates = [
     process.env.E2E_BACKEND_PROJECT_ROOT,
+    resolve(__dirname, '../../api-velocity'),
     resolve(__dirname, '../../api-ampliri'),
     resolve(__dirname, '../../nestjs-api-starter'),
   ].filter((value): value is string => Boolean(value));
@@ -42,15 +48,13 @@ function resolveBackendProjectRoot(): string {
     }
   }
 
-  return resolve(__dirname, '../../api-ampliri');
+  return resolve(__dirname, '../../api-velocity');
 }
 
 function resolveBackendEnvFile(backendProjectRoot: string): string {
   const candidates = [
     process.env.E2E_BACKEND_ENV_FILE,
     resolve(backendProjectRoot, '.env.test'),
-    resolve(backendProjectRoot, '.env'),
-    resolve(__dirname, '../.env.test'),
   ].filter((value): value is string => Boolean(value));
 
   for (const candidate of candidates) {
@@ -59,12 +63,31 @@ function resolveBackendEnvFile(backendProjectRoot: string): string {
     }
   }
 
-  return resolve(backendProjectRoot, '.env.test');
+  throw new Error(
+    `E2E env resolution failed: could not find .env.test in ${backendProjectRoot}. ` +
+    `Create the file or set E2E_BACKEND_ENV_FILE to point to your test env file.`,
+  );
+}
+
+/**
+ * Validate that a database URL points to a test database, not a development/production one.
+ * Throws if the URL looks like it targets a non-test database.
+ */
+function assertTestDatabaseUrl(url: string, source: string): void {
+  const dbName = url.split('/').pop()?.split('?')[0] || '';
+  if (!dbName.includes('test')) {
+    throw new Error(
+      `E2E safety check failed: DATABASE_URL from ${source} points to database "${dbName}" ` +
+      `which does not contain "test" in its name. Refusing to run E2E tests against a ` +
+      `non-test database to prevent data loss. ` +
+      `Expected a database name containing "test" (e.g. nestjs-api-starter-test).`,
+    );
+  }
 }
 
 const backendProjectRoot = resolveBackendProjectRoot();
 const envTestPath = resolveBackendEnvFile(backendProjectRoot);
-const envVars = existsSync(envTestPath) ? parseEnvFile(envTestPath) : {};
+const envVars = parseEnvFile(envTestPath);
 
 export const BACKEND_PROJECT_ROOT = backendProjectRoot;
 
@@ -74,17 +97,28 @@ export const ENV_TEST_PATH = envTestPath;
 /** All raw key-value pairs from .env.test (useful for passing to webServer env) */
 export const ENV_VARS = envVars;
 
-/** PostgreSQL connection string from .env.test */
-export const DATABASE_URL = process.env.E2E_DATABASE_URL || process.env.DATABASE_URL || envVars.DATABASE_URL;
+/**
+ * PostgreSQL connection string for E2E tests.
+ *
+ * Priority: E2E_DATABASE_URL (explicit override) > .env.test value.
+ * We intentionally do NOT fall back to process.env.DATABASE_URL because that
+ * typically contains the development database URL and would break isolation.
+ */
+export const DATABASE_URL = process.env.E2E_DATABASE_URL || envVars.DATABASE_URL;
+
+// Validate at import time — fail fast before any test infrastructure starts.
+if (DATABASE_URL) {
+  assertTestDatabaseUrl(DATABASE_URL, process.env.E2E_DATABASE_URL ? 'E2E_DATABASE_URL' : envTestPath);
+}
 
 /** Backend base URL (e.g. http://localhost:3000) */
-export const API_BASE_URL = process.env.E2E_API_BASE_URL || process.env.API_BASE_URL || envVars.BASE_URL || `http://localhost:${envVars.PORT || '3000'}`;
+export const API_BASE_URL = process.env.E2E_API_BASE_URL || envVars.BASE_URL || `http://localhost:${envVars.PORT || '3000'}`;
 
 /** Frontend base URL */
-export const FE_URL = process.env.E2E_FE_URL || process.env.FE_URL || envVars.FE_URL || 'http://localhost:5173';
+export const FE_URL = process.env.E2E_FE_URL || envVars.FE_URL || 'http://localhost:5173';
 
 /** Pre-seeded test user credentials */
 export const TEST_USER = {
-  email: process.env.E2E_TEST_USER_EMAIL || process.env.TEST_USER_EMAIL || DEFAULT_E2E_TEST_USER_EMAIL,
-  password: process.env.E2E_TEST_USER_PASSWORD || process.env.TEST_USER_PASSWORD || 'password123',
+  email: process.env.E2E_TEST_USER_EMAIL || DEFAULT_E2E_TEST_USER_EMAIL,
+  password: process.env.E2E_TEST_USER_PASSWORD || 'password123',
 };

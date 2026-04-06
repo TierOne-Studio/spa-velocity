@@ -6,7 +6,6 @@ import {
   escapeRegExp,
   ensureUserWithRole,
   findOrganizationListItemBySlug,
-  setActiveOrganizationForUserSessions,
   uniqueEmail,
 } from './test-helpers';
 import {

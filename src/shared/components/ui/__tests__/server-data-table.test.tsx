@@ -36,8 +36,8 @@ vi.mock("@/shared/components/ui/select", () => ({
   SelectItem: ({ children, value }: { children: ReactNode; value: string }) => (
     <option value={value}>{children}</option>
   ),
-  SelectTrigger: ({ children, id }: { children: ReactNode; id?: string }) => <>{children}</>,
-  SelectValue: ({ placeholder }: { placeholder?: string | number }) => null,
+  SelectTrigger: ({ children }: { children: ReactNode; id?: string }) => <>{children}</>,
+  SelectValue: () => null,
 }))
 
 import { ServerDataTable } from "../server-data-table"

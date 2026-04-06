@@ -25,9 +25,22 @@ vi.mock("@features/Admin", () => ({
   RolesPage: () => <div>Roles</div>,
 }));
 
-vi.mock("../RootLayout", () => ({
-  default: () => <div>Root Layout</div>,
+vi.mock("@features/Chat", () => ({
+  ChatPage: () => <div>Chat</div>,
 }));
+
+vi.mock("../RootLayout", async () => {
+  const router = await vi.importActual<typeof import("react-router-dom")>("react-router-dom");
+
+  return {
+    default: () => (
+      <div>
+        <div>Root Layout</div>
+        <router.Outlet />
+      </div>
+    ),
+  };
+});
 
 vi.mock("@shared/components/ui", () => ({
   ThemeProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -76,5 +89,22 @@ describe("AppRoutes", () => {
     render(<AppRoutes />);
 
     expect(screen.getByText("Something went wrong")).toBeInTheDocument();
+  });
+
+  it("renders the chat route", () => {
+    window.history.pushState({}, "", "/chat");
+
+    render(<AppRoutes />);
+
+    expect(screen.getByText("Chat")).toBeInTheDocument();
+  });
+
+  it("redirects removed project routes back to the dashboard", () => {
+    window.history.pushState({}, "", "/projects");
+
+    render(<AppRoutes />);
+
+    expect(screen.getByText("Dashboard")).toBeInTheDocument();
+    expect(screen.queryByText("Chat")).not.toBeInTheDocument();
   });
 });

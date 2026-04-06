@@ -26,6 +26,8 @@ import {
 } from "../useOrganizations"
 import { organizationService } from "../../services/adminService"
 
+const mockUseEffectiveSession = vi.fn()
+
 // Mock the organization service
 vi.mock("../../services/adminService", () => ({
   organizationService: {
@@ -49,6 +51,10 @@ vi.mock("../../services/adminService", () => ({
     setActive: vi.fn(),
     checkSlug: vi.fn(),
   },
+}))
+
+vi.mock("@/shared/hooks/useEffectiveSession", () => ({
+  useEffectiveSession: () => mockUseEffectiveSession(),
 }))
 
 // Get typed mock references
@@ -91,15 +97,25 @@ const createWrapper = () => {
 describe("useOrganizations hooks", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockUseEffectiveSession.mockReturnValue({
+      data: {
+        user: { id: "user-1" },
+        session: { activeOrganizationId: "org-1" },
+      },
+    })
   })
 
   describe("organizationKeys", () => {
     it("should generate correct query keys", () => {
       expect(organizationKeys.all).toEqual(["organizations"])
-      expect(organizationKeys.list({})).toEqual(["organizations", "list", {}])
-      expect(organizationKeys.detail("org-1")).toEqual(["organizations", "detail", "org-1"])
+      expect(organizationKeys.list({}, { userId: "user-1", activeOrganizationId: "org-1" })).toEqual(["organizations", "list", "user-1", "org-1", {}])
+      expect(organizationKeys.detail("org-1", { userId: "user-1", activeOrganizationId: "org-1" })).toEqual(["organizations", "detail", "user-1", "org-1", "org-1"])
       expect(organizationKeys.userInvitations()).toEqual(["organizations", "userInvitations"])
       expect(organizationKeys.activeMember()).toEqual(["organizations", "activeMember"])
+    })
+
+    it("should fall back to anonymous query scope", () => {
+      expect(organizationKeys.members("org-1")).toEqual(["organizations", "members", "anonymous", "no-org", "org-1"])
     })
   })
 
@@ -440,11 +456,11 @@ describe("useOrganizations hooks", () => {
 
   describe("organizationKeys completeness", () => {
     it("should generate members key", () => {
-      expect(organizationKeys.members("org-1")).toEqual(["organizations", "members", "org-1"])
+      expect(organizationKeys.members("org-1", { userId: "user-1", activeOrganizationId: "org-1" })).toEqual(["organizations", "members", "user-1", "org-1", "org-1"])
     })
 
     it("should generate invitations key", () => {
-      expect(organizationKeys.invitations("org-1")).toEqual(["organizations", "invitations", "org-1"])
+      expect(organizationKeys.invitations("org-1", { userId: "user-1", activeOrganizationId: "org-1" })).toEqual(["organizations", "invitations", "user-1", "org-1", "org-1"])
     })
 
     it("should generate lists key", () => {

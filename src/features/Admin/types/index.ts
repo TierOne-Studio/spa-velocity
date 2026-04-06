@@ -61,6 +61,17 @@ export interface OrganizationInvitation {
     inviterId: string;
 }
 
+export interface AirweaveCollection {
+    id: string;
+    name: string;
+    readableId: string;
+    organizationId: string;
+    createdAt: string;
+    updatedAt: string;
+    status: string | null;
+    sourceConnectionCount: number;
+}
+
 // Pagination types
 export interface PaginationParams {
     limit?: number;

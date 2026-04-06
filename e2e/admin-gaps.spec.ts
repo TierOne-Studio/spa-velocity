@@ -22,7 +22,7 @@ async function ensureAdminRole(): Promise<void> {
 
 async function restoreUser(): Promise<void> {
   await withDatabase(async (pool) => {
-    await pool.query(`UPDATE "user" SET role = 'member', "emailVerified" = false WHERE email = $1`, [TEST_USER.email]);
+    await pool.query(`UPDATE "user" SET role = 'member', "emailVerified" = true WHERE email = $1`, [TEST_USER.email]);
   });
 }
 

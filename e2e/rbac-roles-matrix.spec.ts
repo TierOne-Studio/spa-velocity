@@ -3,7 +3,6 @@ import { test, expect, type Page } from '@playwright/test';
 import {
   ensureOrganizationMembership,
   ensureUserWithRole,
-  setActiveOrganizationForUserSessions,
   uniqueEmail,
 } from './test-helpers';
 import {

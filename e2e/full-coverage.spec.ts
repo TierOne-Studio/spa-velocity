@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { Pool } from 'pg';
-import { DATABASE_URL, API_BASE_URL, TEST_USER } from './env';
+import { DATABASE_URL, TEST_USER } from './env';
 import { uniqueEmail } from './test-helpers';
 
 /**

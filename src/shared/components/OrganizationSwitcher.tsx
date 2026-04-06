@@ -148,15 +148,10 @@ export function OrganizationSwitcher() {
       ? `${effectiveUser.id ?? "unknown"}:${Array.isArray(effectiveUser.role) ? effectiveUser.role.join(",") : effectiveUser.role ?? "unknown"}`
       : null
 
-    if (effectiveRole === "superadmin") {
-      lastFetchedUserKeyRef.current = userKey
-      setOrganizations([])
-      setActiveMember(null)
-      setOrgsLoading(false)
-      return
-    }
+    const shouldRefetchForActiveOrganization =
+      !!activeOrganizationId && !organizations.some((org) => org.id === activeOrganizationId)
 
-    if (lastFetchedUserKeyRef.current === userKey) {
+    if (lastFetchedUserKeyRef.current === userKey && !shouldRefetchForActiveOrganization) {
       return
     }
 
@@ -172,8 +167,8 @@ export function OrganizationSwitcher() {
         const resolvedMember = member ?? (activeOrganizationId ? { organizationId: activeOrganizationId } : null)
         setActiveMember(resolvedMember)
 
-        // Auto-activate first org if user has orgs but none is active
-        if (orgs.length > 0 && !resolvedMember?.organizationId) {
+        // Auto-activate only when there is a single possible org and none is active yet.
+        if (orgs.length === 1 && !resolvedMember?.organizationId) {
           try {
             await setActiveOrganization(orgs[0].id)
             await refreshAfterOrgChange()
@@ -189,7 +184,7 @@ export function OrganizationSwitcher() {
       }
     }
     fetchData()
-  }, [activeOrganizationId, effectiveRole, effectiveUser, getActiveMemberSafely, listOrganizationsViaApi, refreshAfterOrgChange, setActiveOrganization])
+  }, [activeOrganizationId, effectiveRole, effectiveUser, getActiveMemberSafely, listOrganizationsViaApi, setActiveOrganization])
 
   const [isLoading, setIsLoading] = useState(false)
 
@@ -209,7 +204,7 @@ export function OrganizationSwitcher() {
   const activeOrg = organizations.find(
     (org) => org.id === (activeMember?.organizationId ?? activeOrganizationId ?? undefined)
   )
-  const displayedOrg = activeOrg ?? organizations[0] ?? null
+  const displayedOrg = activeOrg ?? (organizations.length === 1 ? organizations[0] : null)
 
   const refreshData = async () => {
     const [orgs, memberResult] = await Promise.all([listOrganizationsViaApi(), getActiveMemberSafely()])
@@ -236,11 +231,13 @@ export function OrganizationSwitcher() {
     return <Skeleton className="h-9 w-40" />
   }
 
-  if (effectiveRole === "superadmin") {
-    return null
-  }
-
-  const isSelectorDisabled = isLoading || organizations.length <= 1
+  const resolvedActiveOrganizationId = activeMember?.organizationId ?? activeOrganizationId ?? null
+  const isOnlyVisibleOrganizationActive =
+    organizations.length === 1 && organizations[0]?.id === resolvedActiveOrganizationId
+  const isSelectorDisabled =
+    isLoading ||
+    organizations.length === 0 ||
+    isOnlyVisibleOrganizationActive
 
   return (
     <DropdownMenu>
@@ -253,7 +250,7 @@ export function OrganizationSwitcher() {
           <div className="flex items-center gap-2">
             <IconBuilding className="h-4 w-4" />
             <span className="truncate max-w-[120px]">
-              {displayedOrg?.name ?? "No Organization"}
+              {displayedOrg?.name ?? (organizations.length > 0 ? "Select Organization" : "No Organization")}
             </span>
           </div>
           <IconChevronDown className="h-4 w-4 opacity-50" />

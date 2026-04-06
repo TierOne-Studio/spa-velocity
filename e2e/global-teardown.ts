@@ -15,6 +15,8 @@ async function globalTeardown() {
       `E2E teardown failed: DATABASE_URL is missing. Set E2E_DATABASE_URL or provide DATABASE_URL in ${ENV_TEST_PATH}.`,
     );
   }
+
+  console.log(`🔒 E2E teardown using database: ${databaseUrl.replace(/\/\/.*@/, '//<credentials>@')}`);
   
   const pool = new Pool({
     connectionString: databaseUrl,
