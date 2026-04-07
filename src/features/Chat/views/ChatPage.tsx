@@ -2,9 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { IconMessageCircle, IconPlus, IconTrash } from "@tabler/icons-react";
 import { useQueryClient } from "@tanstack/react-query";
+import ReactMarkdown from "react-markdown";
 import { toast } from "sonner";
 import { usePermissionsContext } from "@/shared/context/PermissionsContext";
 import { useEffectiveSession } from "@/shared/hooks/useEffectiveSession";
+import { isSuperadminRole, getActiveOrganizationId, getSessionUserRole } from "@/shared/utils/roles";
 import { useOrganizations } from "@/features/Admin/hooks/useOrganizations";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card";
@@ -46,28 +48,14 @@ function getSources(message: ChatMessage): ChatSource[] {
   return Array.isArray(sources) ? sources : [];
 }
 
-function isSuperadminRole(role: string | string[] | undefined): boolean {
-  if (Array.isArray(role)) {
-    return role.includes("superadmin");
-  }
-
-  return String(role ?? "")
-    .split(",")
-    .map((value) => value.trim())
-    .filter(Boolean)
-    .includes("superadmin");
-}
-
 export function ChatPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { conversationId } = useParams<{ conversationId?: string }>();
   const { can } = usePermissionsContext();
   const { data: session } = useEffectiveSession();
-  const activeOrganizationId =
-    (session?.session as { activeOrganizationId?: string } | undefined)?.activeOrganizationId ?? null;
-  const sessionUser = session?.user as { role?: string | string[] } | undefined;
-  const isSuperadmin = isSuperadminRole(sessionUser?.role);
+  const activeOrganizationId = getActiveOrganizationId(session);
+  const isSuperadmin = isSuperadminRole(getSessionUserRole(session));
   const [draft, setDraft] = useState("");
   const [selectedOrganizationId, setSelectedOrganizationId] = useState(activeOrganizationId ?? "");
   const [pendingConversationId, setPendingConversationId] = useState<string | null>(null);
@@ -448,7 +436,13 @@ export function ChatPage() {
                             {new Date(message.createdAt).toLocaleTimeString()}
                           </div>
                         </div>
-                        <div className="whitespace-pre-wrap text-sm leading-6">{message.content}</div>
+                        {message.role === "assistant" ? (
+                          <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-6">
+                            <ReactMarkdown>{message.content}</ReactMarkdown>
+                          </div>
+                        ) : (
+                          <div className="whitespace-pre-wrap text-sm leading-6">{message.content}</div>
+                        )}
                         {sources.length > 0 && (
                           <>
                             <Separator className="my-3" />
@@ -478,8 +472,12 @@ export function ChatPage() {
                       <div className="font-medium capitalize">assistant</div>
                       <div className="text-xs text-muted-foreground">Streaming...</div>
                     </div>
-                    <div className="whitespace-pre-wrap text-sm leading-6">
-                      {streamingAssistant.content || "Thinking..."}
+                    <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-6">
+                      {streamingAssistant.content ? (
+                        <ReactMarkdown>{streamingAssistant.content}</ReactMarkdown>
+                      ) : (
+                        "Thinking..."
+                      )}
                     </div>
                   </div>
                 )}

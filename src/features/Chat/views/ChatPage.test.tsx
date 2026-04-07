@@ -64,6 +64,10 @@ vi.mock("sonner", () => ({
   },
 }));
 
+vi.mock("react-markdown", () => ({
+  default: ({ children }: { children: string }) => <div data-testid="react-markdown">{children}</div>,
+}));
+
 import { ChatPage } from "./ChatPage";
 
 const conversations = [

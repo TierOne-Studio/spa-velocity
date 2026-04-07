@@ -298,6 +298,6 @@ test.describe.serial('Organization collection assignment and chat flow', () => {
     await expect(page.getByText(/organization-scoped chat is using the linked airweave collection/i)).toBeVisible({
       timeout: 15000,
     });
-    await expect(page.getByRole('link', { name: /tiertwo collection guide/i })).toBeVisible();
+    await expect(page.getByRole('link', { name: /tiertwo collection guide/i }).first()).toBeVisible();
   });
 });

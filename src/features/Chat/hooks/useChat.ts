@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffectiveSession } from "@/shared/hooks/useEffectiveSession";
+import { getActiveOrganizationId } from "@/shared/utils/roles";
 import { chatService } from "../services/chatService";
 import type { CreateConversationInput } from "../types";
 
@@ -29,8 +30,7 @@ export const chatKeys = {
 
 function useChatQueryScope(requestedOrganizationId?: string | null): ChatQueryScope {
   const { data: session } = useEffectiveSession();
-  const activeOrganizationId =
-    (session?.session as { activeOrganizationId?: string } | undefined)?.activeOrganizationId ?? null;
+  const activeOrganizationId = getActiveOrganizationId(session);
 
   return {
     userId: session?.user?.id ?? null,

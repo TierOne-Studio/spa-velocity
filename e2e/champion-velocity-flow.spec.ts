@@ -187,6 +187,6 @@ test.describe.serial('Champion Velocity full flow', () => {
     await page.getByRole('button', { name: /^send$/i }).click();
 
     await expect(page.getByText(/deployments run through the ci workflow/i)).toBeVisible({ timeout: 15000 });
-    await expect(page.getByRole('link', { name: /deploy guide/i })).toBeVisible();
+    await expect(page.getByRole('link', { name: /deploy guide/i }).first()).toBeVisible();
   });
 });
