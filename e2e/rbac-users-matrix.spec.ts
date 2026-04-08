@@ -4,7 +4,6 @@ import {
   ensureOrganizationMembership,
   ensureUserRecord,
   ensureUserWithRole,
-  setActiveOrganizationForUserSessions,
   uniqueEmail,
 } from './test-helpers';
 import {

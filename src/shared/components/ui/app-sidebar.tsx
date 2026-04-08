@@ -5,6 +5,7 @@ import {
   IconDashboard,
   IconHome,
   IconInnerShadowTop,
+  IconMessageCircle,
   IconShield,
   IconUsers,
   IconUserScan,
@@ -27,6 +28,7 @@ import {
 import { OrganizationSwitcher } from "@/shared/components/OrganizationSwitcher"
 import { useAuth } from "@/shared/context/AuthContext"
 import { usePermissionsContext } from "@/shared/context/PermissionsContext"
+import { isSuperadminRole } from "@/shared/utils/roles"
 
 // Navigation configuration
 const getNavItems = (
@@ -82,7 +84,7 @@ const getNavItems = (
       {
         title: "Main",
         icon: IconHome,
-        isActive: pathname === "/",
+        isActive: pathname === "/" || pathname.startsWith("/chat"),
         items: [
           {
             title: "Dashboard",
@@ -90,6 +92,16 @@ const getNavItems = (
             icon: IconDashboard,
             isActive: pathname === "/",
           },
+          ...(can("organization", "read")
+            ? [
+                {
+                  title: "Chat",
+                  url: "/chat",
+                  icon: IconMessageCircle,
+                  isActive: pathname.startsWith("/chat"),
+                },
+              ]
+            : []),
         ],
       },
       ...(adminItems.length > 0
@@ -112,6 +124,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { can } = usePermissionsContext()
   const location = useLocation()
   const navItems = getNavItems(location.pathname, can)
+  const isSuperadmin = isSuperadminRole(user?.role)
 
   const userData = {
     name: user?.name ?? "User",
@@ -137,7 +150,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        {user && user.role !== "superadmin" && (
+        {user && !isSuperadmin && (
           <SidebarGroup>
             <SidebarGroupLabel>Organization</SidebarGroupLabel>
             <div className="px-2">

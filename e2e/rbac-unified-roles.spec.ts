@@ -63,18 +63,41 @@ async function ensureOrganizationForTestUser(params: {
 async function setActiveOrganizationForUserSessions(organizationId: string) {
   await withDatabase(async (pool) => {
     await pool.query(
-      `UPDATE session SET "activeOrganizationId" = $1
+      `UPDATE session
+       SET "activeOrganizationId" = $1
        WHERE "userId" IN (SELECT id FROM "user" WHERE email = $2)`,
       [organizationId, TEST_USER.email],
     );
   });
 }
 
+async function setActiveOrganization(page: Page, organizationId: string) {
+  await page.evaluate(
+    async ({ apiBaseUrl, nextOrganizationId }) => {
+      const token = window.localStorage.getItem('bearer_token');
+      const response = await fetch(`${apiBaseUrl}/api/auth/organization/set-active`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ organizationId: nextOrganizationId }),
+      });
+
+      if (!response.ok) {
+        const error = await response.text().catch(() => '');
+        throw new Error(`Failed to set active organization: ${response.status} ${error}`);
+      }
+    },
+    { apiBaseUrl: API_BASE_URL, nextOrganizationId: organizationId },
+  );
+}
+
 // Seed a member user for admin to act on
 async function ensureMemberUser(emailPrefix: string) {
   return await withDatabase(async (pool) => {
     const email = resendTestEmail('delivered', emailPrefix);
-    let userRow = await pool.query(`SELECT id FROM "user" WHERE email = $1`, [email]);
+    const userRow = await pool.query(`SELECT id FROM "user" WHERE email = $1`, [email]);
     let userId: string;
     if (userRow.rowCount === 0) {
       const insert = await pool.query(
@@ -456,7 +479,7 @@ test.describe('Manager Role - Organization-Scoped Access', () => {
     });
     managerOrgId = organizationId;
     await login(page);
-    await setActiveOrganizationForUserSessions(managerOrgId);
+    await setActiveOrganization(page, managerOrgId);
     await page.reload().catch(() => page.reload());
     await page.waitForLoadState('networkidle');
   });
@@ -962,6 +985,10 @@ test.describe('Unified Role Dropdowns - Database-Driven', () => {
     expect(signInRes.status()).toBe(200);
     const signInData = await signInRes.json();
     const token = signInData.token || signInData.session?.token;
+
+    // Direct API sign-in creates a fresh session, so re-attach the org context
+    // that the endpoint uses to resolve organization-scoped database roles.
+    await setActiveOrganizationForUserSessions(dropdownAdminOrgId);
     
     const authHeaders: Record<string, string> = token ? { 'Authorization': `Bearer ${token}` } : {};
     const response = await request.get(`${API_BASE_URL}/api/platform-admin/organizations/roles-metadata`, {

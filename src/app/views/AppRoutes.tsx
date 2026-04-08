@@ -11,6 +11,7 @@ import {
 } from "@features/Auth";
 import { DashboardPage, SettingsPage, AccountPage } from "@features/Dashboard";
 import { UsersPage, SessionsPage, OrganizationsPage, RolesPage } from "@features/Admin";
+import { ChatPage } from "@features/Chat";
 import RootLayout from "./RootLayout";
 import { ThemeProvider } from "@shared/components/ui";
 import { AuthProvider } from "@shared/context/AuthContext";
@@ -52,6 +53,22 @@ const AppRoutesContent = () => {
                     <Route index element={<DashboardPage />} />
 
                     {/* Admin routes */}
+                    <Route
+                      path="chat"
+                      element={
+                        <AdminRoute requiredPermission={{ resource: "organization", action: "read" }}>
+                          <ChatPage />
+                        </AdminRoute>
+                      }
+                    />
+                    <Route
+                      path="chat/:conversationId"
+                      element={
+                        <AdminRoute requiredPermission={{ resource: "organization", action: "read" }}>
+                          <ChatPage />
+                        </AdminRoute>
+                      }
+                    />
                     <Route
                       path="admin/users"
                       element={

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { Pool } from 'pg';
-import { DATABASE_URL, API_BASE_URL } from './env';
+import { DATABASE_URL } from './env';
 
 /**
  * API Tests for Unified Roles - Database-Driven

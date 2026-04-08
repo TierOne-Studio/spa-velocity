@@ -117,6 +117,13 @@ test.describe.serial('RBAC Sessions matrix (UI-aligned)', () => {
     });
 
     await ensureOrganizationMembership({
+      userEmail: memberActorEmail,
+      role: 'member',
+      orgSlug,
+      orgName: 'E2E RBAC Sessions Matrix Org',
+    });
+
+    await ensureOrganizationMembership({
       userEmail: sessionsTargetEmail,
       role: 'member',
       orgSlug,

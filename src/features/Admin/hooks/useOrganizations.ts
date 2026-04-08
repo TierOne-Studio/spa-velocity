@@ -1,18 +1,38 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffectiveSession } from "@/shared/hooks/useEffectiveSession";
 import { organizationService, type OrganizationFilterParams } from "../services/adminService";
+
+type OrganizationQueryScope = {
+    activeOrganizationId?: string | null;
+    userId?: string | null;
+};
 
 // Query keys
 export const organizationKeys = {
     all: ["organizations"] as const,
     lists: () => [...organizationKeys.all, "list"] as const,
-    list: (params: OrganizationFilterParams) => [...organizationKeys.lists(), params] as const,
+    list: (params: OrganizationFilterParams, scope?: OrganizationQueryScope) =>
+        [...organizationKeys.lists(), scope?.userId ?? "anonymous", scope?.activeOrganizationId ?? "no-org", params] as const,
     details: () => [...organizationKeys.all, "detail"] as const,
-    detail: (id: string) => [...organizationKeys.details(), id] as const,
-    members: (orgId: string) => [...organizationKeys.all, "members", orgId] as const,
-    invitations: (orgId: string) => [...organizationKeys.all, "invitations", orgId] as const,
+    detail: (id: string, scope?: OrganizationQueryScope) =>
+        [...organizationKeys.details(), scope?.userId ?? "anonymous", scope?.activeOrganizationId ?? "no-org", id] as const,
+    members: (orgId: string, scope?: OrganizationQueryScope) =>
+        [...organizationKeys.all, "members", scope?.userId ?? "anonymous", scope?.activeOrganizationId ?? "no-org", orgId] as const,
+    invitations: (orgId: string, scope?: OrganizationQueryScope) =>
+        [...organizationKeys.all, "invitations", scope?.userId ?? "anonymous", scope?.activeOrganizationId ?? "no-org", orgId] as const,
     userInvitations: () => [...organizationKeys.all, "userInvitations"] as const,
     activeMember: () => [...organizationKeys.all, "activeMember"] as const,
 };
+
+function useOrganizationQueryScope(): OrganizationQueryScope {
+    const { data: session } = useEffectiveSession();
+
+    return {
+        userId: session?.user?.id ?? null,
+        activeOrganizationId:
+            (session?.session as { activeOrganizationId?: string } | undefined)?.activeOrganizationId ?? null,
+    };
+}
 
 /**
  * Hook to fetch list of organizations with pagination.
@@ -21,8 +41,10 @@ export function useOrganizations(
     params: OrganizationFilterParams = {},
     options?: { enabled?: boolean },
 ) {
+    const scope = useOrganizationQueryScope();
+
     return useQuery({
-        queryKey: organizationKeys.list(params),
+        queryKey: organizationKeys.list(params, scope),
         queryFn: () => organizationService.listOrganizations(params),
         enabled: options?.enabled ?? true,
     });
@@ -32,8 +54,10 @@ export function useOrganizations(
  * Hook to fetch organization details.
  */
 export function useOrganization(organizationId: string) {
+    const scope = useOrganizationQueryScope();
+
     return useQuery({
-        queryKey: organizationKeys.detail(organizationId),
+        queryKey: organizationKeys.detail(organizationId, scope),
         queryFn: () => organizationService.getOrganization(organizationId),
         enabled: !!organizationId,
     });
@@ -43,8 +67,10 @@ export function useOrganization(organizationId: string) {
  * Hook to fetch organization members.
  */
 export function useOrganizationMembers(organizationId: string) {
+    const scope = useOrganizationQueryScope();
+
     return useQuery({
-        queryKey: organizationKeys.members(organizationId),
+        queryKey: organizationKeys.members(organizationId, scope),
         queryFn: () => organizationService.listMembers(organizationId),
         enabled: !!organizationId,
     });
@@ -54,8 +80,10 @@ export function useOrganizationMembers(organizationId: string) {
  * Hook to fetch organization invitations.
  */
 export function useOrganizationInvitations(organizationId: string) {
+    const scope = useOrganizationQueryScope();
+
     return useQuery({
-        queryKey: organizationKeys.invitations(organizationId),
+        queryKey: organizationKeys.invitations(organizationId, scope),
         queryFn: () => organizationService.listInvitations(organizationId),
         enabled: !!organizationId,
     });
@@ -85,8 +113,8 @@ export function useUpdateOrganization() {
     return useMutation({
         mutationFn: ({ organizationId, data }: { organizationId: string; data: { name?: string; slug?: string; logo?: string; metadata?: Record<string, unknown> } }) =>
             organizationService.updateOrganization(organizationId, data),
-        onSuccess: (_, variables) => {
-            queryClient.invalidateQueries({ queryKey: organizationKeys.detail(variables.organizationId) });
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: organizationKeys.details() });
             queryClient.invalidateQueries({ queryKey: organizationKeys.lists() });
         },
     });
@@ -115,8 +143,8 @@ export function useInviteMember() {
     return useMutation({
         mutationFn: (params: { organizationId: string; email: string; role: string }) =>
             organizationService.inviteMember(params),
-        onSuccess: (_, variables) => {
-            queryClient.invalidateQueries({ queryKey: organizationKeys.invitations(variables.organizationId) });
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: organizationKeys.all });
         },
     });
 }
@@ -130,8 +158,8 @@ export function useRemoveMember() {
     return useMutation({
         mutationFn: (params: { organizationId: string; memberId: string }) =>
             organizationService.removeMember(params),
-        onSuccess: (_, variables) => {
-            queryClient.invalidateQueries({ queryKey: organizationKeys.members(variables.organizationId) });
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: organizationKeys.all });
         },
     });
 }
@@ -145,8 +173,8 @@ export function useUpdateMemberRole() {
     return useMutation({
         mutationFn: (params: { organizationId: string; memberId: string; role: string }) =>
             organizationService.updateMemberRole(params),
-        onSuccess: (_, variables) => {
-            queryClient.invalidateQueries({ queryKey: organizationKeys.members(variables.organizationId) });
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: organizationKeys.all });
         },
     });
 }
@@ -160,8 +188,8 @@ export function useAddMember() {
     return useMutation({
         mutationFn: (params: { organizationId: string; userId: string; role: string }) =>
             organizationService.addMember(params.organizationId, params.userId, params.role),
-        onSuccess: (_, variables) => {
-            queryClient.invalidateQueries({ queryKey: organizationKeys.members(variables.organizationId) });
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: organizationKeys.all });
         },
     });
 }

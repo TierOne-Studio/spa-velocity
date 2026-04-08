@@ -39,6 +39,7 @@ import { roleColorMap, ROLE_COLORS } from "../types/rbac";
 import type { Role, Permission } from "../types/rbac";
 import { usePermissionsContext } from "@/shared/context/PermissionsContext";
 import { useEffectiveSession } from "@/shared/hooks/useEffectiveSession";
+import { isSuperadminRole, getActiveOrganizationId, getSessionUserRole } from "@/shared/utils/roles";
 import { useOrganizations } from "../hooks/useOrganizations";
 
 const EMPTY_ROLES: Role[] = [];
@@ -165,16 +166,8 @@ function RoleCard({
 export function RolesPage() {
   const { can } = usePermissionsContext();
   const { data: session } = useEffectiveSession();
-  const rawUserRole = (session?.user as { role?: string | string[] } | undefined)?.role;
-  const isSuperadmin = Array.isArray(rawUserRole)
-    ? rawUserRole.includes("superadmin")
-    : String(rawUserRole ?? "")
-        .split(",")
-        .map((role) => role.trim())
-        .filter(Boolean)
-        .includes("superadmin");
-  const activeOrganizationId =
-    (session?.session as { activeOrganizationId?: string } | undefined)?.activeOrganizationId ?? null;
+  const isSuperadmin = isSuperadminRole(getSessionUserRole(session));
+  const activeOrganizationId = getActiveOrganizationId(session);
   const { data: organizationsResponse, isLoading: isOrganizationsLoading } = useOrganizations(
     { page: 1, limit: 100 },
     { enabled: isSuperadmin },

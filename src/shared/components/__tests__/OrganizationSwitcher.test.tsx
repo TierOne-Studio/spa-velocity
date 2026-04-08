@@ -136,7 +136,7 @@ describe("OrganizationSwitcher", () => {
     expect(trigger).toBeDisabled()
   })
 
-  it("does not refetch initial org data on rerender when auth context changes identity", async () => {
+  it("keeps the current organization visible on rerender when auth context changes identity", async () => {
     mockUseAuth.mockImplementation(() => ({
       user: { role: "member" },
       refreshSession: vi.fn().mockResolvedValue(undefined),
@@ -151,8 +151,13 @@ describe("OrganizationSwitcher", () => {
     rerender(<OrganizationSwitcher />)
 
     await waitFor(() => {
-      expect(mockFetchWithAuth).toHaveBeenCalledTimes(2)
+      expect(screen.getByRole("button", { name: /test org/i })).toBeInTheDocument()
     })
+
+    expect(mockFetchWithAuth).not.toHaveBeenCalledWith(
+      expect.stringContaining("/api/auth/organization/set-active"),
+      expect.anything(),
+    )
   })
 
   it("syncs the displayed organization when activeOrganizationId changes externally", async () => {
@@ -328,15 +333,178 @@ describe("OrganizationSwitcher", () => {
     })
   })
 
-  it("returns null for superadmin users", async () => {
+  it("renders an organization selector for superadmin users", async () => {
     mockUseAuth.mockReturnValue({
-      user: { role: "superadmin" },
+      user: { id: "super-1", role: "superadmin" },
       refreshSession: vi.fn().mockResolvedValue(undefined),
     })
+    mockUseEffectiveSession.mockReturnValue({
+      data: {
+        user: { id: "super-1", role: "superadmin" },
+        session: { activeOrganizationId: "org-1" },
+      },
+    })
+    mockFetchWithAuth.mockImplementation((url: unknown) => {
+      const requestUrl = String(url)
+      if (requestUrl.includes("/api/auth/organization/list")) {
+        return Promise.resolve(buildResponse({ data: [ORG, { id: "org-2", name: "Second Org", slug: "second-org" }] }))
+      }
+      if (requestUrl.includes("/api/auth/organization/get-active-member")) {
+        return Promise.resolve(buildResponse({ data: { organizationId: "org-1" } }))
+      }
+      return Promise.reject(new Error(`Unexpected URL: ${requestUrl}`))
+    })
+
     render(<OrganizationSwitcher />)
 
     await waitFor(() => {
-      expect(screen.queryByRole("button")).toBeNull()
+      expect(screen.getByRole("button", { name: /test org/i })).toBeEnabled()
+    })
+  })
+
+  it("does not auto-activate the first organization when multiple orgs exist and none is active", async () => {
+    const mockRefreshSession = vi.fn().mockResolvedValue(undefined)
+    mockUseAuth.mockReturnValue({
+      user: { id: "super-1", role: "superadmin" },
+      refreshSession: mockRefreshSession,
+    })
+    mockUseEffectiveSession.mockReturnValue({
+      data: {
+        user: { id: "super-1", role: "superadmin" },
+        session: {},
+      },
+    })
+    mockFetchWithAuth.mockImplementation((url: unknown) => {
+      const requestUrl = String(url)
+      if (requestUrl.includes("/api/auth/organization/list")) {
+        return Promise.resolve(buildResponse({ data: [ORG, { id: "org-2", name: "Second Org", slug: "second-org" }] }))
+      }
+      if (requestUrl.includes("/api/auth/organization/get-active-member")) {
+        return Promise.resolve(buildResponse({ data: null }))
+      }
+      return Promise.reject(new Error(`Unexpected URL: ${requestUrl}`))
+    })
+
+    render(<OrganizationSwitcher />)
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /select organization/i })).toBeEnabled()
+    })
+
+    expect(mockFetchWithAuth).not.toHaveBeenCalledWith(
+      expect.stringContaining("/api/auth/organization/set-active"),
+      expect.anything(),
+    )
+    expect(mockRefreshSession).not.toHaveBeenCalled()
+  })
+
+  it("refetches organizations when an externally selected active organization is not in the cached list", async () => {
+    let currentSession = {
+      user: { id: "super-1", role: "superadmin" },
+      session: { activeOrganizationId: "org-1" },
+    }
+
+    mockUseAuth.mockReturnValue({
+      user: { id: "super-1", role: "superadmin" },
+      refreshSession: vi.fn().mockResolvedValue(undefined),
+    })
+    mockUseEffectiveSession.mockImplementation(() => ({
+      data: currentSession,
+    }))
+    mockFetchWithAuth
+      .mockImplementationOnce((url: unknown) => {
+        const requestUrl = String(url)
+        if (requestUrl.includes("/api/auth/organization/list")) {
+          return Promise.resolve(buildResponse({ data: [ORG] }))
+        }
+        return Promise.reject(new Error(`Unexpected URL: ${requestUrl}`))
+      })
+      .mockImplementationOnce((url: unknown) => {
+        const requestUrl = String(url)
+        if (requestUrl.includes("/api/auth/organization/get-active-member")) {
+          return Promise.resolve(buildResponse({ data: { organizationId: "org-1" } }))
+        }
+        return Promise.reject(new Error(`Unexpected URL: ${requestUrl}`))
+      })
+      .mockImplementationOnce((url: unknown) => {
+        const requestUrl = String(url)
+        if (requestUrl.includes("/api/auth/organization/list")) {
+          return Promise.resolve(buildResponse({ data: [ORG, { id: "org-2", name: "Second Org", slug: "second-org" }] }))
+        }
+        return Promise.reject(new Error(`Unexpected URL: ${requestUrl}`))
+      })
+      .mockImplementationOnce((url: unknown) => {
+        const requestUrl = String(url)
+        if (requestUrl.includes("/api/auth/organization/get-active-member")) {
+          return Promise.resolve(buildResponse({ data: { organizationId: "org-2" } }))
+        }
+        return Promise.reject(new Error(`Unexpected URL: ${requestUrl}`))
+      })
+
+    const { rerender } = render(<OrganizationSwitcher />)
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /test org/i })).toBeDisabled()
+      expect(mockFetchWithAuth).toHaveBeenCalledTimes(2)
+    })
+
+    currentSession = {
+      user: { id: "super-1", role: "superadmin" },
+      session: { activeOrganizationId: "org-2" },
+    }
+
+    rerender(<OrganizationSwitcher />)
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /second org/i })).toBeEnabled()
+      expect(mockFetchWithAuth).toHaveBeenCalledTimes(4)
+    })
+  })
+
+  it("keeps the selector enabled when the only visible organization does not match the active session organization", async () => {
+    mockUseAuth.mockReturnValue({
+      user: { id: "super-1", role: "superadmin" },
+      refreshSession: vi.fn().mockResolvedValue(undefined),
+    })
+    mockUseEffectiveSession.mockReturnValue({
+      data: {
+        user: { id: "super-1", role: "superadmin" },
+        session: { activeOrganizationId: "org-stale" },
+      },
+    })
+    mockFetchWithAuth.mockImplementation((url: unknown, options?: RequestInit) => {
+      const requestUrl = String(url)
+      if (requestUrl.includes("/api/auth/organization/list")) {
+        return Promise.resolve(buildResponse({ data: [ORG] }))
+      }
+      if (requestUrl.includes("/api/auth/organization/get-active-member")) {
+        return Promise.resolve(buildResponse({ data: { organizationId: "org-stale" } }))
+      }
+      if (requestUrl.includes("/api/auth/organization/set-active")) {
+        expect(options?.body).toBe(JSON.stringify({ organizationId: "org-1" }))
+        return Promise.resolve(buildResponse({ data: null }))
+      }
+      return Promise.reject(new Error(`Unexpected URL: ${requestUrl}`))
+    })
+
+    const user = userEvent.setup()
+    render(<OrganizationSwitcher />)
+
+    const trigger = await waitFor(() => screen.getByRole("button", { name: /test org/i }))
+    expect(trigger).toBeEnabled()
+
+    await user.click(trigger)
+    const menuItem = await screen.findByRole("menuitem", { name: /^test org$/i })
+    await user.click(menuItem)
+
+    await waitFor(() => {
+      expect(mockFetchWithAuth).toHaveBeenCalledWith(
+        expect.stringContaining("/api/auth/organization/set-active"),
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ organizationId: "org-1" }),
+        }),
+      )
     })
   })
 

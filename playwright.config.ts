@@ -15,9 +15,12 @@ function getPortFromUrl(url: string, fallback: number): number {
 
 const apiPort = getPortFromUrl(API_BASE_URL, 3000);
 const fePort = getPortFromUrl(FE_URL, 5173);
-// Default to reuse so a leftover server from a cancelled run never causes a hang.
-// Set E2E_REUSE_EXISTING_SERVER=false explicitly only when you need a clean start.
-const reuseExistingServer = process.env.E2E_REUSE_EXISTING_SERVER !== 'false';
+// Default to NOT reuse so the backend always starts with .env.test (the test database).
+// Reusing a running dev server would route API traffic to the development database,
+// causing test data to leak into (and delete from) the dev DB.
+// Set E2E_REUSE_EXISTING_SERVER=true explicitly only if you know the running server
+// is already configured with the test database.
+const reuseExistingServer = process.env.E2E_REUSE_EXISTING_SERVER === 'true';
 
 export default defineConfig({
   testDir: './e2e',
@@ -49,12 +52,14 @@ export default defineConfig({
       url: `${API_BASE_URL}/health`,
       reuseExistingServer,
       timeout: 120 * 1000,
-      // Tell dotenv/config (used by the backend) to load .env.test
+      // Force the backend to use .env.test and the test database.
+      // DATABASE_URL is always passed explicitly so the backend never falls back to .env.
       env: {
         ...ENV_VARS,
+        NODE_ENV: 'test',
         DOTENV_CONFIG_PATH: ENV_TEST_PATH,
         PORT: String(apiPort),
-        ...(DATABASE_URL ? { DATABASE_URL } : {}),
+        DATABASE_URL,
         BASE_URL: API_BASE_URL,
         FE_URL,
         TRUSTED_ORIGINS: `${FE_URL},http://localhost:${fePort},http://127.0.0.1:${fePort}`,

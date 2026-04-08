@@ -75,6 +75,7 @@ const EMPTY_USER_ACTIONS: UserCapabilities["actions"] = {
 
 const ALL_ORGANIZATIONS_VALUE = "__all__"
 const MEMBERSHIP_PILL_LIMIT = 1
+type ManagedUserRole = 'admin' | 'manager' | 'member'
 
 function getMembershipLabel(membership: AdminUserMembership) {
   return `${membership.organizationName} · ${membership.roleDisplayName ?? membership.roleName}`
@@ -731,7 +732,9 @@ export function UsersPage() {
               <Label htmlFor="role">Role</Label>
               <Select
                 value={newUserData.role}
-                onValueChange={(value) => setNewUserData({ ...newUserData, role: value as any })}
+                onValueChange={(value) =>
+                  setNewUserData({ ...newUserData, role: value as ManagedUserRole })
+                }
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select role" />

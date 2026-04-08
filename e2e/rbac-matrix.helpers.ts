@@ -1,7 +1,7 @@
 import { expect, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 
 import { API_BASE_URL } from './env';
-import { loginWithCredentials, setActiveOrganizationForUserSessions } from './test-helpers';
+import { loginWithCredentials } from './test-helpers';
 
 export type MatrixRole = 'admin' | 'manager' | 'member';
 
@@ -42,10 +42,25 @@ export async function loginAsRole(page: Page, params: {
     (params.role === 'manager' ? params.managerOrganizationId : undefined);
 
   if (organizationId) {
-    await setActiveOrganizationForUserSessions({
-      userEmail: params.emails[params.role],
-      organizationId,
-    });
+    await page.evaluate(
+      async ({ apiBaseUrl, nextOrganizationId }) => {
+        const token = window.localStorage.getItem('bearer_token');
+        const response = await fetch(`${apiBaseUrl}/api/auth/organization/set-active`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ organizationId: nextOrganizationId }),
+        });
+
+        if (!response.ok) {
+          const error = await response.text().catch(() => '');
+          throw new Error(`Failed to set active organization: ${response.status} ${error}`);
+        }
+      },
+      { apiBaseUrl: API_BASE_URL, nextOrganizationId: organizationId },
+    );
     await page.reload({ waitUntil: 'networkidle' });
   }
 }
