@@ -28,6 +28,7 @@ import {
 import { OrganizationSwitcher } from "@/shared/components/OrganizationSwitcher"
 import { useAuth } from "@/shared/context/AuthContext"
 import { usePermissionsContext } from "@/shared/context/PermissionsContext"
+import { isSuperadminRole } from "@/shared/utils/roles"
 
 // Navigation configuration
 const getNavItems = (
@@ -123,8 +124,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { can } = usePermissionsContext()
   const location = useLocation()
   const navItems = getNavItems(location.pathname, can)
-  const userRoles = Array.isArray(user?.role) ? user.role : [user?.role]
-  const isSuperadmin = userRoles.includes("superadmin")
+  const isSuperadmin = isSuperadminRole(user?.role)
 
   const userData = {
     name: user?.name ?? "User",

@@ -448,17 +448,24 @@ export function ChatPage() {
                             <Separator className="my-3" />
                             <div className="space-y-2 text-xs text-muted-foreground">
                               <div className="font-medium text-foreground">Sources</div>
-                              {sources.map((source) => (
-                                <a
-                                  key={`${message.id}-${source.webUrl}`}
-                                  href={source.webUrl}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="block underline-offset-4 hover:underline"
-                                >
-                                  {source.name} · {source.sourceName}
-                                </a>
-                              ))}
+                              {sources.map((source) => {
+                                const isSafeUrl = /^https?:\/\//i.test(source.webUrl);
+                                return isSafeUrl ? (
+                                  <a
+                                    key={`${message.id}-${source.webUrl}`}
+                                    href={source.webUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="block underline-offset-4 hover:underline"
+                                  >
+                                    {source.name} · {source.sourceName}
+                                  </a>
+                                ) : (
+                                  <span key={`${message.id}-${source.webUrl}`} className="block">
+                                    {source.name} · {source.sourceName}
+                                  </span>
+                                );
+                              })}
                             </div>
                           </>
                         )}
