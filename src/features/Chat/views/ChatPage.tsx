@@ -48,6 +48,11 @@ function getSources(message: ChatMessage): ChatSource[] {
   return Array.isArray(sources) ? sources : [];
 }
 
+function isDegradedGenerator(message: ChatMessage): boolean {
+  const generator = message.metadata?.generator;
+  return typeof generator === "string" && generator.startsWith("fallback-");
+}
+
 export function ChatPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -424,6 +429,10 @@ export function ChatPage() {
                 ) : (
                   [...messages].map((message) => {
                     const sources = getSources(message);
+                    const showDegradedBadge =
+                      import.meta.env.DEV &&
+                      message.role === "assistant" &&
+                      isDegradedGenerator(message);
 
                     return (
                       <div
@@ -431,7 +440,17 @@ export function ChatPage() {
                         className={`rounded-lg border p-4 ${message.role === "user" ? "bg-muted/40" : "bg-background"}`}
                       >
                         <div className="mb-2 flex items-center justify-between gap-3">
-                          <div className="font-medium capitalize">{message.role}</div>
+                          <div className="flex items-center gap-2">
+                            <div className="font-medium capitalize">{message.role}</div>
+                            {showDegradedBadge && (
+                              <span
+                                className="rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-600 dark:text-amber-400"
+                                title={`Generator: ${message.metadata?.generator ?? "unknown"}. Visible in dev only.`}
+                              >
+                                degraded mode
+                              </span>
+                            )}
+                          </div>
                           <div className="text-xs text-muted-foreground">
                             {new Date(message.createdAt).toLocaleTimeString()}
                           </div>

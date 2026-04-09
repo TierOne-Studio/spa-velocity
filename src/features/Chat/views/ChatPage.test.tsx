@@ -304,6 +304,44 @@ describe("ChatPage", () => {
     });
   });
 
+  it("renders a dev-only degraded-mode badge when the assistant generator is a fallback", () => {
+    mockUseChatMessages.mockReturnValue({
+      data: [
+        {
+          ...messages[0],
+          metadata: {
+            ...messages[0].metadata,
+            generator: "fallback-search-summary",
+          },
+        },
+      ],
+      isLoading: false,
+    });
+
+    renderPage("/chat/conversation-1");
+
+    expect(screen.getByText(/degraded mode/i)).toBeInTheDocument();
+  });
+
+  it("does not render the degraded-mode badge when the generator is healthy", () => {
+    mockUseChatMessages.mockReturnValue({
+      data: [
+        {
+          ...messages[0],
+          metadata: {
+            ...messages[0].metadata,
+            generator: "langchain-openai",
+          },
+        },
+      ],
+      isLoading: false,
+    });
+
+    renderPage("/chat/conversation-1");
+
+    expect(screen.queryByText(/degraded mode/i)).not.toBeInTheDocument();
+  });
+
   it("deletes the selected conversation", async () => {
     const mutateAsync = vi.fn().mockResolvedValue(undefined);
     mockUseDeleteConversation.mockReturnValue({ mutateAsync, isPending: false });
