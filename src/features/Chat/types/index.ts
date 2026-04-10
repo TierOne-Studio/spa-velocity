@@ -55,6 +55,13 @@ export type ChatStreamEvent =
       userMessage: ChatMessage;
     }
   | {
+      type: "thinking";
+    }
+  | {
+      type: "searching";
+      query: string;
+    }
+  | {
       type: "chunk";
       content: string;
     }

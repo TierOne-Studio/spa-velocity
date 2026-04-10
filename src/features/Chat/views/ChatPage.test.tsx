@@ -57,16 +57,22 @@ vi.mock("../services/chatService", () => ({
   },
 }));
 
+const mockToastInfo = vi.fn();
+
 vi.mock("sonner", () => ({
   toast: {
     error: (...args: unknown[]) => mockToastError(...args),
     success: (...args: unknown[]) => mockToastSuccess(...args),
+    info: (...args: unknown[]) => mockToastInfo(...args),
   },
 }));
 
 vi.mock("react-markdown", () => ({
   default: ({ children }: { children: string }) => <div data-testid="react-markdown">{children}</div>,
 }));
+
+// jsdom doesn't implement scrollIntoView
+Element.prototype.scrollIntoView = vi.fn();
 
 import { ChatPage } from "./ChatPage";
 

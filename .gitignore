@@ -156,3 +156,4 @@ playwright-report
 # END Ruler Generated Files
 .agents
 .continue
+.claude
