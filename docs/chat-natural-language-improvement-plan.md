@@ -46,7 +46,100 @@ The agent path takes 10–20s per question (`durationMs: 21454` observed). Durin
 - No `<think>` tag parsing from the LLM (our prompt doesn't generate them). Reserve for later if reasoning models are adopted.
 - No message editing or regeneration in this phase (chat-components supports it, but it requires backend changes to re-run the agent loop on edited content).
 
-### Architecture
+### Architecture — Current System (Phase 2, as-built)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  spa-velocity (frontend)                                         │
+│                                                                  │
+│  ChatPage.tsx ──▶ chatService.sendMessage() ──▶ SSE connection  │
+│       │                                           │              │
+│       │  events: start, chunk, complete, error    │              │
+│       ▼                                           │              │
+│  StreamingAssistant state ──▶ ReactMarkdown       │              │
+│       │                                           │              │
+│       ▼                                           │              │
+│  Persisted messages ──▶ Sources list              │              │
+└───────────────────────────────────────────────────│──────────────┘
+                                                    │
+                                              HTTP SSE
+                                                    │
+┌───────────────────────────────────────────────────│──────────────┐
+│  api-velocity (backend)                           │              │
+│                                                   ▼              │
+│  chat.controller.ts ◀── chat.service.ts ◀── chat-agent.service  │
+│       │                                          │               │
+│       │  writeSseEvent()                         │               │
+│       │  chunkContent(120 chars)          agent.invoke()         │
+│       ▼                                          │               │
+│  SSE response                              ┌─────┴──────┐       │
+│                                            │  createAgent │       │
+│                                            │  + search    │       │
+│                                            │    tool      │       │
+│                                            └─────┬──────┘       │
+│                                                  │               │
+│                                          Airweave search         │
+│                                          (2-5 calls per          │
+│                                           question)              │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Current problem**: `agent.invoke()` blocks until the full agent loop completes (10-20s). The controller only starts emitting SSE events after it has the complete response, then slices it into 120-char chunks. The user sees "Thinking..." the entire time.
+
+### Architecture — Phase 4 (streaming + chat-components)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  spa-velocity (frontend) — chat-components adopted               │
+│                                                                  │
+│  ChatPage.tsx                                                    │
+│    ├── <Message>          (from chat-components, adapted)        │
+│    │     ├── ReactMarkdown content                               │
+│    │     ├── PatternHandler citations [1] [2]                    │
+│    │     └── Sources metadata (below message)                    │
+│    ├── <GenerationStatus> (from chat-components, adapted)        │
+│    │     ├── "Thinking..."    (brain icon, pulse)                │
+│    │     ├── "Searching: X"   (globe icon, spin)                 │
+│    │     └── "Responding..."  (message icon, bounce)             │
+│    └── <ChatInput>        (from chat-components, adapted)        │
+│          ├── Auto-growing textarea                               │
+│          ├── Stop generation button                              │
+│          └── Keyboard shortcuts (Cmd+Enter)                      │
+│                                                                  │
+│  chatService.ts ──▶ SSE connection                               │
+│       │                                                          │
+│       │  events: start, thinking, searching, chunk, complete     │
+│       ▼                                                          │
+│  StreamingState { stage, searchQuery, content }                  │
+└───────────────────────────────────────────────────│──────────────┘
+                                                    │
+                                              HTTP SSE
+                                                    │
+┌───────────────────────────────────────────────────│──────────────┐
+│  api-velocity (backend) — agent.stream()          │              │
+│                                                   ▼              │
+│  chat.controller.ts                                              │
+│       │                                                          │
+│       │  iterates agent.stream() chunks                          │
+│       │  ├── model-call node start ──▶ SSE "thinking"            │
+│       │  ├── tool-call node ──▶ SSE "searching" { query }        │
+│       │  ├── final model tokens ──▶ SSE "chunk" { token }        │
+│       │  └── stream ends ──▶ SSE "complete" { fullResponse }     │
+│       ▼                                                          │
+│  chat-agent.service.ts                                           │
+│       │                                                          │
+│       │  agent.stream({ messages })                              │
+│       │  ├── LLM reasons ──▶ decides to search                   │
+│       │  ├── search_knowledge_base(query) ──▶ Airweave           │
+│       │  ├── LLM reads results ──▶ decides: more? or synthesize  │
+│       │  ├── (loop 2-5 times)                                    │
+│       │  └── LLM generates final answer (token by token)         │
+│       ▼                                                          │
+│  Real-time event flow: ~0.5s per search, tokens as generated     │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Key difference**: `agent.stream()` yields state updates in real time as each graph node executes. The controller maps node types to SSE events and forwards them immediately. The user sees "Thinking..." → "Searching: what projects do you see?" → "Searching: MGProjects pages" → answer streaming word-by-word. Total perceived wait before first useful text drops from 20s to ~5-8s (the tool-calling phase), with continuous visual feedback throughout.
 
 #### Backend changes (api-velocity)
 
