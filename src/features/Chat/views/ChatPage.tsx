@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { IconMessageCircle, IconPlus, IconTrash } from "@tabler/icons-react";
+import { IconPlus, IconTrash } from "@tabler/icons-react";
 import { useQueryClient } from "@tanstack/react-query";
-import ReactMarkdown from "react-markdown";
 import { toast } from "sonner";
 import { usePermissionsContext } from "@/shared/context/PermissionsContext";
 import { useEffectiveSession } from "@/shared/hooks/useEffectiveSession";
@@ -10,9 +9,7 @@ import { isSuperadminRole, getActiveOrganizationId, getSessionUserRole } from "@
 import { useOrganizations } from "@/features/Admin/hooks/useOrganizations";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card";
-import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
-import { Separator } from "@/shared/components/ui/separator";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
 import { chatService } from "../services/chatService";
@@ -24,9 +21,14 @@ import {
   useDeleteConversation,
 } from "../hooks/useChat";
 import type { ChatMessage, ChatSource } from "../types";
+import { ChatMessage as ChatMessageComponent } from "../components/ChatMessage";
+import { GenerationStatus, type GenerationStage } from "../components/GenerationStatus";
+import { ChatInput } from "../components/ChatInput";
 
-type StreamingAssistantState = {
+type StreamingState = {
   conversationId: string;
+  stage: GenerationStage;
+  searchQuery?: string;
   content: string;
 };
 
@@ -48,11 +50,6 @@ function getSources(message: ChatMessage): ChatSource[] {
   return Array.isArray(sources) ? sources : [];
 }
 
-function isDegradedGenerator(message: ChatMessage): boolean {
-  const generator = message.metadata?.generator;
-  return typeof generator === "string" && generator.startsWith("fallback-");
-}
-
 export function ChatPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -61,10 +58,10 @@ export function ChatPage() {
   const { data: session } = useEffectiveSession();
   const activeOrganizationId = getActiveOrganizationId(session);
   const isSuperadmin = isSuperadminRole(getSessionUserRole(session));
-  const [draft, setDraft] = useState("");
   const [selectedOrganizationId, setSelectedOrganizationId] = useState(activeOrganizationId ?? "");
   const [pendingConversationId, setPendingConversationId] = useState<string | null>(null);
-  const [streamingAssistant, setStreamingAssistant] = useState<StreamingAssistantState | null>(null);
+  const [streaming, setStreaming] = useState<StreamingState | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const { data: organizationsResponse, isLoading: areOrganizationsLoading } = useOrganizations(
     { page: 1, limit: 100 },
     { enabled: isSuperadmin },
@@ -114,18 +111,18 @@ export function ChatPage() {
   }, [activeOrganizationId, isSuperadmin, organizations]);
 
   useEffect(() => {
-    if (!streamingAssistant || resolvedConversationId !== streamingAssistant.conversationId) {
+    if (!streaming || resolvedConversationId !== streaming.conversationId) {
       return;
     }
 
     const hasPersistedAssistantMessage = messages.some(
-      (message) => message.role === "assistant" && message.content === streamingAssistant.content,
+      (message) => message.role === "assistant" && message.content === streaming.content,
     );
 
     if (hasPersistedAssistantMessage) {
-      setStreamingAssistant(null);
+      setStreaming(null);
     }
-  }, [messages, resolvedConversationId, streamingAssistant]);
+  }, [messages, resolvedConversationId, streaming]);
 
   useEffect(() => {
     if (selectedConversation?.id && selectedConversation.id === pendingConversationId) {
@@ -148,11 +145,15 @@ export function ChatPage() {
     }
   }, [conversationId, conversations, navigate, pendingConversationId, resolvedOrganizationId, selectedConversation]);
 
+  // Auto-scroll to bottom when new content arrives
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, streaming]);
+
   const handleOrganizationChange = (organizationId: string) => {
     setSelectedOrganizationId(organizationId);
     setPendingConversationId(null);
-    setStreamingAssistant(null);
-    setDraft("");
+    setStreaming(null);
     navigate("/chat", { replace: true });
   };
 
@@ -166,8 +167,7 @@ export function ChatPage() {
         organizationId: resolvedOrganizationId,
       });
       setPendingConversationId(conversation.id);
-      setStreamingAssistant(null);
-      setDraft("");
+      setStreaming(null);
       navigate(`/chat/${conversation.id}`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to create conversation");
@@ -183,8 +183,7 @@ export function ChatPage() {
     navigate(`/chat/${nextConversationId}`);
   };
 
-  const handleSend = async () => {
-    const content = draft.trim();
+  const handleSend = async (content: string) => {
     if (!resolvedOrganizationId || !content) {
       return;
     }
@@ -201,29 +200,45 @@ export function ChatPage() {
         navigate(`/chat/${conversation.id}`);
       }
 
-      setStreamingAssistant({ conversationId: nextConversationId, content: "" });
+      setStreaming({ conversationId: nextConversationId, stage: "thinking", content: "" });
 
       await chatService.sendMessage({
         conversationId: nextConversationId,
         content,
         organizationId: resolvedOrganizationId,
         onEvent: (event) => {
+          if (event.type === "thinking") {
+            setStreaming((current) => {
+              if (!current || current.conversationId !== nextConversationId) return current;
+              return { ...current, stage: "thinking" };
+            });
+          }
+
+          if (event.type === "searching") {
+            setStreaming((current) => {
+              if (!current || current.conversationId !== nextConversationId) return current;
+              return { ...current, stage: "searching", searchQuery: event.query };
+            });
+          }
+
           if (event.type === "chunk") {
-            setStreamingAssistant((current) => {
+            setStreaming((current) => {
               if (!current || current.conversationId !== nextConversationId) {
-                return { conversationId: nextConversationId, content: event.content };
+                return { conversationId: nextConversationId, stage: "responding", content: event.content };
               }
 
               return {
                 ...current,
+                stage: "responding",
                 content: `${current.content}${event.content}`,
               };
             });
           }
 
           if (event.type === "complete") {
-            setStreamingAssistant({
+            setStreaming({
               conversationId: nextConversationId,
+              stage: "idle",
               content: event.data.assistantMessage.content,
             });
           }
@@ -231,11 +246,16 @@ export function ChatPage() {
       });
 
       await queryClient.invalidateQueries({ queryKey: chatKeys.all });
-      setDraft("");
     } catch (error) {
-      setStreamingAssistant(null);
+      setStreaming(null);
       toast.error(error instanceof Error ? error.message : "Failed to send message");
     }
+  };
+
+  const handleStopGeneration = () => {
+    // TODO: implement abort controller for SSE connection
+    setStreaming(null);
+    toast.info("Generation stopped");
   };
 
   const handleDeleteConversation = async () => {
@@ -315,6 +335,8 @@ export function ChatPage() {
       </div>
     );
   }
+
+  const isStreaming = streaming !== null && streaming.stage !== "idle";
 
   return (
     <div className="flex flex-1 flex-col gap-4 p-4 lg:p-6">
@@ -403,7 +425,7 @@ export function ChatPage() {
             </CardContent>
           </Card>
 
-          <Card className="lg:col-span-2">
+          <Card className="lg:col-span-2 flex flex-col">
             <CardHeader className="flex flex-row items-start justify-between gap-4">
               <div>
                 <CardTitle>{selectedConversation?.title || "New conversation"}</CardTitle>
@@ -418,122 +440,55 @@ export function ChatPage() {
                 </Button>
               )}
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="max-h-[500px] space-y-4 overflow-y-auto rounded-lg border p-4">
+            <CardContent className="flex flex-1 flex-col gap-4">
+              <div className="flex-1 space-y-4 overflow-y-auto rounded-lg border p-4 max-h-[500px]">
                 {areMessagesLoading ? (
                   Array.from({ length: 3 }).map((_, index) => <Skeleton key={index} className="h-20 w-full" />)
-                ) : messages.length === 0 ? (
+                ) : messages.length === 0 && !isStreaming ? (
                   <div className="py-10 text-center text-sm text-muted-foreground">
                     Ask a question about this organization to start the conversation.
                   </div>
                 ) : (
-                  [...messages].map((message) => {
-                    const sources = getSources(message);
-                    const showDegradedBadge =
-                      import.meta.env.DEV &&
-                      message.role === "assistant" &&
-                      isDegradedGenerator(message);
-
-                    return (
-                      <div
+                  <>
+                    {messages.map((message) => (
+                      <ChatMessageComponent
                         key={message.id}
-                        className={`rounded-lg border p-4 ${message.role === "user" ? "bg-muted/40" : "bg-background"}`}
-                      >
-                        <div className="mb-2 flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-2">
-                            <div className="font-medium capitalize">{message.role}</div>
-                            {showDegradedBadge && (
-                              <span
-                                className="rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-600 dark:text-amber-400"
-                                title={`Generator: ${message.metadata?.generator ?? "unknown"}. Visible in dev only.`}
-                              >
-                                degraded mode
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {new Date(message.createdAt).toLocaleTimeString()}
-                          </div>
-                        </div>
-                        {message.role === "assistant" ? (
-                          <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-6">
-                            <ReactMarkdown>{message.content}</ReactMarkdown>
-                          </div>
-                        ) : (
-                          <div className="whitespace-pre-wrap text-sm leading-6">{message.content}</div>
+                        content={message.content}
+                        role={message.role}
+                        sources={getSources(message)}
+                        generator={message.metadata?.generator}
+                        createdAt={message.createdAt}
+                      />
+                    ))}
+
+                    {streaming && streaming.conversationId === resolvedConversationId && (
+                      <>
+                        {streaming.stage !== "idle" && streaming.stage !== "responding" && (
+                          <GenerationStatus
+                            stage={streaming.stage}
+                            searchQuery={streaming.searchQuery}
+                          />
                         )}
-                        {sources.length > 0 && (
-                          <>
-                            <Separator className="my-3" />
-                            <div className="space-y-2 text-xs text-muted-foreground">
-                              <div className="font-medium text-foreground">Sources</div>
-                              {sources.map((source) => {
-                                const isSafeUrl = /^https?:\/\//i.test(source.webUrl);
-                                return isSafeUrl ? (
-                                  <a
-                                    key={`${message.id}-${source.webUrl}`}
-                                    href={source.webUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="block underline-offset-4 hover:underline"
-                                  >
-                                    {source.name} · {source.sourceName}
-                                  </a>
-                                ) : (
-                                  <span key={`${message.id}-${source.webUrl}`} className="block">
-                                    {source.name} · {source.sourceName}
-                                  </span>
-                                );
-                              })}
-                            </div>
-                          </>
+
+                        {streaming.content && (
+                          <ChatMessageComponent
+                            content={streaming.content}
+                            role="assistant"
+                          />
                         )}
-                      </div>
-                    );
-                  })
+                      </>
+                    )}
+                  </>
                 )}
-                {streamingAssistant && streamingAssistant.conversationId === resolvedConversationId && (
-                  <div className="rounded-lg border bg-background p-4">
-                    <div className="mb-2 flex items-center justify-between gap-3">
-                      <div className="font-medium capitalize">assistant</div>
-                      <div className="text-xs text-muted-foreground">Streaming...</div>
-                    </div>
-                    <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-6">
-                      {streamingAssistant.content ? (
-                        <ReactMarkdown>{streamingAssistant.content}</ReactMarkdown>
-                      ) : (
-                        "Thinking..."
-                      )}
-                    </div>
-                  </div>
-                )}
+                <div ref={messagesEndRef} />
               </div>
 
-              <div className="space-y-3 rounded-lg border p-4">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <IconMessageCircle className="h-4 w-4" />
-                  {isSuperadmin ? "Selected organization chat" : "Active organization chat"}
-                </div>
-                <Input
-                  value={draft}
-                  onChange={(event) => setDraft(event.target.value)}
-                  placeholder="Ask a question about this organization"
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      void handleSend();
-                    }
-                  }}
-                />
-                <div className="flex justify-end">
-                  <Button
-                    onClick={() => void handleSend()}
-                    disabled={createConversation.isPending || !draft.trim()}
-                  >
-                    {streamingAssistant ? "Streaming..." : createConversation.isPending ? "Sending..." : "Send"}
-                  </Button>
-                </div>
-              </div>
+              <ChatInput
+                onSend={(content) => void handleSend(content)}
+                onStopGeneration={handleStopGeneration}
+                isLoading={isStreaming}
+                disabled={createConversation.isPending || !resolvedOrganizationId}
+              />
             </CardContent>
           </Card>
         </div>

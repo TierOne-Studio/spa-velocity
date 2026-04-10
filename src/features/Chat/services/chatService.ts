@@ -85,6 +85,17 @@ async function parseStreamResponse(
         continue;
       }
 
+      if (event.event === "thinking") {
+        onEvent?.({ type: "thinking" });
+        continue;
+      }
+
+      if (event.event === "searching") {
+        const typedPayload = payload as { query?: string };
+        onEvent?.({ type: "searching", query: typedPayload.query ?? "" });
+        continue;
+      }
+
       if (event.event === "chunk") {
         const typedPayload = payload as { content?: string };
         onEvent?.({ type: "chunk", content: typedPayload.content ?? "" });
