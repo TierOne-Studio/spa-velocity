@@ -18,16 +18,17 @@ export function isSuperadminRole(role: string | string[] | null | undefined): bo
  * Extract the active organization ID from a session object.
  */
 export function getActiveOrganizationId(
-  session: { session?: { activeOrganizationId?: string } } | null | undefined,
+  session: { session?: { activeOrganizationId?: string | null } } | null | undefined,
 ): string | null {
-  return (session?.session as { activeOrganizationId?: string } | undefined)?.activeOrganizationId ?? null;
+  return (session?.session as { activeOrganizationId?: string | null } | undefined)?.activeOrganizationId ?? null;
 }
 
 /**
  * Extract the user role from a session object.
  */
 export function getSessionUserRole(
-  session: { user?: { role?: string | string[] } } | null | undefined,
+  session: { user?: { role?: string | string[] | null } } | null | undefined,
 ): string | string[] | undefined {
-  return (session?.user as { role?: string | string[] } | undefined)?.role;
+  const role = (session?.user as { role?: string | string[] | null } | undefined)?.role;
+  return role ?? undefined;
 }
