@@ -67,7 +67,7 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     );
 
     return (
-      <div className={cn("rounded-lg border bg-background p-3", className)}>
+      <div className={cn("rounded-[1.75rem] border bg-background px-4 py-3 shadow-sm", className)}>
         <textarea
           ref={mergedRef}
           value={input}
@@ -76,9 +76,9 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
           placeholder={placeholder}
           disabled={disabled || isLoading}
           rows={1}
-          className="w-full resize-none bg-transparent text-sm leading-6 placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
+          className="min-h-[28px] w-full resize-none bg-transparent text-sm leading-6 placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
         />
-        <div className="flex items-center justify-between pt-2">
+        <div className="flex items-center justify-between gap-3 pt-3">
           <div className="text-xs text-muted-foreground">
             {isLoading ? "Agent is working..." : "Enter to send, Shift+Enter for new line"}
           </div>
@@ -88,7 +88,7 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                 variant="outline"
                 size="sm"
                 onClick={onStopGeneration}
-                className="h-8"
+                className="h-8 rounded-full"
               >
                 <IconPlayerStop className="mr-1.5 h-3.5 w-3.5" />
                 Stop
@@ -98,7 +98,7 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                 size="sm"
                 onClick={handleSend}
                 disabled={!input.trim() || disabled}
-                className="h-8"
+                className="h-8 rounded-full"
               >
                 <IconSend className="mr-1.5 h-3.5 w-3.5" />
                 Send

@@ -219,6 +219,25 @@ describe("ChatPage", () => {
     expect(screen.getByText(/deploy guide/i)).toBeInTheDocument();
   });
 
+  it("normalizes markdown and html in the left rail preview", () => {
+    mockUseChatConversations.mockReturnValue({
+      data: [
+        {
+          ...conversations[0],
+          lastMessagePreview: "## Overview\n\nTierOne is organized around **permission-based RBAC** with <strong>admin APIs</strong>.",
+        },
+      ],
+      isLoading: false,
+    });
+
+    renderPage("/chat/conversation-1");
+
+    expect(screen.getByText(/permission-based rbac/i)).toBeInTheDocument();
+    expect(screen.getByText(/admin apis\./i)).toBeInTheDocument();
+    expect(screen.queryByText(/\*\*permission-based rbac\*\*/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/<strong>/i)).not.toBeInTheDocument();
+  });
+
   it("creates a new conversation from the left-side New button", async () => {
     const createMutateAsync = vi.fn().mockResolvedValue({ ...conversations[0], id: "conversation-2" });
     mockUseCreateConversation.mockReturnValue({ mutateAsync: createMutateAsync, isPending: false });
@@ -244,7 +263,7 @@ describe("ChatPage", () => {
       );
     });
 
-    expect(screen.getByText(/^new conversation$/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /^new conversation$/i })).toBeInTheDocument();
     expect(screen.getByText(/ask a question about this organization to start the conversation/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /new conversation/i })).not.toBeInTheDocument();
   });

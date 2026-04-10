@@ -1,17 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { IconPlus, IconTrash } from "@tabler/icons-react";
+import { IconLayoutSidebarLeftCollapse, IconLayoutSidebarLeftExpand, IconPlus, IconTrash } from "@tabler/icons-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { usePermissionsContext } from "@/shared/context/PermissionsContext";
 import { useEffectiveSession } from "@/shared/hooks/useEffectiveSession";
+import { cn } from "@/shared/lib/utils";
 import { isSuperadminRole, getActiveOrganizationId, getSessionUserRole } from "@/shared/utils/roles";
 import { useOrganizations } from "@/features/Admin/hooks/useOrganizations";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { Label } from "@/shared/components/ui/label";
+import { ScrollArea } from "@/shared/components/ui/scroll-area";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/shared/components/ui/sheet";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/components/ui/tooltip";
 import { chatService } from "../services/chatService";
 import {
   chatKeys,
@@ -20,7 +30,7 @@ import {
   useCreateConversation,
   useDeleteConversation,
 } from "../hooks/useChat";
-import type { ChatMessage, ChatSource } from "../types";
+import type { ChatConversation, ChatMessage, ChatSource } from "../types";
 import { ChatMessage as ChatMessageComponent } from "../components/ChatMessage";
 import { GenerationStatus, type GenerationStage } from "../components/GenerationStatus";
 import { ChatInput } from "../components/ChatInput";
@@ -37,17 +47,204 @@ type OrganizationOption = {
   name: string;
 };
 
-function formatTimestamp(value: string | null) {
+type ConversationGroup = {
+  label: string;
+  conversations: ChatConversation[];
+};
+
+function formatConversationTimestamp(value: string | null) {
+  if (!value) {
+    return "No activity";
+  }
+
+  const date = new Date(value);
+  const now = new Date();
+
+  const sameDay =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
+
+  if (sameDay) {
+    return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  }
+
+  if (date.getFullYear() === now.getFullYear()) {
+    return date.toLocaleDateString([], { month: "short", day: "numeric" });
+  }
+
+  return date.toLocaleDateString([], { year: "numeric", month: "short", day: "numeric" });
+}
+
+function formatConversationPreview(value: string | null) {
   if (!value) {
     return "No messages yet";
   }
 
-  return new Date(value).toLocaleString();
+  return value
+    .replace(/<think>[\s\S]*?<\/think>/gi, " ")
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^>\s+/gm, "")
+    .replace(/^[*-]\s+/gm, "")
+    .replace(/^\d+\.\s+/gm, "")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/__([^_]+)__/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/_([^_]+)_/g, "$1")
+    .replace(/~~([^~]+)~~/g, "$1")
+    .replace(/\s+([.,!?;:])/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function startOfDay(value: Date) {
+  const next = new Date(value);
+  next.setHours(0, 0, 0, 0);
+  return next;
+}
+
+function getConversationGroupLabel(value: string | null) {
+  if (!value) {
+    return "Older";
+  }
+
+  const today = startOfDay(new Date());
+  const target = startOfDay(new Date(value));
+  const diffDays = Math.round((today.getTime() - target.getTime()) / 86_400_000);
+
+  if (diffDays <= 0) {
+    return "Today";
+  }
+
+  if (diffDays === 1) {
+    return "Yesterday";
+  }
+
+  if (diffDays < 7) {
+    return "Previous 7 Days";
+  }
+
+  return "Older";
+}
+
+function groupConversations(conversations: ChatConversation[]): ConversationGroup[] {
+  const order = ["Today", "Yesterday", "Previous 7 Days", "Older"] as const;
+  const grouped = new Map<string, ChatConversation[]>();
+
+  for (const conversation of conversations) {
+    const label = getConversationGroupLabel(conversation.lastMessageAt ?? conversation.updatedAt);
+    const existing = grouped.get(label) ?? [];
+    existing.push(conversation);
+    grouped.set(label, existing);
+  }
+
+  return order
+    .map((label) => ({
+      label,
+      conversations: grouped.get(label) ?? [],
+    }))
+    .filter((group) => group.conversations.length > 0);
 }
 
 function getSources(message: ChatMessage): ChatSource[] {
   const sources = message.metadata?.sources;
   return Array.isArray(sources) ? sources : [];
+}
+
+type ConversationRailContentProps = {
+  conversations: ChatConversation[];
+  groups: ConversationGroup[];
+  isLoading: boolean;
+  resolvedConversationId: string;
+  isCreatePending: boolean;
+  resolvedOrganizationId: string | null;
+  onCreateConversation: () => void;
+  onSelectConversation: (conversationId: string) => void;
+};
+
+function ConversationRailContent({
+  conversations,
+  groups,
+  isLoading,
+  resolvedConversationId,
+  isCreatePending,
+  resolvedOrganizationId,
+  onCreateConversation,
+  onSelectConversation,
+}: ConversationRailContentProps) {
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="border-b px-4 py-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex flex-col gap-1">
+            <div className="text-sm font-semibold">Chats</div>
+            <div className="text-xs text-muted-foreground">Private history for the active organization.</div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onCreateConversation}
+            disabled={isCreatePending || !resolvedOrganizationId}
+          >
+            <IconPlus className="mr-2 h-4 w-4" />
+            {isCreatePending ? "Creating..." : "New"}
+          </Button>
+        </div>
+      </div>
+
+      <ScrollArea className="flex-1">
+        <div className="flex flex-col gap-4 p-3">
+          {isLoading ? (
+            Array.from({ length: 5 }).map((_, index) => <Skeleton key={index} className="h-20 w-full rounded-2xl" />)
+          ) : conversations.length === 0 ? (
+            <div className="rounded-2xl border border-dashed p-5 text-sm text-muted-foreground">
+              No conversations yet. Ask the first question to create one.
+            </div>
+          ) : (
+            groups.map((group) => (
+              <div key={group.label} className="flex flex-col gap-1.5">
+                <div className="px-2 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                  {group.label}
+                </div>
+                {group.conversations.map((conversation) => {
+                  const isActive = conversation.id === resolvedConversationId;
+
+                  return (
+                    <button
+                      key={conversation.id}
+                      type="button"
+                      onClick={() => onSelectConversation(conversation.id)}
+                      className={cn(
+                        "flex w-full flex-col gap-2 rounded-2xl px-3 py-3 text-left transition-colors",
+                        isActive ? "bg-accent text-accent-foreground shadow-sm" : "hover:bg-accent/60",
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="line-clamp-2 text-sm font-medium">
+                          {conversation.title || "Untitled conversation"}
+                        </div>
+                        <div className="shrink-0 text-[11px] text-muted-foreground">
+                          {formatConversationTimestamp(conversation.lastMessageAt ?? conversation.updatedAt)}
+                        </div>
+                      </div>
+                      <div className="line-clamp-2 text-xs text-muted-foreground">
+                        {formatConversationPreview(conversation.lastMessagePreview)}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            ))
+          )}
+        </div>
+      </ScrollArea>
+    </div>
+  );
 }
 
 export function ChatPage() {
@@ -60,6 +257,8 @@ export function ChatPage() {
   const isSuperadmin = isSuperadminRole(getSessionUserRole(session));
   const [selectedOrganizationId, setSelectedOrganizationId] = useState(activeOrganizationId ?? "");
   const [pendingConversationId, setPendingConversationId] = useState<string | null>(null);
+  const [isRailOpen, setIsRailOpen] = useState(true);
+  const [isMobileRailOpen, setIsMobileRailOpen] = useState(false);
   const [streaming, setStreaming] = useState<StreamingState | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { data: organizationsResponse, isLoading: areOrganizationsLoading } = useOrganizations(
@@ -83,6 +282,7 @@ export function ChatPage() {
     organizationId: resolvedOrganizationId,
     enabled: !!resolvedConversationId,
   });
+  const conversationGroups = useMemo(() => groupConversations(conversations), [conversations]);
 
   const createConversation = useCreateConversation();
   const deleteConversation = useDeleteConversation();
@@ -153,6 +353,7 @@ export function ChatPage() {
   const handleOrganizationChange = (organizationId: string) => {
     setSelectedOrganizationId(organizationId);
     setPendingConversationId(null);
+    setIsMobileRailOpen(false);
     setStreaming(null);
     navigate("/chat", { replace: true });
   };
@@ -167,6 +368,7 @@ export function ChatPage() {
         organizationId: resolvedOrganizationId,
       });
       setPendingConversationId(conversation.id);
+      setIsMobileRailOpen(false);
       setStreaming(null);
       navigate(`/chat/${conversation.id}`);
     } catch (error) {
@@ -179,6 +381,7 @@ export function ChatPage() {
       return;
     }
 
+    setIsMobileRailOpen(false);
     setPendingConversationId(null);
     navigate(`/chat/${nextConversationId}`);
   };
@@ -339,159 +542,173 @@ export function ChatPage() {
   const isStreaming = streaming !== null && streaming.stage !== "idle";
 
   return (
-    <div className="flex flex-1 flex-col gap-4 p-4 lg:p-6">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Chat</h1>
-          <p className="text-muted-foreground">
-            Ask organization-scoped questions against the linked Airweave collection.
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          {isSuperadmin && (
-            <div className="grid gap-2">
-              <Label htmlFor="chat-organization-active-select" className="text-xs text-muted-foreground">
-                Organization
-              </Label>
-              <Select
-                value={selectedOrganizationId}
-                disabled={areOrganizationsLoading || organizations.length === 0}
-                onValueChange={handleOrganizationChange}
-              >
-                <SelectTrigger id="chat-organization-active-select" className="w-[220px]">
-                  <SelectValue placeholder={areOrganizationsLoading ? "Loading organizations..." : "Select organization"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {organizations.map((organization) => (
-                    <SelectItem key={organization.id} value={organization.id}>
-                      {organization.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4 lg:p-6">
+      <div className="flex min-h-0 flex-1 overflow-hidden rounded-[1.75rem] border bg-background shadow-sm">
+        <div
+          className={cn(
+            "hidden border-r bg-muted/15 transition-all duration-200 ease-linear md:flex md:flex-col",
+            isRailOpen ? "md:w-[320px]" : "md:w-0 md:border-r-0",
           )}
+        >
+          <div className={cn("flex h-full min-h-0 flex-col", !isRailOpen && "pointer-events-none opacity-0")}> 
+            <ConversationRailContent
+              conversations={conversations}
+              groups={conversationGroups}
+              isLoading={areConversationsLoading}
+              resolvedConversationId={resolvedConversationId}
+              isCreatePending={createConversation.isPending}
+              resolvedOrganizationId={resolvedOrganizationId}
+              onCreateConversation={() => void handleCreateConversation()}
+              onSelectConversation={handleSelectConversation}
+            />
+          </div>
         </div>
-      </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <Card className="lg:col-span-1">
-            <CardHeader className="flex flex-row items-center justify-between gap-3">
-              <div>
-                <CardTitle>Conversations</CardTitle>
-                <CardDescription>Private conversations in your active organization.</CardDescription>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void handleCreateConversation()}
-                disabled={createConversation.isPending || !resolvedOrganizationId}
-              >
-                <IconPlus className="mr-2 h-4 w-4" />
-                {createConversation.isPending ? "Creating..." : "New"}
-              </Button>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {areConversationsLoading ? (
-                Array.from({ length: 3 }).map((_, index) => <Skeleton key={index} className="h-16 w-full" />)
-              ) : conversations.length === 0 ? (
-                <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-                  No conversations yet. Ask the first question to create one.
-                </div>
-              ) : (
-                conversations.map((conversation) => (
-                  <button
-                    key={conversation.id}
-                    type="button"
-                    onClick={() => handleSelectConversation(conversation.id)}
-                    className={`w-full rounded-lg border p-4 text-left transition-colors ${
-                      conversation.id === resolvedConversationId
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:bg-muted/60"
-                    }`}
-                  >
-                    <div className="font-medium">
-                      {conversation.title || "Untitled conversation"}
-                    </div>
-                    <div className="mt-1 line-clamp-2 text-sm text-muted-foreground">
-                      {conversation.lastMessagePreview || "No messages yet"}
-                    </div>
-                    <div className="mt-2 text-xs text-muted-foreground">
-                      {formatTimestamp(conversation.lastMessageAt)}
-                    </div>
-                  </button>
-                ))
-              )}
-            </CardContent>
-          </Card>
+        <Sheet open={isMobileRailOpen} onOpenChange={setIsMobileRailOpen}>
+          <SheetContent side="left" className="w-full max-w-sm p-0">
+            <SheetHeader className="border-b">
+              <SheetTitle>Chats</SheetTitle>
+              <SheetDescription>Browse or start conversations without leaving the current page.</SheetDescription>
+            </SheetHeader>
+            <ConversationRailContent
+              conversations={conversations}
+              groups={conversationGroups}
+              isLoading={areConversationsLoading}
+              resolvedConversationId={resolvedConversationId}
+              isCreatePending={createConversation.isPending}
+              resolvedOrganizationId={resolvedOrganizationId}
+              onCreateConversation={() => void handleCreateConversation()}
+              onSelectConversation={handleSelectConversation}
+            />
+          </SheetContent>
+        </Sheet>
 
-          <Card className="lg:col-span-2 flex flex-col">
-            <CardHeader className="flex flex-row items-start justify-between gap-4">
-              <div>
-                <CardTitle>{selectedConversation?.title || "New conversation"}</CardTitle>
-                <CardDescription>
-                  Responses are grounded in the organization&apos;s linked collection and connected sources.
-                </CardDescription>
-              </div>
-              {resolvedConversationId && (
-                <Button variant="destructive" size="sm" onClick={handleDeleteConversation}>
-                  <IconTrash className="mr-2 h-4 w-4" />
-                  Delete
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <div className="border-b bg-background/95 px-4 py-3 backdrop-blur md:px-6">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-start gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="md:hidden"
+                  onClick={() => setIsMobileRailOpen(true)}
+                  aria-label="Open chats"
+                >
+                  <IconLayoutSidebarLeftExpand className="h-4 w-4" />
                 </Button>
-              )}
-            </CardHeader>
-            <CardContent className="flex flex-1 flex-col gap-4">
-              <div className="flex-1 space-y-4 overflow-y-auto rounded-lg border p-4 max-h-[500px]">
-                {areMessagesLoading ? (
-                  Array.from({ length: 3 }).map((_, index) => <Skeleton key={index} className="h-20 w-full" />)
-                ) : messages.length === 0 && !isStreaming ? (
-                  <div className="py-10 text-center text-sm text-muted-foreground">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="hidden md:inline-flex"
+                      onClick={() => setIsRailOpen((current) => !current)}
+                      aria-label={isRailOpen ? "Hide chats" : "Show chats"}
+                    >
+                      {isRailOpen ? <IconLayoutSidebarLeftCollapse className="h-4 w-4" /> : <IconLayoutSidebarLeftExpand className="h-4 w-4" />}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {isRailOpen ? "Hide chats" : "Show chats"}
+                  </TooltipContent>
+                </Tooltip>
+                <div className="min-w-0">
+                  <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Chat</div>
+                  <h1 className="truncate text-lg font-semibold">{selectedConversation?.title || "New conversation"}</h1>
+                  <p className="text-sm text-muted-foreground">
+                    Ask organization-scoped questions against the linked Airweave collection.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-end gap-3 lg:justify-end">
+                {isSuperadmin && (
+                  <div className="grid gap-2">
+                    <Label htmlFor="chat-organization-active-select" className="text-xs text-muted-foreground">
+                      Organization
+                    </Label>
+                    <Select
+                      value={selectedOrganizationId}
+                      disabled={areOrganizationsLoading || organizations.length === 0}
+                      onValueChange={handleOrganizationChange}
+                    >
+                      <SelectTrigger id="chat-organization-active-select" className="w-[220px]">
+                        <SelectValue placeholder={areOrganizationsLoading ? "Loading organizations..." : "Select organization"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {organizations.map((organization) => (
+                          <SelectItem key={organization.id} value={organization.id}>
+                            {organization.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {resolvedConversationId && (
+                  <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={handleDeleteConversation}>
+                    <IconTrash className="mr-2 h-4 w-4" />
+                    Delete
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <ScrollArea className="min-h-0 flex-1">
+            <div className="mx-auto flex w-full max-w-4xl flex-col gap-8 px-4 py-6 md:px-6">
+              {areMessagesLoading ? (
+                Array.from({ length: 3 }).map((_, index) => (
+                  <Skeleton key={index} className={cn("h-24 rounded-3xl", index === 1 ? "w-[80%]" : "w-full")} />
+                ))
+              ) : messages.length === 0 && !isStreaming ? (
+                <div className="flex min-h-[45vh] flex-col items-center justify-center gap-3 text-center">
+                  <div className="text-xl font-semibold">New conversation</div>
+                  <div className="max-w-md text-sm text-muted-foreground">
                     Ask a question about this organization to start the conversation.
                   </div>
-                ) : (
-                  <>
-                    {messages.map((message) => (
-                      <ChatMessageComponent
-                        key={message.id}
-                        content={message.content}
-                        role={message.role}
-                        sources={getSources(message)}
-                        generator={message.metadata?.generator}
-                        createdAt={message.createdAt}
-                      />
-                    ))}
+                </div>
+              ) : (
+                <>
+                  {messages.map((message) => (
+                    <ChatMessageComponent
+                      key={message.id}
+                      content={message.content}
+                      role={message.role}
+                      sources={getSources(message)}
+                      generator={message.metadata?.generator}
+                      createdAt={message.createdAt}
+                    />
+                  ))}
 
-                    {streaming && streaming.conversationId === resolvedConversationId && (
-                      <>
-                        {streaming.stage !== "idle" && streaming.stage !== "responding" && (
-                          <GenerationStatus
-                            stage={streaming.stage}
-                            searchQuery={streaming.searchQuery}
-                          />
-                        )}
+                  {streaming && streaming.conversationId === resolvedConversationId && (
+                    <>
+                      {streaming.stage !== "idle" && streaming.stage !== "responding" && (
+                        <GenerationStatus stage={streaming.stage} searchQuery={streaming.searchQuery} />
+                      )}
 
-                        {streaming.content && (
-                          <ChatMessageComponent
-                            content={streaming.content}
-                            role="assistant"
-                          />
-                        )}
-                      </>
-                    )}
-                  </>
-                )}
-                <div ref={messagesEndRef} />
-              </div>
+                      {streaming.content && <ChatMessageComponent content={streaming.content} role="assistant" />}
+                    </>
+                  )}
+                </>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+          </ScrollArea>
 
+          <div className="border-t bg-background/95 px-4 py-4 backdrop-blur md:px-6">
+            <div className="mx-auto w-full max-w-4xl">
               <ChatInput
                 onSend={(content) => void handleSend(content)}
                 onStopGeneration={handleStopGeneration}
                 isLoading={isStreaming}
                 disabled={createConversation.isPending || !resolvedOrganizationId}
               />
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
+      </div>
     </div>
   );
 }
