@@ -56,7 +56,7 @@ const AppRoutesContent = () => {
                     <Route
                       path="chat"
                       element={
-                        <AdminRoute requiredPermission={{ resource: "organization", action: "read" }}>
+                        <AdminRoute requiredPermission={{ resource: "chat", action: "read" }}>
                           <ChatPage />
                         </AdminRoute>
                       }
@@ -64,7 +64,7 @@ const AppRoutesContent = () => {
                     <Route
                       path="chat/:conversationId"
                       element={
-                        <AdminRoute requiredPermission={{ resource: "organization", action: "read" }}>
+                        <AdminRoute requiredPermission={{ resource: "chat", action: "read" }}>
                           <ChatPage />
                         </AdminRoute>
                       }

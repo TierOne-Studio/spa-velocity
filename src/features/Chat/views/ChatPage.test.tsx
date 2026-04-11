@@ -163,7 +163,9 @@ describe("ChatPage", () => {
       assistantMessage: messages[0],
     });
     mockUsePermissionsContext.mockReturnValue({
-      can: (resource: string, action: string) => resource === "organization" && action === "read",
+      can: (resource: string, action: string) =>
+        (resource === "organization" && action === "read") ||
+        (resource === "chat" && ["read", "create", "stream", "delete"].includes(action)),
     });
     mockUseEffectiveSession.mockReturnValue({
       data: {

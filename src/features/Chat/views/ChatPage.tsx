@@ -163,6 +163,7 @@ type ConversationRailContentProps = {
   resolvedConversationId: string;
   isCreatePending: boolean;
   resolvedOrganizationId: string | null;
+  canCreate: boolean;
   onCreateConversation: () => void;
   onSelectConversation: (conversationId: string) => void;
 };
@@ -174,6 +175,7 @@ function ConversationRailContent({
   resolvedConversationId,
   isCreatePending,
   resolvedOrganizationId,
+  canCreate,
   onCreateConversation,
   onSelectConversation,
 }: ConversationRailContentProps) {
@@ -189,7 +191,7 @@ function ConversationRailContent({
             variant="outline"
             size="sm"
             onClick={onCreateConversation}
-            disabled={isCreatePending || !resolvedOrganizationId}
+            disabled={isCreatePending || !resolvedOrganizationId || !canCreate}
           >
             <IconPlus className="mr-2 h-4 w-4" />
             {isCreatePending ? "Creating..." : "New"}
@@ -273,7 +275,7 @@ export function ChatPage() {
 
   const { data: conversations = [], isLoading: areConversationsLoading } = useChatConversations({
     organizationId: resolvedOrganizationId,
-    enabled: !!resolvedOrganizationId && can("organization", "read"),
+    enabled: !!resolvedOrganizationId && can("chat", "read"),
   });
   const selectedConversation = conversations.find((conversation) => conversation.id === conversationId) ?? null;
   const resolvedConversationId =
@@ -479,13 +481,13 @@ export function ChatPage() {
     }
   };
 
-  if (!can("organization", "read")) {
+  if (!can("chat", "read")) {
     return (
       <div className="flex flex-1 flex-col gap-4 p-4 lg:p-6">
         <Card>
           <CardHeader>
             <CardTitle>Chat unavailable</CardTitle>
-            <CardDescription>You do not have permission to access organization-backed chat.</CardDescription>
+            <CardDescription>You do not have permission to access chat.</CardDescription>
           </CardHeader>
         </Card>
       </div>
@@ -558,6 +560,7 @@ export function ChatPage() {
               resolvedConversationId={resolvedConversationId}
               isCreatePending={createConversation.isPending}
               resolvedOrganizationId={resolvedOrganizationId}
+              canCreate={can("chat", "create")}
               onCreateConversation={() => void handleCreateConversation()}
               onSelectConversation={handleSelectConversation}
             />
@@ -577,6 +580,7 @@ export function ChatPage() {
               resolvedConversationId={resolvedConversationId}
               isCreatePending={createConversation.isPending}
               resolvedOrganizationId={resolvedOrganizationId}
+              canCreate={can("chat", "create")}
               onCreateConversation={() => void handleCreateConversation()}
               onSelectConversation={handleSelectConversation}
             />
@@ -646,7 +650,7 @@ export function ChatPage() {
                   </div>
                 )}
 
-                {resolvedConversationId && (
+                {resolvedConversationId && can("chat", "delete") && (
                   <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={handleDeleteConversation}>
                     <IconTrash className="mr-2 h-4 w-4" />
                     Delete
@@ -703,7 +707,7 @@ export function ChatPage() {
                 onSend={(content) => void handleSend(content)}
                 onStopGeneration={handleStopGeneration}
                 isLoading={isStreaming}
-                disabled={createConversation.isPending || !resolvedOrganizationId}
+                disabled={createConversation.isPending || !resolvedOrganizationId || !can("chat", "stream")}
               />
             </div>
           </div>

@@ -289,7 +289,7 @@ test.describe.serial('Organization collection assignment and chat flow', () => {
     await page.goto('/chat');
     await page.waitForLoadState('networkidle');
 
-    await expect(page.getByRole('heading', { name: /chat/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /new conversation/i })).toBeVisible();
     await expect(page.getByText(/organization-scoped questions/i)).toBeVisible();
 
     await page.getByPlaceholder(/ask a question about this organization/i).fill('Which collection am I using?');
