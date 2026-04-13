@@ -54,6 +54,9 @@ import {
   useRemoveUser,
   useRemoveUsers,
   useImpersonateUser,
+  usePendingUsers,
+  useApproveUser,
+  useRejectUser,
 } from "../hooks/useUsers"
 import { useOrganizations } from "../hooks/useOrganizations"
 import { Checkbox } from "@/shared/components/ui/checkbox"
@@ -71,6 +74,8 @@ const EMPTY_USER_ACTIONS: UserCapabilities["actions"] = {
   remove: false,
   revokeSessions: false,
   impersonate: false,
+  approve: false,
+  reject: false,
 }
 
 const ALL_ORGANIZATIONS_VALUE = "__all__"
@@ -171,9 +176,23 @@ export function UsersPage() {
   const canSetPassword = can('user', 'set-password')
   const canDeleteUser = can('user', 'delete')
   const canImpersonate = can('user', 'impersonate')
+  const canApproveUser = can('user', 'approve')
+
+  // Pending approvals tab state
+  const [activeTab, setActiveTab] = useState<'all' | 'pending'>('all')
+  const [approveDialogOpen, setApproveDialogOpen] = useState(false)
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
+  const [rejectionReason, setRejectionReason] = useState("")
 
   // Queries and mutations
-  const { data, isLoading } = useUsers(queryParams)
+  const { data, isLoading } = useUsers({ ...queryParams, enabled: activeTab === 'all' })
+  const pendingQueryParams = activeTab === 'pending'
+    ? { limit: pageSize, offset: pageIndex * pageSize, searchValue: searchValue || undefined }
+    : { limit: 1, offset: 0 }
+  const { data: pendingData, isLoading: pendingLoading } = usePendingUsers({
+    ...pendingQueryParams,
+    enabled: canApproveUser,
+  })
   const users = data?.data ?? []
 
   const userIds = useMemo(() => users.map((u) => u.id), [users])
@@ -196,6 +215,37 @@ export function UsersPage() {
   const removeUser = useRemoveUser()
   const removeUsers = useRemoveUsers()
   const impersonateUser = useImpersonateUser()
+  const approveUser = useApproveUser()
+  const rejectUser = useRejectUser()
+
+  // Approval handlers
+  const handleApproveUser = async () => {
+    if (!selectedUser) return
+    try {
+      await approveUser.mutateAsync(selectedUser.id)
+      toast.success(`${selectedUser.name} has been approved`)
+      setApproveDialogOpen(false)
+      setSelectedUser(null)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to approve user")
+    }
+  }
+
+  const handleRejectUser = async () => {
+    if (!selectedUser) return
+    try {
+      await rejectUser.mutateAsync({
+        userId: selectedUser.id,
+        rejectionReason: rejectionReason || undefined,
+      })
+      toast.success(`${selectedUser.name} has been rejected`)
+      setRejectDialogOpen(false)
+      setRejectionReason("")
+      setSelectedUser(null)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to reject user")
+    }
+  }
 
   // Handlers
   const handleCreateUser = async () => {
@@ -466,6 +516,20 @@ export function UsersPage() {
       header: "Status",
       cell: ({ row }) => {
         const user = row.original
+        if (user.approvalStatus === "pending") {
+          return (
+            <Badge variant="outline" className="gap-1 text-yellow-600 border-yellow-600">
+              Pending Approval
+            </Badge>
+          )
+        }
+        if (user.approvalStatus === "rejected") {
+          return (
+            <Badge variant="destructive" className="gap-1">
+              Rejected
+            </Badge>
+          )
+        }
         if (user.banned) {
           return (
             <Badge variant="destructive" className="gap-1">
@@ -503,6 +567,8 @@ export function UsersPage() {
         const canUnban = actions.unban && canBanUser
         const canRemove = actions.remove && canDeleteUser
         const canDoImpersonate = actions.impersonate && canImpersonate
+        const canDoApprove = actions.approve && canApproveUser && user.approvalStatus === 'pending'
+        const canDoReject = actions.reject && canApproveUser && user.approvalStatus === 'pending'
         const hasAnyAction =
           canUpdate ||
           canDoSetRole ||
@@ -510,7 +576,9 @@ export function UsersPage() {
           canBan ||
           canUnban ||
           canRemove ||
-          canDoImpersonate
+          canDoImpersonate ||
+          canDoApprove ||
+          canDoReject
 
         if (!hasAnyAction) return null
 
@@ -523,6 +591,32 @@ export function UsersPage() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              {canDoApprove && (
+                <DropdownMenuItem
+                  onClick={() => {
+                    setSelectedUser(user)
+                    setApproveDialogOpen(true)
+                  }}
+                >
+                  <IconCheck className="mr-2 h-4 w-4" />
+                  Approve
+                </DropdownMenuItem>
+              )}
+              {canDoReject && (
+                <DropdownMenuItem
+                  className="text-destructive"
+                  onClick={() => {
+                    setSelectedUser(user)
+                    setRejectDialogOpen(true)
+                  }}
+                >
+                  <IconBan className="mr-2 h-4 w-4" />
+                  Reject
+                </DropdownMenuItem>
+              )}
+              {(canDoApprove || canDoReject) && (canUpdate || canDoSetRole || canDoSetPassword || canBan || canUnban || canRemove || canDoImpersonate) && (
+                <DropdownMenuSeparator />
+              )}
               {canUpdate && (
                 <DropdownMenuItem
                   onClick={() => {
@@ -615,11 +709,17 @@ export function UsersPage() {
     canSetPassword,
     canDeleteUser,
     canImpersonate,
+    canApproveUser,
     isAllOrganizationsMode,
     handleOpenRoleDialog,
     handleImpersonateUser,
     handleUnbanUser,
   ])
+
+  // Determine which data to show based on active tab
+  const displayUsers = activeTab === 'pending' ? (pendingData?.data ?? []) : users
+  const displayTotal = activeTab === 'pending' ? (pendingData?.total ?? 0) : (data?.total ?? 0)
+  const displayLoading = activeTab === 'pending' ? pendingLoading : isLoading
 
   return (
     <div className="flex flex-1 flex-col gap-4 p-4 lg:p-6">
@@ -630,13 +730,37 @@ export function UsersPage() {
         </div>
       </div>
 
+      {canApproveUser && (
+        <div className="flex gap-2">
+          <Button
+            variant={activeTab === 'all' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => { setActiveTab('all'); setPageIndex(0) }}
+          >
+            All Users
+          </Button>
+          <Button
+            variant={activeTab === 'pending' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => { setActiveTab('pending'); setPageIndex(0) }}
+          >
+            Pending Approvals
+            {(pendingData?.total ?? 0) > 0 && (
+              <Badge variant="secondary" className="ml-2">
+                {pendingData?.total}
+              </Badge>
+            )}
+          </Button>
+        </div>
+      )}
+
       <ServerDataTable
         columns={columns}
-        data={users}
-        total={data?.total ?? 0}
+        data={displayUsers}
+        total={displayTotal}
         pageSize={pageSize}
         pageIndex={pageIndex}
-        isLoading={isLoading}
+        isLoading={displayLoading}
         searchPlaceholder="Search users..."
         searchValue={searchValue}
         onSearchChange={setSearchValue}
@@ -956,6 +1080,57 @@ export function UsersPage() {
             </Button>
             <Button variant="destructive" onClick={handleBulkDeleteUsers} disabled={removeUsers.isPending}>
               {removeUsers.isPending ? "Deleting..." : `Delete ${selectedUsers.length} User(s)`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Approve User Dialog */}
+      <Dialog open={approveDialogOpen} onOpenChange={setApproveDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Approve User</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to approve {selectedUser?.name} ({selectedUser?.email})? They will be able to access the platform.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setApproveDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleApproveUser} disabled={approveUser.isPending}>
+              {approveUser.isPending ? "Approving..." : "Approve User"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reject User Dialog */}
+      <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject User</DialogTitle>
+            <DialogDescription>
+              Reject the registration for {selectedUser?.name} ({selectedUser?.email}). They will not be able to access the platform.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="rejectionReason">Reason (optional)</Label>
+              <Input
+                id="rejectionReason"
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+                placeholder="Reason for rejection..."
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleRejectUser} disabled={rejectUser.isPending}>
+              {rejectUser.isPending ? "Rejecting..." : "Reject User"}
             </Button>
           </DialogFooter>
         </DialogContent>

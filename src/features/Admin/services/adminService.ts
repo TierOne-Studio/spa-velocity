@@ -42,6 +42,8 @@ export type UserCapabilities = {
         remove: boolean;
         revokeSessions: boolean;
         impersonate: boolean;
+        approve: boolean;
+        reject: boolean;
     };
 };
 
@@ -66,6 +68,65 @@ export async function getOrganizationRolesMetadata(organizationId?: string): Pro
  */
 export const adminService = {
     // ============ User Operations ============
+
+    /**
+     * Self-approve the current user if they have an accepted invitation.
+     * Used during the invitation acceptance flow.
+     */
+    async selfApproveInvited(): Promise<void> {
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/users/self-approve-invited`, {
+            method: "POST",
+        });
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.message || "Failed to self-approve");
+        }
+    },
+
+    /**
+     * List pending users awaiting approval.
+     */
+    async listPendingUsers(params: UserFilterParams = {}): Promise<PaginatedResponse<AdminUser>> {
+        const url = new URL(`${API_BASE_URL}/api/admin/users/pending`);
+        url.searchParams.set("limit", String(params.limit ?? 10));
+        url.searchParams.set("offset", String(params.offset ?? 0));
+        if (params.searchValue) url.searchParams.set("searchValue", params.searchValue);
+
+        const response = await fetchWithAuth(url.toString());
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.message || "Failed to list pending users");
+        }
+        return await response.json();
+    },
+
+    /**
+     * Approve a pending user.
+     */
+    async approveUser(userId: string): Promise<void> {
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/users/${userId}/approve`, {
+            method: "POST",
+        });
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.message || "Failed to approve user");
+        }
+    },
+
+    /**
+     * Reject a pending user.
+     */
+    async rejectUser(userId: string, rejectionReason?: string): Promise<void> {
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/users/${userId}/reject`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ rejectionReason }),
+        });
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.message || "Failed to reject user");
+        }
+    },
 
     /**
      * List all users with optional filtering and pagination.

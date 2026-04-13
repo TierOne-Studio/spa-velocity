@@ -21,6 +21,7 @@ type SessionPayload = {
     banned?: boolean;
     banReason?: string;
     banExpires?: Date;
+    approvalStatus?: string;
     createdAt?: Date;
     updatedAt?: Date;
   };

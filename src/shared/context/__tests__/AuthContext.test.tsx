@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, renderHook, act } from '@testing-library/react';
+import { render, screen, renderHook, act, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 
 const {
@@ -36,16 +36,27 @@ vi.mock('@shared/hooks/useEffectiveSession', () => ({
   useEffectiveSession: () => mockUseEffectiveSession(),
 }));
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from '../AuthContext';
 
-const createWrapper = () =>
-  ({ children }: { children: ReactNode }) => (
-    <AuthProvider>{children}</AuthProvider>
+const createWrapper = () => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>{children}</AuthProvider>
+    </QueryClientProvider>
   );
+};
 
 describe('AuthContext', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFetchWithAuth.mockResolvedValue({
+      ok: false,
+      json: async () => ({}),
+    });
     mockUseEffectiveSession.mockReturnValue({
       data: null,
       isPending: false,
@@ -475,10 +486,13 @@ describe('AuthContext', () => {
 
   describe('AuthProvider renders', () => {
     it('renders children', () => {
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
       render(
-        <AuthProvider>
-          <span>Hello World</span>
-        </AuthProvider>,
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider>
+            <span>Hello World</span>
+          </AuthProvider>
+        </QueryClientProvider>,
       );
       expect(screen.getByText('Hello World')).toBeInTheDocument();
     });
@@ -492,6 +506,60 @@ describe('AuthContext', () => {
 
       const { result } = renderHook(() => useAuth(), { wrapper: createWrapper() });
       expect(result.current.isLoading).toBe(true);
+    });
+
+    it('keeps auth loading true while approval status is resolving for authenticated users', async () => {
+      let resolveFetch!: (value: {
+        ok: boolean;
+        json: () => Promise<{ approvalStatus: string; rejectionReason: string | null }>;
+      }) => void;
+
+      mockUseEffectiveSession.mockReturnValue({
+        data: { user: { id: 'u1', name: 'User', email: 'u@x.com', role: 'member' }, session: {} },
+        isPending: false,
+        refetch: vi.fn(),
+      });
+      mockFetchWithAuth.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveFetch = resolve;
+          }),
+      );
+
+      const { result } = renderHook(() => useAuth(), { wrapper: createWrapper() });
+
+      expect(result.current.isLoading).toBe(true);
+
+      await act(async () => {
+        resolveFetch({
+          ok: true,
+          json: async () => ({ approvalStatus: 'pending', rejectionReason: null }),
+        });
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+        expect(result.current.user?.approvalStatus).toBe('pending');
+      });
+    });
+
+    it('fails closed to pending approval when the approval-status request is unauthorized', async () => {
+      mockUseEffectiveSession.mockReturnValue({
+        data: { user: { id: 'u1', name: 'User', email: 'u@x.com', role: 'member' }, session: {} },
+        isPending: false,
+        refetch: vi.fn(),
+      });
+      mockFetchWithAuth.mockResolvedValue({
+        ok: false,
+        json: async () => ({ message: 'Unauthorized' }),
+      });
+
+      const { result } = renderHook(() => useAuth(), { wrapper: createWrapper() });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+        expect(result.current.user?.approvalStatus).toBe('pending');
+      });
     });
   });
 });

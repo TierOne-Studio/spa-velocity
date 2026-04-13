@@ -16,6 +16,8 @@ export interface AdminUser {
     banned?: boolean;
     banReason?: string;
     banExpires?: number;
+    approvalStatus?: 'pending' | 'approved' | 'rejected';
+    rejectionReason?: string;
     createdAt: Date;
     updatedAt: Date;
     memberships?: AdminUserMembership[];

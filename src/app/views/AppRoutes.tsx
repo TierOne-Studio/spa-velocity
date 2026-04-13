@@ -8,6 +8,8 @@ import {
   ForgotPasswordPage,
   SetNewPasswordPage,
   AcceptInvitationPage,
+  PendingApprovalPage,
+  AccountRejectedPage,
 } from "@features/Auth";
 import { DashboardPage, SettingsPage, AccountPage } from "@features/Dashboard";
 import { UsersPage, SessionsPage, OrganizationsPage, RolesPage } from "@features/Admin";
@@ -40,6 +42,8 @@ const AppRoutesContent = () => {
                   <Route path="/forgot-password" element={<ForgotPasswordPage />} />
                   <Route path="/set-new-password" element={<SetNewPasswordPage />} />
                   <Route path="/accept-invitation/:invitationId" element={<AcceptInvitationPage />} />
+                  <Route path="/pending-approval" element={<PendingApprovalPage />} />
+                  <Route path="/account-rejected" element={<AccountRejectedPage />} />
 
                   {/* Protected routes */}
                   <Route

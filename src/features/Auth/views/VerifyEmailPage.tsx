@@ -52,8 +52,9 @@ export function VerifyEmailPage() {
             setStatus("success");
             setMessage("Your email has been verified successfully!");
 
-            // Navigate directly into the app so OrganizationSwitcher can auto-activate the default org
-            setTimeout(() => navigate("/"), 3000);
+            // Land on the pending-approval route first so approval gating
+            // doesn't depend on the protected app route resolving in time.
+            setTimeout(() => navigate("/pending-approval"), 3000);
         } catch (error) {
             setStatus("error");
             setMessage(error instanceof Error ? error.message : "Verification failed");
@@ -81,7 +82,7 @@ export function VerifyEmailPage() {
                             <IconCircleCheck className="h-16 w-16 text-green-500" />
                             <p className="text-center text-muted-foreground">{message}</p>
                             <p className="text-sm text-muted-foreground">
-                                Redirecting to dashboard...
+                                Redirecting to account status...
                             </p>
                         </>
                     )}

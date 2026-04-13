@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@shared/components/ui/card"
 import { Button } from "@shared/components/ui/button"
 import { Loader2, CheckCircle, XCircle } from "lucide-react"
-import { organizationService } from "@features/Admin/services/adminService"
+import { organizationService, adminService } from "@features/Admin/services/adminService"
 import { useAuth } from "@shared/context/AuthContext"
 import { toast } from "sonner"
 
@@ -42,6 +42,14 @@ export function AcceptInvitationPage() {
         console.log("Accepting invitation:", invitationId)
         await organizationService.acceptInvitation(invitationId)
         console.log("Invitation accepted successfully")
+
+        // Auto-approve invited users — the invitation itself is the approval
+        try {
+          await adminService.selfApproveInvited()
+        } catch {
+          // Non-critical: user may already be approved or endpoint may not exist yet
+        }
+
         toast.success("Invitation accepted! You are now a member of the organization.")
         setStatus("success")
         // Redirect to dashboard after 2 seconds
