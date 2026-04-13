@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@shared/components/ui/card";
 import { Button } from "@/shared/components/ui/button";
@@ -10,24 +10,23 @@ export function PendingApprovalPage() {
     const navigate = useNavigate();
     const [isChecking, setIsChecking] = useState(false);
 
-    useEffect(() => {
-        if (user?.approvalStatus === "approved") {
-            navigate("/", { replace: true });
-        }
-
-        if (user?.approvalStatus === "rejected") {
-            navigate("/account-rejected", { replace: true });
-        }
-    }, [navigate, user?.approvalStatus]);
-
     const handleCheckStatus = async () => {
         setIsChecking(true);
         try {
             await refreshSession();
+            // Navigation happens via the useEffect below once user state updates
         } finally {
             setIsChecking(false);
         }
     };
+
+    // Navigate when approval status changes (after refreshSession updates the auth context)
+    const approvalStatus = user?.approvalStatus;
+    if (approvalStatus === "approved") {
+        navigate("/", { replace: true });
+    } else if (approvalStatus === "rejected") {
+        navigate("/account-rejected", { replace: true });
+    }
 
     const handleLogout = async () => {
         await logout();

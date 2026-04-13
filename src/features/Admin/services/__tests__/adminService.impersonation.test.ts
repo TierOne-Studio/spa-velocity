@@ -13,6 +13,15 @@ vi.mock('@shared/lib/auth-client', () => ({
 
 vi.mock('@shared/lib/fetch-with-auth', () => ({
     fetchWithAuth: mockFetchWithAuth,
+    fetchApi: async (url: string, options?: RequestInit, fallbackMessage = "Request failed") => {
+        const response = await mockFetchWithAuth(...[url, options].filter(v => v !== undefined));
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.message || fallbackMessage);
+        }
+        if (response.status === 204) return undefined;
+        return response.json();
+    },
 }));
 
 // Mock localStorage

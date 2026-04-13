@@ -53,7 +53,20 @@ describe("PendingApprovalPage", () => {
     expect(mockRefreshSession).toHaveBeenCalledTimes(1);
   });
 
-  it("redirects approved users to the dashboard route", async () => {
+  it("calls logout and navigates to login on log out click", async () => {
+    const user = userEvent.setup();
+
+    render(<PendingApprovalPage />);
+
+    await user.click(screen.getByRole("button", { name: /log out/i }));
+
+    expect(mockLogout).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith("/login", { replace: true });
+    });
+  });
+
+  it("navigates to dashboard when user is approved", () => {
     mockUseAuth.mockReturnValue({
       user: { approvalStatus: "approved" },
       refreshSession: mockRefreshSession,
@@ -62,12 +75,10 @@ describe("PendingApprovalPage", () => {
 
     render(<PendingApprovalPage />);
 
-    await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith("/", { replace: true });
-    });
+    expect(mockNavigate).toHaveBeenCalledWith("/", { replace: true });
   });
 
-  it("redirects rejected users to the rejected page", async () => {
+  it("navigates to rejected page when user is rejected", () => {
     mockUseAuth.mockReturnValue({
       user: { approvalStatus: "rejected" },
       refreshSession: mockRefreshSession,
@@ -76,8 +87,6 @@ describe("PendingApprovalPage", () => {
 
     render(<PendingApprovalPage />);
 
-    await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith("/account-rejected", { replace: true });
-    });
+    expect(mockNavigate).toHaveBeenCalledWith("/account-rejected", { replace: true });
   });
 });
