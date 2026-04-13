@@ -10,6 +10,8 @@ vi.mock("@features/Auth", () => ({
   ForgotPasswordPage: () => <div>Forgot Password</div>,
   SetNewPasswordPage: () => <div>Set New Password</div>,
   AcceptInvitationPage: () => <div>Accept Invitation</div>,
+  PendingApprovalPage: () => <div>Pending Approval</div>,
+  AccountRejectedPage: () => <div>Account Rejected</div>,
 }));
 
 vi.mock("@features/Dashboard", () => ({

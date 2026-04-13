@@ -8,6 +8,8 @@ export interface User {
     banned?: boolean;
     banReason?: string;
     banExpires?: Date;
+    approvalStatus?: 'pending' | 'approved' | 'rejected';
+    rejectionReason?: string | null;
     createdAt?: Date;
     updatedAt?: Date;
 }

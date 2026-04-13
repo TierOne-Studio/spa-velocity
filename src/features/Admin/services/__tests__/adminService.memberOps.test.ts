@@ -8,8 +8,20 @@ const { mockOrganization } = vi.hoisted(() => ({
   },
 }));
 
+const { mockFetchWithAuthInline } = vi.hoisted(() => ({
+  mockFetchWithAuthInline: vi.fn(),
+}));
 vi.mock("@shared/lib/fetch-with-auth", () => ({
-  fetchWithAuth: vi.fn(),
+  fetchWithAuth: mockFetchWithAuthInline,
+  fetchApi: async (url: string, options?: RequestInit, fallbackMessage = "Request failed") => {
+    const response = await mockFetchWithAuthInline(...[url, options].filter(v => v !== undefined));
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || fallbackMessage);
+    }
+    if (response.status === 204) return undefined;
+    return response.json();
+  },
 }));
 
 vi.mock("@shared/lib/auth-client", () => ({

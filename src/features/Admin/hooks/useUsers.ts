@@ -42,6 +42,59 @@ function useUserQueryScope(): UserQueryScope {
     };
 }
 
+// Query keys for pending users
+export const pendingUserKeys = {
+    all: ["pending-users"] as const,
+    lists: () => [...pendingUserKeys.all, "list"] as const,
+    list: (params: UserFilterParams, scope?: UserQueryScope) =>
+        [...pendingUserKeys.lists(), scope?.userId ?? "anonymous", scope?.activeOrganizationId ?? "no-org", params] as const,
+};
+
+/**
+ * Hook to fetch pending users awaiting approval.
+ */
+export function usePendingUsers(params: UserFilterParams & { enabled?: boolean } = {}) {
+    const { enabled = true, ...filterParams } = params;
+    const scope = useUserQueryScope();
+
+    return useQuery({
+        queryKey: pendingUserKeys.list(filterParams, scope),
+        queryFn: () => adminService.listPendingUsers(filterParams),
+        enabled,
+    });
+}
+
+/**
+ * Hook to approve a pending user.
+ */
+export function useApproveUser() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (userId: string) => adminService.approveUser(userId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: pendingUserKeys.all });
+            queryClient.invalidateQueries({ queryKey: userKeys.lists() });
+        },
+    });
+}
+
+/**
+ * Hook to reject a pending user.
+ */
+export function useRejectUser() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (params: { userId: string; rejectionReason?: string }) =>
+            adminService.rejectUser(params.userId, params.rejectionReason),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: pendingUserKeys.all });
+            queryClient.invalidateQueries({ queryKey: userKeys.lists() });
+        },
+    });
+}
+
 /**
  * Hook to fetch paginated list of users with server-side filtering.
  */

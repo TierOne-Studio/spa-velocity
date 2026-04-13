@@ -20,6 +20,9 @@ const {
   mockUseRemoveUser,
   mockUseRemoveUsers,
   mockUseImpersonateUser,
+  mockUsePendingUsers,
+  mockUseApproveUser,
+  mockUseRejectUser,
   mockUseOrganizations,
   mockUseAuth,
   mockUseEffectiveSession,
@@ -39,6 +42,9 @@ const {
   mockUseRemoveUser: vi.fn(),
   mockUseRemoveUsers: vi.fn(),
   mockUseImpersonateUser: vi.fn(),
+  mockUsePendingUsers: vi.fn(),
+  mockUseApproveUser: vi.fn(),
+  mockUseRejectUser: vi.fn(),
   mockUseOrganizations: vi.fn(),
   mockUseAuth: vi.fn(),
   mockUseEffectiveSession: vi.fn(),
@@ -60,6 +66,9 @@ vi.mock("../hooks/useUsers", () => ({
   useRemoveUser: () => mockUseRemoveUser(),
   useRemoveUsers: () => mockUseRemoveUsers(),
   useImpersonateUser: () => mockUseImpersonateUser(),
+  usePendingUsers: (...args: unknown[]) => mockUsePendingUsers(...args),
+  useApproveUser: () => mockUseApproveUser(),
+  useRejectUser: () => mockUseRejectUser(),
 }))
 
 vi.mock("../hooks/useOrganizations", () => ({
@@ -273,6 +282,9 @@ describe("UsersPage", () => {
     mockUseRemoveUser.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
     mockUseRemoveUsers.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
     mockUseImpersonateUser.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+    mockUsePendingUsers.mockReturnValue({ data: { data: [], total: 0 }, isLoading: false })
+    mockUseApproveUser.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+    mockUseRejectUser.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
     mockUseOrganizations.mockReturnValue({ data: { data: [] }, isLoading: false })
 
     mockUseAuth.mockReturnValue({ user: { id: "actor-1", role: "admin" } })
@@ -1128,6 +1140,9 @@ describe("UsersPage – additional dialog cancels", () => {
     mockUseRemoveUser.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
     mockUseRemoveUsers.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
     mockUseImpersonateUser.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+    mockUsePendingUsers.mockReturnValue({ data: { data: [], total: 0 }, isLoading: false })
+    mockUseApproveUser.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+    mockUseRejectUser.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
     mockUseOrganizations.mockReturnValue({ data: { data: [] }, isLoading: false })
     mockUseAuth.mockReturnValue({ user: { id: "actor-1", role: "admin" } })
     mockUseEffectiveSession.mockReturnValue({

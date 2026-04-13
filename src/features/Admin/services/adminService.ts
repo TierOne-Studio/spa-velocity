@@ -1,5 +1,5 @@
 import { organization } from "@shared/lib/auth-client";
-import { fetchWithAuth } from "@shared/lib/fetch-with-auth";
+import { fetchWithAuth, fetchApi } from "@shared/lib/fetch-with-auth";
 import type {
     AdminUser,
     UserSession,
@@ -42,6 +42,8 @@ export type UserCapabilities = {
         remove: boolean;
         revokeSessions: boolean;
         impersonate: boolean;
+        approve: boolean;
+        reject: boolean;
     };
 };
 
@@ -52,12 +54,7 @@ export type UserCapabilities = {
 export async function getOrganizationRolesMetadata(organizationId?: string): Promise<OrgRolesMetadata> {
     const url = new URL(`${API_BASE_URL}/api/platform-admin/organizations/roles-metadata`);
     if (organizationId) url.searchParams.set('organizationId', organizationId);
-    const response = await fetchWithAuth(url.toString());
-    if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.message || "Failed to get organization roles metadata");
-    }
-    return await response.json();
+    return fetchApi<OrgRolesMetadata>(url.toString(), undefined, "Failed to get organization roles metadata");
 }
 
 /**
@@ -68,6 +65,47 @@ export const adminService = {
     // ============ User Operations ============
 
     /**
+     * Self-approve the current user if they have an accepted invitation.
+     * Used during the invitation acceptance flow.
+     */
+    async selfApproveInvited(): Promise<void> {
+        await fetchApi(`${API_BASE_URL}/api/admin/users/self-approve-invited`, {
+            method: "POST",
+        }, "Failed to self-approve");
+    },
+
+    /**
+     * List pending users awaiting approval.
+     */
+    async listPendingUsers(params: UserFilterParams = {}): Promise<PaginatedResponse<AdminUser>> {
+        const url = new URL(`${API_BASE_URL}/api/admin/users/pending`);
+        url.searchParams.set("limit", String(params.limit ?? 10));
+        url.searchParams.set("offset", String(params.offset ?? 0));
+        if (params.searchValue) url.searchParams.set("searchValue", params.searchValue);
+        return fetchApi<PaginatedResponse<AdminUser>>(url.toString(), undefined, "Failed to list pending users");
+    },
+
+    /**
+     * Approve a pending user.
+     */
+    async approveUser(userId: string): Promise<void> {
+        await fetchApi(`${API_BASE_URL}/api/admin/users/${userId}/approve`, {
+            method: "POST",
+        }, "Failed to approve user");
+    },
+
+    /**
+     * Reject a pending user.
+     */
+    async rejectUser(userId: string, rejectionReason?: string): Promise<void> {
+        await fetchApi(`${API_BASE_URL}/api/admin/users/${userId}/reject`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ rejectionReason }),
+        }, "Failed to reject user");
+    },
+
+    /**
      * List all users with optional filtering and pagination.
      */
     async listUsers(params: UserFilterParams = {}): Promise<PaginatedResponse<AdminUser>> {
@@ -76,43 +114,27 @@ export const adminService = {
         url.searchParams.set("offset", String(params.offset ?? 0));
         if (params.searchValue) url.searchParams.set("searchValue", params.searchValue);
         if (params.organizationId) url.searchParams.set("organizationId", params.organizationId);
-
-        const response = await fetchWithAuth(url.toString());
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.message || "Failed to list users");
-        }
-        return await response.json();
+        return fetchApi<PaginatedResponse<AdminUser>>(url.toString(), undefined, "Failed to list users");
     },
 
     async getUserCapabilities(userId: string): Promise<UserCapabilities> {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/users/${userId}/capabilities`);
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.message || "Failed to fetch user capabilities");
-        }
-        return await response.json();
+        return fetchApi<UserCapabilities>(`${API_BASE_URL}/api/admin/users/${userId}/capabilities`, undefined, "Failed to fetch user capabilities");
     },
 
     async getBatchCapabilities(userIds: string[]): Promise<Record<string, UserCapabilities>> {
         if (userIds.length === 0) return {};
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/users/capabilities/batch`, {
+        return fetchApi<Record<string, UserCapabilities>>(`${API_BASE_URL}/api/admin/users/capabilities/batch`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ userIds }),
-        });
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.message || "Failed to fetch batch capabilities");
-        }
-        return await response.json();
+        }, "Failed to fetch batch capabilities");
     },
 
     /**
      * Create a new user.
      */
     async createUser(params: CreateUserParams): Promise<AdminUser> {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/users`, {
+        return fetchApi<AdminUser>(`${API_BASE_URL}/api/admin/users`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -122,85 +144,58 @@ export const adminService = {
                 role: params.role,
                 organizationId: params.organizationId,
             }),
-        });
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.message || "Failed to create user");
-        }
-        return await response.json();
+        }, "Failed to create user");
     },
 
     /**
      * Update a user's details.
      */
     async updateUser(params: UpdateUserParams): Promise<AdminUser> {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/users/${params.userId}`, {
+        return fetchApi<AdminUser>(`${API_BASE_URL}/api/admin/users/${params.userId}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ name: params.data.name }),
-        });
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.message || "Failed to update user");
-        }
-        return await response.json();
+        }, "Failed to update user");
     },
 
     /**
      * Remove (delete) a user.
      */
     async removeUser(userId: string): Promise<void> {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/users/${userId}`, {
+        await fetchApi(`${API_BASE_URL}/api/admin/users/${userId}`, {
             method: "DELETE",
-        });
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.message || "Failed to remove user");
-        }
+        }, "Failed to remove user");
     },
 
     /**
      * Bulk remove (delete) multiple users.
      */
     async removeUsers(userIds: string[]): Promise<{ success: boolean; deletedCount: number }> {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/users/bulk-delete`, {
+        return fetchApi<{ success: boolean; deletedCount: number }>(`${API_BASE_URL}/api/admin/users/bulk-delete`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ userIds }),
-        });
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.message || "Failed to remove users");
-        }
-        return await response.json();
+        }, "Failed to remove users");
     },
 
     /**
      * Ban a user.
      */
     async banUser(params: BanUserParams): Promise<void> {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/users/${params.userId}/ban`, {
+        await fetchApi(`${API_BASE_URL}/api/admin/users/${params.userId}/ban`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ banReason: params.banReason }),
-        });
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.message || "Failed to ban user");
-        }
+        }, "Failed to ban user");
     },
 
     /**
      * Unban a user.
      */
     async unbanUser(userId: string): Promise<void> {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/users/${userId}/unban`, {
+        await fetchApi(`${API_BASE_URL}/api/admin/users/${userId}/unban`, {
             method: "POST",
-        });
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.message || "Failed to unban user");
-        }
+        }, "Failed to unban user");
     },
 
     /**
@@ -208,30 +203,22 @@ export const adminService = {
      */
     async setRole(params: SetRoleParams): Promise<void> {
         const role = Array.isArray(params.role) ? params.role[0] : params.role;
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/users/${params.userId}/role`, {
+        await fetchApi(`${API_BASE_URL}/api/admin/users/${params.userId}/role`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ role }),
-        });
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.message || "Failed to set user role");
-        }
+        }, "Failed to set user role");
     },
 
     /**
      * Set a user's password.
      */
     async setPassword(params: SetPasswordParams): Promise<void> {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/users/${params.userId}/password`, {
+        await fetchApi(`${API_BASE_URL}/api/admin/users/${params.userId}/password`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ newPassword: params.newPassword }),
-        });
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.message || "Failed to set user password");
-        }
+        }, "Failed to set user password");
     },
 
     // ============ Session Operations ============
@@ -240,40 +227,27 @@ export const adminService = {
      * List all sessions for a user.
      */
     async listUserSessions(userId: string): Promise<UserSession[]> {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/users/${userId}/sessions`);
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.message || "Failed to list user sessions");
-        }
-        return await response.json();
+        return fetchApi<UserSession[]>(`${API_BASE_URL}/api/admin/users/${userId}/sessions`, undefined, "Failed to list user sessions");
     },
 
     /**
      * Revoke a specific session.
      */
     async revokeSession(sessionToken: string): Promise<void> {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/users/sessions/revoke`, {
+        await fetchApi(`${API_BASE_URL}/api/admin/users/sessions/revoke`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ sessionToken }),
-        });
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.message || "Failed to revoke session");
-        }
+        }, "Failed to revoke session");
     },
 
     /**
      * Revoke all sessions for a user.
      */
     async revokeAllSessions(userId: string): Promise<void> {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/users/${userId}/sessions/revoke-all`, {
+        await fetchApi(`${API_BASE_URL}/api/admin/users/${userId}/sessions/revoke-all`, {
             method: "POST",
-        });
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.message || "Failed to revoke all sessions");
-        }
+        }, "Failed to revoke all sessions");
     },
 
     async getCreateUserMetadata(): Promise<{
@@ -281,12 +255,7 @@ export const adminService = {
         allowedRoleNames: Array<'admin' | 'manager' | 'member'>;
         organizations: Array<{ id: string; name: string; slug: string }>;
     }> {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/users/create-metadata`);
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.message || "Failed to fetch create user metadata");
-        }
-        return await response.json();
+        return fetchApi(`${API_BASE_URL}/api/admin/users/create-metadata`, undefined, "Failed to fetch create user metadata");
     },
 
     // ============ Impersonation ============
@@ -398,20 +367,14 @@ export const organizationService = {
         if (params.page) url.searchParams.set("page", String(params.page));
         if (params.limit) url.searchParams.set("limit", String(params.limit));
         if (params.search) url.searchParams.set("search", params.search);
-
-        const response = await fetchWithAuth(url.toString());
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.message || "Failed to list organizations");
-        }
-        return await response.json();
+        return fetchApi<PaginatedOrganizationsResponse>(url.toString(), undefined, "Failed to list organizations");
     },
 
     /**
      * Create a new organization.
      */
     async createOrganization(params: { name: string; slug: string; logo?: string; metadata?: Record<string, unknown> }) {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/platform-admin/organizations`, {
+        const result = await fetchApi<{ data: unknown }>(`${API_BASE_URL}/api/platform-admin/organizations`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -420,14 +383,7 @@ export const organizationService = {
                 logo: params.logo,
                 metadata: params.metadata,
             }),
-        });
-
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.message || "Failed to create organization");
-        }
-
-        const result = await response.json();
+        }, "Failed to create organization");
         return result.data;
     },
 
@@ -450,17 +406,11 @@ export const organizationService = {
      * Update an organization.
      */
     async updateOrganization(organizationId: string, data: { name?: string; slug?: string; logo?: string; metadata?: Record<string, unknown> }) {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/platform-admin/organizations/${organizationId}`, {
+        const result = await fetchApi<{ data: unknown }>(`${API_BASE_URL}/api/platform-admin/organizations/${organizationId}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(data),
-        });
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.message || "Failed to update organization");
-        }
-
-        const result = await response.json();
+        }, "Failed to update organization");
         return result.data;
     },
 
@@ -468,44 +418,24 @@ export const organizationService = {
      * Delete an organization (admin - can delete any organization).
      */
     async deleteOrganization(organizationId: string) {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/platform-admin/organizations/${organizationId}`, {
+        await fetchApi(`${API_BASE_URL}/api/platform-admin/organizations/${organizationId}`, {
             method: "DELETE",
-        });
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.message || "Failed to delete organization");
-        }
+        }, "Failed to delete organization");
     },
 
     /**
      * List members of an organization (admin - can view any organization).
      */
     async listMembers(organizationId: string) {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/platform-admin/organizations/${organizationId}/members`);
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.message || "Failed to list members");
-        }
-        const result = await response.json();
+        const result = await fetchApi<{ data?: unknown[] }>(`${API_BASE_URL}/api/platform-admin/organizations/${organizationId}/members`, undefined, "Failed to list members");
         return result.data ?? [];
     },
 
     async listMemberCandidates(organizationId: string, params: { search?: string; limit?: number } = {}) {
         const url = new URL(`${API_BASE_URL}/api/platform-admin/organizations/${organizationId}/member-candidates`);
-        if (params.search) {
-            url.searchParams.set("search", params.search);
-        }
-        if (params.limit) {
-            url.searchParams.set("limit", String(params.limit));
-        }
-
-        const response = await fetchWithAuth(url.toString());
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.message || "Failed to list member candidates");
-        }
-
-        const result = await response.json();
+        if (params.search) url.searchParams.set("search", params.search);
+        if (params.limit) url.searchParams.set("limit", String(params.limit));
+        const result = await fetchApi<{ data?: unknown[] }>(url.toString(), undefined, "Failed to list member candidates");
         return result.data ?? [];
     },
 
@@ -513,16 +443,11 @@ export const organizationService = {
      * Add an existing user to an organization (admin).
      */
     async addMember(organizationId: string, userId: string, role: string) {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/platform-admin/organizations/${organizationId}/members`, {
+        const result = await fetchApi<{ data: unknown }>(`${API_BASE_URL}/api/platform-admin/organizations/${organizationId}/members`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ userId, role }),
-        });
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.message || "Failed to add member");
-        }
-        const result = await response.json();
+        }, "Failed to add member");
         return result.data;
     },
 
@@ -530,16 +455,11 @@ export const organizationService = {
      * Invite a member to an organization.
      */
     async inviteMember(params: { organizationId: string; email: string; role: string }) {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/platform-admin/organizations/${params.organizationId}/invitations`, {
+        const result = await fetchApi<{ data: unknown }>(`${API_BASE_URL}/api/platform-admin/organizations/${params.organizationId}/invitations`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ email: params.email, role: params.role }),
-        });
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.message || "Failed to invite member");
-        }
-        const result = await response.json();
+        }, "Failed to invite member");
         return result.data;
     },
 
@@ -547,46 +467,27 @@ export const organizationService = {
      * Remove a member from an organization.
      */
     async removeMember(params: { organizationId: string; memberId: string }) {
-        const response = await fetchWithAuth(
-            `${API_BASE_URL}/api/platform-admin/organizations/${params.organizationId}/members/${params.memberId}`,
-            {
-                method: "DELETE",
-            },
-        );
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.message || "Failed to remove member");
-        }
+        await fetchApi(`${API_BASE_URL}/api/platform-admin/organizations/${params.organizationId}/members/${params.memberId}`, {
+            method: "DELETE",
+        }, "Failed to remove member");
     },
 
     /**
      * Update a member's role.
      */
     async updateMemberRole(params: { organizationId: string; memberId: string; role: string }) {
-        const response = await fetchWithAuth(
-            `${API_BASE_URL}/api/platform-admin/organizations/${params.organizationId}/members/${params.memberId}/role`,
-            {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ role: params.role }),
-            },
-        );
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.message || "Failed to update member role");
-        }
+        await fetchApi(`${API_BASE_URL}/api/platform-admin/organizations/${params.organizationId}/members/${params.memberId}/role`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ role: params.role }),
+        }, "Failed to update member role");
     },
 
     /**
      * List invitations for an organization (admin - can view any organization).
      */
     async listInvitations(organizationId: string) {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/platform-admin/organizations/${organizationId}/invitations`);
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.message || "Failed to list invitations");
-        }
-        const result = await response.json();
+        const result = await fetchApi<{ data?: unknown[] }>(`${API_BASE_URL}/api/platform-admin/organizations/${organizationId}/invitations`, undefined, "Failed to list invitations");
         return result.data ?? [];
     },
 
@@ -594,26 +495,18 @@ export const organizationService = {
      * Cancel an invitation.
      */
     async cancelInvitation(params: { organizationId: string; invitationId: string }) {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/platform-admin/organizations/${params.organizationId}/invitations/${params.invitationId}`, {
+        await fetchApi(`${API_BASE_URL}/api/platform-admin/organizations/${params.organizationId}/invitations/${params.invitationId}`, {
             method: "DELETE",
-        });
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.message || "Failed to cancel invitation");
-        }
+        }, "Failed to cancel invitation");
     },
 
     /**
      * Delete an invitation (admin - can delete any invitation).
      */
     async deleteInvitation(organizationId: string, invitationId: string) {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/platform-admin/organizations/${organizationId}/invitations/${invitationId}`, {
+        await fetchApi(`${API_BASE_URL}/api/platform-admin/organizations/${organizationId}/invitations/${invitationId}`, {
             method: "DELETE",
-        });
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.message || "Failed to delete invitation");
-        }
+        }, "Failed to delete invitation");
     },
 
     /**
@@ -633,16 +526,11 @@ export const organizationService = {
      * Set active organization.
      */
     async setActive(organizationId: string) {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/auth/organization/set-active`, {
+        await fetchApi(`${API_BASE_URL}/api/auth/organization/set-active`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ organizationId }),
-        });
-
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.message || "Failed to set active organization");
-        }
+        }, "Failed to set active organization");
     },
 
     /**

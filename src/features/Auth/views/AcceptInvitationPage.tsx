@@ -1,9 +1,9 @@
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useState, useRef, useCallback } from "react"
 import { useParams, useNavigate } from "react-router-dom"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@shared/components/ui/card"
 import { Button } from "@shared/components/ui/button"
 import { Loader2, CheckCircle, XCircle } from "lucide-react"
-import { organizationService } from "@features/Admin/services/adminService"
+import { organizationService, adminService } from "@features/Admin/services/adminService"
 import { useAuth } from "@shared/context/AuthContext"
 import { toast } from "sonner"
 
@@ -16,6 +16,18 @@ export function AcceptInvitationPage() {
   const [status, setStatus] = useState<Status>("loading")
   const [errorMessage, setErrorMessage] = useState("")
   const hasAttemptedAcceptance = useRef(false)
+  const redirectTimerRef = useRef<ReturnType<typeof setTimeout>>(null)
+
+  const scheduleRedirect = useCallback((path: string, delayMs: number) => {
+    if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current)
+    redirectTimerRef.current = setTimeout(() => navigate(path), delayMs)
+  }, [navigate])
+
+  useEffect(() => {
+    return () => {
+      if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current)
+    }
+  }, [])
 
   useEffect(() => {
     // Wait for auth to finish loading
@@ -42,12 +54,17 @@ export function AcceptInvitationPage() {
         console.log("Accepting invitation:", invitationId)
         await organizationService.acceptInvitation(invitationId)
         console.log("Invitation accepted successfully")
+
+        // Auto-approve invited users — the invitation itself is the approval
+        try {
+          await adminService.selfApproveInvited()
+        } catch (approveError) {
+          console.warn("Self-approve after invitation failed (non-critical):", approveError)
+        }
+
         toast.success("Invitation accepted! You are now a member of the organization.")
         setStatus("success")
-        // Redirect to dashboard after 2 seconds
-        setTimeout(() => {
-          navigate("/")
-        }, 2000)
+        scheduleRedirect("/", 2000)
       } catch (error) {
         console.error("Failed to accept invitation:", error)
         const message = error instanceof Error ? error.message : "Failed to accept invitation"

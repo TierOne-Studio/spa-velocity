@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import type { User, AuthState, LoginCredentials, SignupCredentials } from "@features/Auth/types";
 import { signIn, signUp, signOut } from "@shared/lib/auth-client";
 import { fetchWithAuth } from "@shared/lib/fetch-with-auth";
@@ -21,7 +22,35 @@ interface AuthContextType extends AuthState {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-    const { data: session, isPending: isLoading, refetch } = useEffectiveSession();
+    const { data: session, isPending: isSessionLoading, refetch } = useEffectiveSession();
+
+    const isSessionAuthenticated = !!session?.user;
+    const sessionUserId = session?.user?.id;
+    const sessionApprovalStatus = (session?.user as { approvalStatus?: User["approvalStatus"] } | undefined)?.approvalStatus;
+    const sessionRejectionReason = (session?.user as { rejectionReason?: string | null } | undefined)?.rejectionReason;
+
+    // Fetch approval status from dedicated endpoint (doesn't depend on better-auth session fields)
+    const { data: approvalData, isPending: isApprovalLoading, refetch: refetchApproval } = useQuery({
+        queryKey: ["auth", "approval-status", sessionUserId],
+        queryFn: async () => {
+            const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/users/me/approval-status`);
+            if (!response.ok) {
+                return {
+                    approvalStatus: sessionApprovalStatus ?? "pending",
+                    rejectionReason: sessionRejectionReason ?? null,
+                };
+            }
+            return response.json() as Promise<{ approvalStatus: string; rejectionReason: string | null }>;
+        },
+        enabled: isSessionAuthenticated,
+        staleTime: 30_000,
+        refetchOnWindowFocus: false,
+    });
+    const resolvedApprovalStatus =
+        (approvalData?.approvalStatus as User["approvalStatus"] | undefined) ?? sessionApprovalStatus;
+    const resolvedRejectionReason = approvalData?.rejectionReason ?? sessionRejectionReason ?? null;
+    const isApprovalStatusLoading =
+        isSessionAuthenticated && !resolvedApprovalStatus && isApprovalLoading;
 
     const rawRole = (session?.user as { role?: string | string[] } | undefined)?.role;
     const normalizedRole = useMemo(() => {
@@ -52,14 +81,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                       banned: (session.user as { banned?: boolean }).banned,
                       banReason: (session.user as { banReason?: string }).banReason,
                       banExpires: (session.user as { banExpires?: Date }).banExpires,
+                      approvalStatus: resolvedApprovalStatus,
+                      rejectionReason: resolvedRejectionReason,
                       createdAt: session.user.createdAt,
                       updatedAt: session.user.updatedAt,
                   }
                 : null,
-        [normalizedRole, session?.user],
+        [normalizedRole, resolvedApprovalStatus, resolvedRejectionReason, session?.user],
     );
 
     const isAuthenticated = !!session?.user;
+    const isLoading = isSessionLoading || isApprovalStatusLoading;
 
     const login = useCallback(async (credentials: LoginCredentials) => {
         const result = await signIn.email({
@@ -136,7 +168,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const refreshSession = useCallback(async () => {
         await refetch();
-    }, [refetch]);
+        await refetchApproval();
+    }, [refetch, refetchApproval]);
 
     const value: AuthContextType = useMemo(
         () => ({
@@ -151,18 +184,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             sendVerificationEmail,
             refreshSession,
         }),
-        [
-            user,
-            isAuthenticated,
-            isLoading,
-            login,
-            signup,
-            logout,
-            forgotPassword,
-            resetPassword,
-            sendVerificationEmail,
-            refreshSession,
-        ],
+        [user, isAuthenticated, isLoading, login, signup, logout, forgotPassword, resetPassword, sendVerificationEmail, refreshSession],
     );
 
     return (
