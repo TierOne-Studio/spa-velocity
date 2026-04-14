@@ -310,7 +310,7 @@ export function OrganizationsPage() {
 
       if (createdOrganization?.id) {
         setOptimisticActiveOrganizationId(createdOrganization.id)
-        setSelectedOrg(createdOrganization)
+        setSelectedOrg({ ...createdOrganization, createdAt: new Date(createdOrganization.createdAt) })
 
         try {
           await setActiveOrganization.mutateAsync(createdOrganization.id)

@@ -374,7 +374,7 @@ export const organizationService = {
      * Create a new organization.
      */
     async createOrganization(params: { name: string; slug: string; logo?: string; metadata?: Record<string, unknown> }) {
-        const result = await fetchApi<{ data: unknown }>(`${API_BASE_URL}/api/platform-admin/organizations`, {
+        const result = await fetchApi<{ data: { id: string; name: string; slug: string; logo?: string | null; createdAt: string; metadata?: unknown } }>(`${API_BASE_URL}/api/platform-admin/organizations`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -435,7 +435,7 @@ export const organizationService = {
         const url = new URL(`${API_BASE_URL}/api/platform-admin/organizations/${organizationId}/member-candidates`);
         if (params.search) url.searchParams.set("search", params.search);
         if (params.limit) url.searchParams.set("limit", String(params.limit));
-        const result = await fetchApi<{ data?: unknown[] }>(url.toString(), undefined, "Failed to list member candidates");
+        const result = await fetchApi<{ data?: { id: string; name: string; email: string; image?: string | null }[] }>(url.toString(), undefined, "Failed to list member candidates");
         return result.data ?? [];
     },
 
