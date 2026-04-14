@@ -55,13 +55,17 @@ const AppRoutesContent = () => {
                       </ProtectedRoute>
                     }
                   >
-                    <Route index element={<DashboardPage />} />
+                    <Route index element={<Navigate to="/chat" replace />} />
+                    <Route path="dashboard" element={<DashboardPage />} />
 
                     {/* Admin routes */}
                     <Route
                       path="chat"
                       element={
-                        <AdminRoute requiredPermission={{ resource: "chat", action: "read" }}>
+                        <AdminRoute
+                          fallbackPath="/dashboard"
+                          requiredPermission={{ resource: "chat", action: "read" }}
+                        >
                           <ChatPage />
                         </AdminRoute>
                       }
@@ -69,7 +73,10 @@ const AppRoutesContent = () => {
                     <Route
                       path="chat/:conversationId"
                       element={
-                        <AdminRoute requiredPermission={{ resource: "chat", action: "read" }}>
+                        <AdminRoute
+                          fallbackPath="/dashboard"
+                          requiredPermission={{ resource: "chat", action: "read" }}
+                        >
                           <ChatPage />
                         </AdminRoute>
                       }

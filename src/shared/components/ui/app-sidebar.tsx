@@ -1,5 +1,5 @@
 import * as React from "react"
-import { useLocation } from "react-router-dom"
+import { Link, useLocation } from "react-router-dom"
 import {
   IconBuilding,
   IconChartBar,
@@ -144,10 +144,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               asChild
               className="data-[slot=sidebar-menu-button]:!p-1.5"
             >
-              <a href="/">
+              <Link to="/">
                 <IconInnerShadowTop className="!size-5" />
-                <span className="text-base font-semibold">Admin Panel</span>
-              </a>
+                <span className="text-base font-semibold">Velocity</span>
+              </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

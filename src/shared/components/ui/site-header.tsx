@@ -16,29 +16,48 @@ import {
  * Follows sidebar grouping hierarchy
  */
 const routeConfig: Record<string, { label: string; parent?: string }> = {
-  "/": { label: "Dashboard" },
+  "/": { label: "Chat", parent: "/main" },
+  "/main": { label: "Main", parent: undefined },
+  "/chat": { label: "Chat", parent: "/main" },
+  "/dashboard": { label: "Dashboard" },
+  "/admin/dashboard": { label: "Admin Dashboard", parent: "/admin" },
   "/admin/users": { label: "Users", parent: "/admin" },
   "/admin/sessions": { label: "Sessions", parent: "/admin" },
   "/admin/organizations": { label: "Organizations", parent: "/admin" },
   "/admin/roles": { label: "Roles & Permissions", parent: "/admin" },
   "/admin": { label: "Admin" },
+  "/settings": { label: "Settings" },
+  "/account": { label: "Account" },
 }
 
 type BreadcrumbItem = { path: string; label: string; isLast: boolean }
 
 /**
+ * Normalize dynamic routes to their static config key.
+ * e.g. "/chat/abc-123" -> "/chat"
+ */
+function normalizePath(pathname: string): string {
+  if (pathname.startsWith("/chat/")) return "/chat"
+  return pathname
+}
+
+/**
  * Build breadcrumb trail from current path
  */
 function buildBreadcrumbs(pathname: string): BreadcrumbItem[] {
+  const normalized = normalizePath(pathname)
   // Get current route config
-  const currentConfig = routeConfig[pathname]
+  const currentConfig = routeConfig[normalized]
   if (!currentConfig) {
-    // Fallback for unknown routes
-    return [{ path: "/", label: "Dashboard", isLast: true }]
+    // Fallback for unknown routes — mirror the default Main > Chat landing.
+    return [
+      { path: "/main", label: "Main", isLast: false },
+      { path: "/chat", label: "Chat", isLast: true },
+    ]
   }
 
   // Build trail by following parent chain
-  let currentPath: string | undefined = pathname
+  let currentPath: string | undefined = normalized
   const trail: Array<{ path: string; label: string }> = []
   
   while (currentPath) {

@@ -39,6 +39,11 @@ vi.mock("@/features/Admin/hooks/useOrganizations", () => ({
   useOrganizations: (...args: unknown[]) => mockUseOrganizations(...args),
 }));
 
+const mockSetSidebarOpen = vi.fn();
+vi.mock("@/shared/components/ui/sidebar", () => ({
+  useSidebar: () => ({ setOpen: mockSetSidebarOpen }),
+}));
+
 vi.mock("@/shared/components/ui/select", () => ({
   Select: ({ children, value, disabled, onValueChange }: { children: ReactNode; value?: string; disabled?: boolean; onValueChange?: (value: string) => void }) => (
     <select value={value ?? ""} disabled={disabled} onChange={(event) => onValueChange?.(event.target.value)}>
@@ -55,6 +60,13 @@ vi.mock("../services/chatService", () => ({
   chatService: {
     sendMessage: (...args: unknown[]) => mockChatServiceSendMessage(...args),
   },
+}));
+
+vi.mock("@/shared/lib/fetch-with-auth", () => ({
+  fetchWithAuth: vi.fn(async () => ({
+    ok: true,
+    json: async () => [],
+  })),
 }));
 
 const mockToastInfo = vi.fn();
@@ -117,6 +129,8 @@ function renderPage(initialEntry = "/chat/conversation-1") {
       mutations: { retry: false },
     },
   });
+  // Seed the user-orgs query so isLoading is false on first render.
+  queryClient.setQueryData(["chat", "user-orgs"], []);
 
   return render(
     <QueryClientProvider client={queryClient}>
@@ -133,6 +147,7 @@ function renderPage(initialEntry = "/chat/conversation-1") {
 describe("ChatPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
 
     mockUseChatConversations.mockReturnValue({
       data: conversations,
@@ -198,12 +213,16 @@ describe("ChatPage", () => {
     expect(screen.getByText(/chat is scoped to your active organization/i)).toBeInTheDocument();
   });
 
-  it("shows a superadmin organization selector when no active organization is set", () => {
+  it("shows a superadmin organization selector when no organizations are available", () => {
     mockUseEffectiveSession.mockReturnValue({
       data: {
         user: { id: "superadmin-1", role: "superadmin" },
         session: {},
       },
+    });
+    mockUseOrganizations.mockReturnValue({
+      data: { data: [] },
+      isLoading: false,
     });
 
     renderPage("/chat");
@@ -211,6 +230,69 @@ describe("ChatPage", () => {
     expect(screen.getByText(/select an organization first/i)).toBeInTheDocument();
     expect(screen.getByText(/superadmin chat can target any organization/i)).toBeInTheDocument();
     expect(screen.getByRole("combobox")).toBeInTheDocument();
+  });
+
+  it("auto-selects the first organization for a superadmin with no active org", async () => {
+    mockUseEffectiveSession.mockReturnValue({
+      data: {
+        user: { id: "superadmin-1", role: "superadmin" },
+        session: {},
+      },
+    });
+    mockUseChatConversations.mockReturnValue({ data: [], isLoading: false });
+    mockUseChatMessages.mockReturnValue({ data: [], isLoading: false });
+
+    renderPage("/chat");
+
+    // Should NOT show the blocking card — should auto-select org-1 from the list.
+    await waitFor(() => {
+      expect(screen.queryByText(/select an organization first/i)).not.toBeInTheDocument();
+    });
+    expect(screen.getByPlaceholderText(/ask a question about this organization/i)).toBeInTheDocument();
+  });
+
+  it("restores the last used organization from localStorage", async () => {
+    localStorage.setItem("chat_last_org_id", "org-2");
+    mockUseEffectiveSession.mockReturnValue({
+      data: {
+        user: { id: "superadmin-1", role: "superadmin" },
+        session: {},
+      },
+    });
+    mockUseChatConversations.mockReturnValue({ data: [], isLoading: false });
+    mockUseChatMessages.mockReturnValue({ data: [], isLoading: false });
+    const createMutateAsync = vi.fn().mockResolvedValue({ ...conversations[0], id: "conversation-3", organizationId: "org-2" });
+    mockUseCreateConversation.mockReturnValue({ mutateAsync: createMutateAsync, isPending: false });
+
+    renderPage("/chat");
+
+    fireEvent.change(screen.getByPlaceholderText(/ask a question about this organization/i), {
+      target: { value: "Test" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+
+    await waitFor(() => {
+      expect(createMutateAsync).toHaveBeenCalledWith({ organizationId: "org-2" });
+    });
+  });
+
+  it("persists the selected organization to localStorage", async () => {
+    mockUseEffectiveSession.mockReturnValue({
+      data: {
+        user: { id: "superadmin-1", role: "superadmin" },
+        session: {},
+      },
+    });
+    mockUseChatConversations.mockReturnValue({ data: [], isLoading: false });
+    mockUseChatMessages.mockReturnValue({ data: [], isLoading: false });
+
+    renderPage("/chat");
+
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "org-2" } });
+
+    await waitFor(() => {
+      expect(localStorage.getItem("chat_last_org_id")).toBe("org-2");
+    });
   });
 
   it("renders conversations and messages for the active organization", () => {

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { IconLayoutSidebarLeftCollapse, IconLayoutSidebarLeftExpand, IconPlus, IconTrash } from "@tabler/icons-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { usePermissionsContext } from "@/shared/context/PermissionsContext";
 import { useEffectiveSession } from "@/shared/hooks/useEffectiveSession";
@@ -21,7 +21,9 @@ import {
 } from "@/shared/components/ui/sheet";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
+import { useSidebar } from "@/shared/components/ui/sidebar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/components/ui/tooltip";
+import { fetchWithAuth } from "@/shared/lib/fetch-with-auth";
 import { chatService } from "../services/chatService";
 import {
   chatKeys,
@@ -34,6 +36,9 @@ import type { ChatConversation, ChatMessage, ChatSource } from "../types";
 import { ChatMessage as ChatMessageComponent } from "../components/ChatMessage";
 import { GenerationStatus, type GenerationStage } from "../components/GenerationStatus";
 import { ChatInput } from "../components/ChatInput";
+
+const CHAT_LAST_ORG_KEY = "chat_last_org_id";
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
 type StreamingState = {
   conversationId: string;
@@ -253,11 +258,26 @@ export function ChatPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { conversationId } = useParams<{ conversationId?: string }>();
+  const { setOpen: setSidebarOpen } = useSidebar();
   const { can } = usePermissionsContext();
+
+  // Collapse the main navigation sidebar once on mount so the user lands straight in chat.
+  // Using a ref keeps this a true one-shot: setSidebarOpen's identity changes whenever the
+  // sidebar toggles, so depending on it would re-close the sidebar after every user toggle.
+  const hasCollapsedSidebarRef = useRef(false);
+  const setSidebarOpenRef = useRef(setSidebarOpen);
+  setSidebarOpenRef.current = setSidebarOpen;
+  useEffect(() => {
+    if (hasCollapsedSidebarRef.current) return;
+    hasCollapsedSidebarRef.current = true;
+    setSidebarOpenRef.current(false);
+  }, []);
   const { data: session } = useEffectiveSession();
   const activeOrganizationId = getActiveOrganizationId(session);
   const isSuperadmin = isSuperadminRole(getSessionUserRole(session));
-  const [selectedOrganizationId, setSelectedOrganizationId] = useState(activeOrganizationId ?? "");
+  const [selectedOrganizationId, setSelectedOrganizationId] = useState(
+    () => localStorage.getItem(CHAT_LAST_ORG_KEY) ?? activeOrganizationId ?? "",
+  );
   const [pendingConversationId, setPendingConversationId] = useState<string | null>(null);
   const [isRailOpen, setIsRailOpen] = useState(true);
   const [isMobileRailOpen, setIsMobileRailOpen] = useState(false);
@@ -271,7 +291,30 @@ export function ChatPage() {
     () => organizationsResponse?.data ?? [],
     [organizationsResponse?.data],
   );
-  const resolvedOrganizationId = isSuperadmin ? selectedOrganizationId || null : activeOrganizationId;
+
+  const { data: userOrgsRaw, isLoading: areUserOrgsLoading } = useQuery({
+    queryKey: ["chat", "user-orgs"],
+    queryFn: async () => {
+      const res = await fetchWithAuth(`${API_BASE_URL}/api/auth/organization/list`);
+      if (!res.ok) return [] as OrganizationOption[];
+      const payload = await res.json();
+      const list: Array<{ id: string; name: string }> = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload?.data)
+          ? payload.data
+          : [];
+      return list.map((o) => ({ id: o.id, name: o.name })) as OrganizationOption[];
+    },
+    enabled: !isSuperadmin,
+    staleTime: 5 * 60 * 1000,
+  });
+  const userOrgs = userOrgsRaw ?? [];
+  const isMultiOrgUser = !isSuperadmin && userOrgs.length > 1;
+  const showOrgDropdown = isSuperadmin || isMultiOrgUser;
+  const dropdownOrgs = isSuperadmin ? organizations : userOrgs;
+  const areDropdownOrgsLoading = isSuperadmin ? areOrganizationsLoading : areUserOrgsLoading;
+
+  const resolvedOrganizationId = selectedOrganizationId || activeOrganizationId || null;
 
   const { data: conversations = [], isLoading: areConversationsLoading } = useChatConversations({
     organizationId: resolvedOrganizationId,
@@ -290,27 +333,21 @@ export function ChatPage() {
   const deleteConversation = useDeleteConversation();
 
   useEffect(() => {
-    if (!isSuperadmin) {
-      setSelectedOrganizationId("");
-      return;
-    }
+    const validOrgs = isSuperadmin ? organizations : userOrgs;
+    if (validOrgs.length === 0 && !activeOrganizationId) return;
 
     setSelectedOrganizationId((current) => {
-      if (activeOrganizationId && organizations.some((organization) => organization.id === activeOrganizationId)) {
-        return activeOrganizationId;
-      }
+      const isValid = (id: string) =>
+        validOrgs.length > 0 ? validOrgs.some((o) => o.id === id) : id === activeOrganizationId;
+      const stored = localStorage.getItem(CHAT_LAST_ORG_KEY) ?? "";
 
-      if (current && organizations.some((organization) => organization.id === current)) {
-        return current;
-      }
-
-      if (organizations.length === 1) {
-        return organizations[0].id;
-      }
-
-      return "";
+      if (stored && isValid(stored)) return stored;
+      if (activeOrganizationId && isValid(activeOrganizationId)) return activeOrganizationId;
+      if (current && isValid(current)) return current;
+      if (validOrgs.length > 0) return validOrgs[0].id;
+      return activeOrganizationId ?? current;
     });
-  }, [activeOrganizationId, isSuperadmin, organizations]);
+  }, [activeOrganizationId, isSuperadmin, organizations, userOrgs]);
 
   useEffect(() => {
     if (!streaming || resolvedConversationId !== streaming.conversationId) {
@@ -353,6 +390,7 @@ export function ChatPage() {
   }, [messages, streaming]);
 
   const handleOrganizationChange = (organizationId: string) => {
+    localStorage.setItem(CHAT_LAST_ORG_KEY, organizationId);
     setSelectedOrganizationId(organizationId);
     setPendingConversationId(null);
     setIsMobileRailOpen(false);
@@ -495,6 +533,14 @@ export function ChatPage() {
   }
 
   if (!resolvedOrganizationId) {
+    if (areDropdownOrgsLoading) {
+      return (
+        <div className="flex flex-1 flex-col gap-4 p-4 lg:p-6">
+          <Skeleton className="h-32 w-full max-w-sm rounded-2xl" />
+        </div>
+      );
+    }
+
     return (
       <div className="flex flex-1 flex-col gap-4 p-4 lg:p-6">
         <Card>
@@ -506,27 +552,25 @@ export function ChatPage() {
                 : "Chat is scoped to your active organization and its linked Airweave collection."}
             </CardDescription>
           </CardHeader>
-          {isSuperadmin && (
+          {showOrgDropdown && (
             <CardContent className="max-w-sm">
               <div className="grid gap-2">
                 <Label htmlFor="chat-organization-select">Organization</Label>
                 <Select
                   value={selectedOrganizationId}
-                  disabled={areOrganizationsLoading || organizations.length === 0}
+                  disabled={dropdownOrgs.length === 0}
                   onValueChange={handleOrganizationChange}
                 >
                   <SelectTrigger id="chat-organization-select" className="w-full">
-                    <SelectValue
-                      placeholder={areOrganizationsLoading ? "Loading organizations..." : "Select organization"}
-                    />
+                    <SelectValue placeholder="Select organization" />
                   </SelectTrigger>
                   <SelectContent>
-                    {organizations.map((organization) => (
+                    {dropdownOrgs.map((organization) => (
                       <SelectItem key={organization.id} value={organization.id}>
                         {organization.name}
                       </SelectItem>
                     ))}
-                    {organizations.length === 0 && !areOrganizationsLoading && (
+                    {dropdownOrgs.length === 0 && (
                       <SelectItem value="no-organizations" disabled>
                         No organizations available
                       </SelectItem>
@@ -626,21 +670,21 @@ export function ChatPage() {
               </div>
 
               <div className="flex flex-wrap items-end gap-3 lg:justify-end">
-                {isSuperadmin && (
+                {showOrgDropdown && (
                   <div className="grid gap-2">
                     <Label htmlFor="chat-organization-active-select" className="text-xs text-muted-foreground">
                       Organization
                     </Label>
                     <Select
                       value={selectedOrganizationId}
-                      disabled={areOrganizationsLoading || organizations.length === 0}
+                      disabled={areDropdownOrgsLoading || dropdownOrgs.length === 0}
                       onValueChange={handleOrganizationChange}
                     >
                       <SelectTrigger id="chat-organization-active-select" className="w-[220px]">
-                        <SelectValue placeholder={areOrganizationsLoading ? "Loading organizations..." : "Select organization"} />
+                        <SelectValue placeholder={areDropdownOrgsLoading ? "Loading..." : "Select organization"} />
                       </SelectTrigger>
                       <SelectContent>
-                        {organizations.map((organization) => (
+                        {dropdownOrgs.map((organization) => (
                           <SelectItem key={organization.id} value={organization.id}>
                             {organization.name}
                           </SelectItem>
