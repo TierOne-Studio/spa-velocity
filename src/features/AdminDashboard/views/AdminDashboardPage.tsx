@@ -42,7 +42,7 @@ export function AdminDashboardPage() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">Admin Analytics</h1>
+          <h1 className="text-2xl font-semibold">Admin Dashboard</h1>
           <p className="text-muted-foreground text-sm">
             {selectedOrgId
               ? `Showing data for: ${availableOrgs.find(o => o.id === selectedOrgId)?.name ?? 'Selected organization'}`

@@ -3,7 +3,6 @@ import { useLocation } from "react-router-dom"
 import {
   IconBuilding,
   IconChartBar,
-  IconDashboard,
   IconHome,
   IconInnerShadowTop,
   IconMessageCircle,
@@ -45,7 +44,7 @@ const getNavItems = (
 
   if (can("dashboard", "view")) {
     adminItems.push({
-      title: "Analytics",
+      title: "Dashboard",
       url: "/admin/dashboard",
       icon: IconChartBar,
       isActive: pathname.startsWith("/admin/dashboard"),
@@ -96,12 +95,6 @@ const getNavItems = (
         icon: IconHome,
         isActive: pathname === "/" || pathname.startsWith("/chat"),
         items: [
-          {
-            title: "Dashboard",
-            url: "/",
-            icon: IconDashboard,
-            isActive: pathname === "/",
-          },
           ...(can("chat", "read")
             ? [
                 {
