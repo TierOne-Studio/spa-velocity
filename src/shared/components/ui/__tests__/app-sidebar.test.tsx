@@ -66,10 +66,10 @@ describe("AppSidebar", () => {
     });
   });
 
-  it("shows the Chat nav item when organization:read is granted", () => {
+  it("shows the Chat nav item when chat:read is granted", () => {
     mockUsePermissionsContext.mockReturnValue({
       can: (resource: string, action: string) =>
-        (resource === "organization" && action === "read") || (resource === "user" && action === "read"),
+        (resource === "chat" && action === "read") || (resource === "user" && action === "read"),
     });
 
     render(
@@ -84,7 +84,7 @@ describe("AppSidebar", () => {
     expect(screen.getByTestId("org-switcher")).toBeInTheDocument();
   });
 
-  it("hides chat when organization:read is missing", () => {
+  it("hides chat when chat:read is missing", () => {
     mockUsePermissionsContext.mockReturnValue({
       can: () => false,
     });

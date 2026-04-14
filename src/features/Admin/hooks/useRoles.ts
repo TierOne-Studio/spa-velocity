@@ -158,32 +158,5 @@ export function useUsersByRole(roleName: string) {
   });
 }
 
-/**
- * Hook to get user's effective permissions
- */
-export function useUserPermissions(roleName: string, options?: { enabled?: boolean }) {
-  return useQuery({
-    queryKey: rbacKeys.userPermissions(roleName),
-    queryFn: () => rbacService.getUserPermissions(roleName),
-    enabled: options?.enabled ?? !!roleName,
-  });
-}
-
-/**
- * Hook to check if current user has a specific permission
- */
-export function useCheckPermission(
-  roleName: string,
-  resource: string,
-  action: string,
-  options?: { enabled?: boolean }
-) {
-  return useQuery({
-    queryKey: [...rbacKeys.all, "check", roleName, resource, action],
-    queryFn: () => rbacService.checkPermission(roleName, resource, action),
-    enabled: options?.enabled ?? !!roleName,
-  });
-}
-
 // Re-export types for convenience
 export type { Role, RoleWithPermissions, Permission, PermissionsGrouped };
