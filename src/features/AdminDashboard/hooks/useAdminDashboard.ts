@@ -5,9 +5,8 @@ import type { TimeRange } from '../types/adminDashboard.types';
 export const dashboardKeys = {
   overview: ['admin-dashboard', 'overview'] as const,
   users: (range: TimeRange) => ['admin-dashboard', 'users', range] as const,
-  sessions: (range: TimeRange) => ['admin-dashboard', 'sessions', range] as const,
   chat: (range: TimeRange) => ['admin-dashboard', 'chat', range] as const,
-  projects: ['admin-dashboard', 'projects'] as const,
+  orgs: ['admin-dashboard', 'orgs'] as const,
 };
 
 export function useOverviewStats() {
@@ -26,14 +25,6 @@ export function useUserStats(range: TimeRange) {
   });
 }
 
-export function useSessionStats(range: TimeRange) {
-  return useQuery({
-    queryKey: dashboardKeys.sessions(range),
-    queryFn: () => adminDashboardService.getSessionStats(range),
-    staleTime: 60_000,
-  });
-}
-
 export function useChatStats(range: TimeRange) {
   return useQuery({
     queryKey: dashboardKeys.chat(range),
@@ -42,10 +33,10 @@ export function useChatStats(range: TimeRange) {
   });
 }
 
-export function useProjectStats() {
+export function useOrgStats() {
   return useQuery({
-    queryKey: dashboardKeys.projects,
-    queryFn: () => adminDashboardService.getProjectStats(),
+    queryKey: dashboardKeys.orgs,
+    queryFn: () => adminDashboardService.getOrgStats(),
     staleTime: 60_000,
   });
 }

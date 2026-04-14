@@ -1,48 +1,64 @@
 export type TimeRange = '7d' | '30d' | '90d';
 
-export interface OverviewStats {
+export interface OverviewStatsDto {
   totalUsers: number;
-  activeUsers: number;
   bannedUsers: number;
   activeSessions: number;
   totalOrganizations: number;
   totalConversations: number;
   totalMessages: number;
-  totalProjects: number;
+  assistantMessages: number;
+  totalTokensAllTime: number | null;
 }
 
-export interface UserStats {
+export interface UserStatsDto {
   total: number;
   newInRange: number;
   bannedCount: number;
   emailVerifiedCount: number;
-  byRole: { role: string; count: number }[];
-  timeSeriesNewUsers: { date: string; count: number }[];
-}
-
-export interface SessionStats {
-  total: number;
+  timeSeriesNewUsers: Array<{ date: string; count: number }>;
+  topUsers: Array<{
+    userId: string;
+    name: string;
+    email: string;
+    role: string;
+    conversationCount: number;
+    messageCount: number;
+    organizationCount: number;
+    lastActiveAt: string | null;
+  }>;
   activeSessions: number;
-  impersonatedCount: number;
-  timeSeriesCreated: { date: string; count: number }[];
-  byUserAgent: { browser: string; count: number }[];
+  expiredSessions: number;
+  impersonatedSessions: number;
+  sessionsByBrowser: Array<{ browser: string; count: number }>;
 }
 
-export interface ChatStats {
+export interface ChatStatsDto {
   totalConversations: number;
   totalMessages: number;
+  assistantMessages: number;
+  userMessages: number;
   avgMessagesPerConversation: number;
   activeConversationsInRange: number;
-  byRole: { role: string; count: number }[];
-  timeSeriesConversations: { date: string; count: number }[];
+  timeSeriesConversations: Array<{ date: string; count: number }>;
+  timeSeriesMessages: Array<{ date: string; userCount: number; assistantCount: number }>;
+  generatorDistribution: Array<{ generator: string; count: number; percentage: number }>;
+  sourceIntegrationUsage: Array<{ sourceName: string; count: number }>;
+  entityTypeBreakdown: Array<{ entityType: string; count: number }>;
+  avgToolCallsPerResponse: number | null;
+  avgResultsPerResponse: number | null;
+  totalTokens: number | null;
+  totalPromptTokens: number | null;
+  totalCompletionTokens: number | null;
+  avgTokensPerResponse: number | null;
+  messagesWithTokenData: number;
 }
 
-export interface ProjectStats {
-  totalProjects: number;
-  byStatus: { status: string; count: number }[];
-  byPhase: { phase: string; count: number }[];
-  totalDataSources: number;
-  dataSourcesByType: { type: string; count: number }[];
-  dataSourcesByStatus: { status: string; count: number }[];
-  totalEntityCount: number;
+export interface OrgStatsDto {
+  totalOrganizations: number;
+  pendingInvitations: number;
+  conversationsPerOrg: Array<{ orgId: string; orgName: string; conversationCount: number; messageCount: number }>;
+  membersPerOrg: Array<{ orgId: string; orgName: string; memberCount: number }>;
+  memberRoleDistribution: Array<{ role: string; count: number }>;
+  mostActiveOrgs: Array<{ orgId: string; orgName: string; recentMessageCount: number }>;
 }

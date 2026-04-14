@@ -1,19 +1,12 @@
 import { useState } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select';
+import { Skeleton } from '@/shared/components/ui/skeleton';
 import { ToggleGroup, ToggleGroupItem } from '@/shared/components/ui/toggle-group';
 import { OverviewCards } from '../components/OverviewCards';
-import { UsersChart } from '../components/UsersChart';
-import { SessionsChart } from '../components/SessionsChart';
-import { ChatConversationsChart } from '../components/ChatConversationsChart';
-import { MessagesByRoleChart } from '../components/MessagesByRoleChart';
-import { ProjectStatusChart } from '../components/ProjectStatusChart';
-import {
-  useOverviewStats,
-  useUserStats,
-  useSessionStats,
-  useChatStats,
-  useProjectStats,
-} from '../hooks/useAdminDashboard';
+import { ChatIntelligenceSection } from '../components/ChatIntelligenceSection';
+import { UserActivitySection } from '../components/UserActivitySection';
+import { OrgActivitySection } from '../components/OrgActivitySection';
+import { useOverviewStats, useUserStats, useChatStats, useOrgStats } from '../hooks/useAdminDashboard';
 import type { TimeRange } from '../types/adminDashboard.types';
 
 export function AdminDashboardPage() {
@@ -21,9 +14,8 @@ export function AdminDashboardPage() {
 
   const overview = useOverviewStats();
   const users = useUserStats(range);
-  const sessions = useSessionStats(range);
   const chat = useChatStats(range);
-  const projects = useProjectStats();
+  const orgs = useOrgStats();
 
   return (
     <div className="@container/main flex flex-1 flex-col gap-6 p-4 lg:p-6">
@@ -33,8 +25,6 @@ export function AdminDashboardPage() {
           <h1 className="text-2xl font-semibold">Admin Analytics</h1>
           <p className="text-muted-foreground text-sm">Platform-wide usage and growth metrics</p>
         </div>
-
-        {/* Range toggle — ToggleGroup on desktop, Select on mobile */}
         <div className="flex items-center gap-2">
           <ToggleGroup
             type="single"
@@ -47,7 +37,6 @@ export function AdminDashboardPage() {
             <ToggleGroupItem value="30d">30d</ToggleGroupItem>
             <ToggleGroupItem value="90d">90d</ToggleGroupItem>
           </ToggleGroup>
-
           <Select value={range} onValueChange={(v) => setRange(v as TimeRange)}>
             <SelectTrigger className="w-28 @[500px]/main:hidden" size="sm">
               <SelectValue />
@@ -61,23 +50,53 @@ export function AdminDashboardPage() {
         </div>
       </div>
 
-      {/* Row 1: KPI Overview Cards */}
+      {/* KPI Overview */}
       <OverviewCards data={overview.data} isLoading={overview.isLoading} />
 
-      {/* Row 2: Users chart — full width */}
-      <UsersChart data={users.data} isLoading={users.isLoading} range={range} />
+      {/* Chat Intelligence */}
+      <section className="flex flex-col gap-4">
+        <h2 className="text-xl font-semibold">Chat Intelligence</h2>
+        {chat.isLoading ? (
+          <div className="flex flex-col gap-4">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <Skeleton className="h-[360px] w-full rounded-xl" />
+              <Skeleton className="h-[360px] w-full rounded-xl" />
+            </div>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <Skeleton className="h-[360px] w-full rounded-xl" />
+              <Skeleton className="h-[360px] w-full rounded-xl" />
+            </div>
+          </div>
+        ) : (
+          <ChatIntelligenceSection data={chat.data} range={range} />
+        )}
+      </section>
 
-      {/* Row 3: Sessions | Chat Conversations */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <SessionsChart data={sessions.data} isLoading={sessions.isLoading} range={range} />
-        <ChatConversationsChart data={chat.data} isLoading={chat.isLoading} range={range} />
-      </div>
+      {/* User Activity */}
+      <section className="flex flex-col gap-4">
+        <h2 className="text-xl font-semibold">User Activity</h2>
+        {users.isLoading ? (
+          <div className="flex flex-col gap-4">
+            <Skeleton className="h-[360px] w-full rounded-xl" />
+            <Skeleton className="h-[200px] w-full rounded-xl" />
+          </div>
+        ) : (
+          <UserActivitySection data={users.data} range={range} />
+        )}
+      </section>
 
-      {/* Row 4: Messages by Role | Project Status */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <MessagesByRoleChart data={chat.data} isLoading={chat.isLoading} />
-        <ProjectStatusChart data={projects.data} isLoading={projects.isLoading} />
-      </div>
+      {/* Organization Activity */}
+      <section className="flex flex-col gap-4">
+        <h2 className="text-xl font-semibold">Organization Activity</h2>
+        {orgs.isLoading ? (
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <Skeleton className="h-[360px] w-full rounded-xl" />
+            <Skeleton className="h-[360px] w-full rounded-xl" />
+          </div>
+        ) : (
+          <OrgActivitySection data={orgs.data} />
+        )}
+      </section>
     </div>
   );
 }

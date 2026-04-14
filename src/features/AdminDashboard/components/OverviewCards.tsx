@@ -1,49 +1,14 @@
-import { IconUsers, IconMessages } from '@tabler/icons-react';
-import { IconActivity } from '@tabler/icons-react';
-import { IconMessage2 } from '@tabler/icons-react';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/shared/components/ui/card';
+import { IconUsers, IconUserScan, IconMessages, IconBrain } from '@tabler/icons-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import { Skeleton } from '@/shared/components/ui/skeleton';
-import type { OverviewStats } from '../types/adminDashboard.types';
+import type { OverviewStatsDto } from '../types/adminDashboard.types';
 
 interface OverviewCardsProps {
-  data?: OverviewStats;
+  data?: OverviewStatsDto;
   isLoading: boolean;
 }
 
 export function OverviewCards({ data, isLoading }: OverviewCardsProps) {
-  const cards = [
-    {
-      title: 'Total Users',
-      value: data?.totalUsers ?? 0,
-      subtitle: `${data?.bannedUsers ?? 0} banned`,
-      icon: IconUsers,
-    },
-    {
-      title: 'Active Sessions',
-      value: data?.activeSessions ?? 0,
-      subtitle: `${data?.activeUsers ?? 0} active users`,
-      icon: IconActivity,
-    },
-    {
-      title: 'Total Conversations',
-      value: data?.totalConversations ?? 0,
-      subtitle: `${data?.totalOrganizations ?? 0} organizations`,
-      icon: IconMessages,
-    },
-    {
-      title: 'Total Messages',
-      value: data?.totalMessages ?? 0,
-      subtitle: `${data?.totalProjects ?? 0} projects`,
-      icon: IconMessage2,
-    },
-  ];
-
   if (isLoading) {
     return (
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -62,6 +27,34 @@ export function OverviewCards({ data, isLoading }: OverviewCardsProps) {
     );
   }
 
+  const tokens = data?.totalTokensAllTime;
+  const cards = [
+    {
+      title: 'Total Users',
+      value: (data?.totalUsers ?? 0).toLocaleString(),
+      subtitle: `${data?.bannedUsers ?? 0} banned`,
+      icon: IconUsers,
+    },
+    {
+      title: 'Active Sessions',
+      value: (data?.activeSessions ?? 0).toLocaleString(),
+      subtitle: `${data?.totalOrganizations ?? 0} orgs`,
+      icon: IconUserScan,
+    },
+    {
+      title: 'Conversations',
+      value: (data?.totalConversations ?? 0).toLocaleString(),
+      subtitle: `${(data?.totalMessages ?? 0).toLocaleString()} messages total`,
+      icon: IconMessages,
+    },
+    {
+      title: 'AI Tokens Used',
+      value: tokens != null ? tokens.toLocaleString() : '—',
+      subtitle: 'tracked since deployment',
+      icon: IconBrain,
+    },
+  ];
+
   return (
     <div className="*:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card grid grid-cols-2 gap-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-xs lg:grid-cols-4">
       {cards.map(({ title, value, subtitle, icon: Icon }) => (
@@ -72,7 +65,7 @@ export function OverviewCards({ data, isLoading }: OverviewCardsProps) {
               <Icon className="text-muted-foreground size-4" />
             </div>
             <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-              {value.toLocaleString()}
+              {value}
             </CardTitle>
           </CardHeader>
           <CardContent>

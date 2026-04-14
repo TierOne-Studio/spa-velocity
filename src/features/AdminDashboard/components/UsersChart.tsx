@@ -1,31 +1,17 @@
 import { Area, AreaChart, CartesianGrid, XAxis } from 'recharts';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/shared/components/ui/card';
-import {
-  type ChartConfig,
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-} from '@/shared/components/ui/chart';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card';
+import { type ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from '@/shared/components/ui/chart';
 import { Skeleton } from '@/shared/components/ui/skeleton';
-import type { UserStats, TimeRange } from '../types/adminDashboard.types';
+import type { UserStatsDto, TimeRange } from '../types/adminDashboard.types';
 
 interface UsersChartProps {
-  data?: UserStats;
+  data?: UserStatsDto;
   isLoading: boolean;
   range: TimeRange;
 }
 
 const chartConfig = {
-  count: {
-    label: 'New Users',
-    color: 'var(--chart-1)',
-  },
+  count: { label: 'New Users', color: 'var(--chart-1)' },
 } satisfies ChartConfig;
 
 export function UsersChart({ data, isLoading, range }: UsersChartProps) {
@@ -34,7 +20,7 @@ export function UsersChart({ data, isLoading, range }: UsersChartProps) {
       <Card>
         <CardHeader>
           <Skeleton className="h-5 w-32" />
-          <Skeleton className="mt-1 h-4 w-48" />
+          <Skeleton className="h-4 w-48" />
         </CardHeader>
         <CardContent>
           <Skeleton className="h-[250px] w-full" />

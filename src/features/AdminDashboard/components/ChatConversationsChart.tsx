@@ -1,31 +1,18 @@
 import { Area, AreaChart, CartesianGrid, XAxis } from 'recharts';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/shared/components/ui/card';
-import {
-  type ChartConfig,
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-} from '@/shared/components/ui/chart';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card';
+import { type ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from '@/shared/components/ui/chart';
 import { Skeleton } from '@/shared/components/ui/skeleton';
-import type { ChatStats, TimeRange } from '../types/adminDashboard.types';
+import type { ChatStatsDto, TimeRange } from '../types/adminDashboard.types';
 
 interface ChatConversationsChartProps {
-  data?: ChatStats;
+  data?: ChatStatsDto;
   isLoading: boolean;
   range: TimeRange;
 }
 
 const chartConfig = {
-  count: {
-    label: 'Conversations',
-    color: 'var(--chart-3)',
-  },
+  userCount: { label: 'User Messages', color: 'var(--chart-1)' },
+  assistantCount: { label: 'AI Messages', color: 'var(--chart-2)' },
 } satisfies ChartConfig;
 
 export function ChatConversationsChart({ data, isLoading, range }: ChatConversationsChartProps) {
@@ -33,8 +20,8 @@ export function ChatConversationsChart({ data, isLoading, range }: ChatConversat
     return (
       <Card>
         <CardHeader>
-          <Skeleton className="h-5 w-32" />
-          <Skeleton className="mt-1 h-4 w-48" />
+          <Skeleton className="h-5 w-40" />
+          <Skeleton className="h-4 w-52" />
         </CardHeader>
         <CardContent>
           <Skeleton className="h-[250px] w-full" />
@@ -43,23 +30,27 @@ export function ChatConversationsChart({ data, isLoading, range }: ChatConversat
     );
   }
 
-  const chartData = data?.timeSeriesConversations ?? [];
+  const chartData = data?.timeSeriesMessages ?? [];
 
   return (
     <Card className="@container/card">
       <CardHeader>
-        <CardTitle>Conversations</CardTitle>
+        <CardTitle>Message Activity</CardTitle>
         <CardDescription>
-          {data?.activeConversationsInRange ?? 0} active conversations in the last {range}
+          User vs AI messages over the last {range}
         </CardDescription>
       </CardHeader>
       <CardContent className="px-2 pt-4 sm:px-6 sm:pt-6">
         <ChartContainer config={chartConfig} className="aspect-auto h-[250px] w-full">
           <AreaChart data={chartData}>
             <defs>
-              <linearGradient id="fillChatCount" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="var(--color-count)" stopOpacity={1.0} />
-                <stop offset="95%" stopColor="var(--color-count)" stopOpacity={0.1} />
+              <linearGradient id="fillUserCount" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="var(--color-userCount)" stopOpacity={0.8} />
+                <stop offset="95%" stopColor="var(--color-userCount)" stopOpacity={0.1} />
+              </linearGradient>
+              <linearGradient id="fillAssistantCount" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="var(--color-assistantCount)" stopOpacity={0.8} />
+                <stop offset="95%" stopColor="var(--color-assistantCount)" stopOpacity={0.1} />
               </linearGradient>
             </defs>
             <CartesianGrid vertical={false} />
@@ -85,10 +76,18 @@ export function ChatConversationsChart({ data, isLoading, range }: ChatConversat
               }
             />
             <Area
-              dataKey="count"
+              dataKey="userCount"
               type="natural"
-              fill="url(#fillChatCount)"
-              stroke="var(--color-count)"
+              fill="url(#fillUserCount)"
+              stroke="var(--color-userCount)"
+              stackId="messages"
+            />
+            <Area
+              dataKey="assistantCount"
+              type="natural"
+              fill="url(#fillAssistantCount)"
+              stroke="var(--color-assistantCount)"
+              stackId="messages"
             />
           </AreaChart>
         </ChartContainer>
