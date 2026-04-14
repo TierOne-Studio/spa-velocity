@@ -101,12 +101,28 @@ describe("AppRoutes", () => {
     expect(screen.getByText("Chat")).toBeInTheDocument();
   });
 
-  it("redirects removed project routes back to the dashboard", () => {
-    window.history.pushState({}, "", "/projects");
+  it("redirects the index route to chat", () => {
+    window.history.pushState({}, "", "/");
+
+    render(<AppRoutes />);
+
+    expect(screen.getByText("Chat")).toBeInTheDocument();
+    expect(screen.queryByText("Dashboard")).not.toBeInTheDocument();
+  });
+
+  it("renders the dashboard fallback route", () => {
+    window.history.pushState({}, "", "/dashboard");
 
     render(<AppRoutes />);
 
     expect(screen.getByText("Dashboard")).toBeInTheDocument();
-    expect(screen.queryByText("Chat")).not.toBeInTheDocument();
+  });
+
+  it("redirects removed project routes to chat", () => {
+    window.history.pushState({}, "", "/projects");
+
+    render(<AppRoutes />);
+
+    expect(screen.getByText("Chat")).toBeInTheDocument();
   });
 });

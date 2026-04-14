@@ -26,21 +26,49 @@ describe("SiteHeader", () => {
     expect(container.querySelectorAll("li li")).toHaveLength(0)
   })
 
-  it("renders Dashboard breadcrumb for '/' route (single item, no separator)", () => {
+  it("renders Main > Chat breadcrumb for '/' route", () => {
     render(
       <MemoryRouter initialEntries={["/"]}>
         <SiteHeader />
       </MemoryRouter>,
     )
 
-    expect(screen.getByText("Dashboard")).toBeInTheDocument()
-    // No separator for single item
-    expect(screen.queryByRole("presentation")).not.toBeInTheDocument()
+    expect(screen.getByText("Main")).toBeInTheDocument()
+    expect(screen.getByText("Chat")).toBeInTheDocument()
   })
 
-  it("renders fallback Dashboard for unknown routes", () => {
+  it("renders fallback Main > Chat for unknown routes", () => {
     render(
       <MemoryRouter initialEntries={["/some/unknown/route"]}>
+        <SiteHeader />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText("Main")).toBeInTheDocument()
+    expect(screen.getByText("Chat")).toBeInTheDocument()
+  })
+
+  it("renders Main > Chat breadcrumb for '/chat' and its conversation subpaths", () => {
+    const { rerender } = render(
+      <MemoryRouter initialEntries={["/chat"]}>
+        <SiteHeader />
+      </MemoryRouter>,
+    )
+    expect(screen.getByText("Main")).toBeInTheDocument()
+    expect(screen.getByText("Chat")).toBeInTheDocument()
+
+    rerender(
+      <MemoryRouter initialEntries={["/chat/abc-123"]}>
+        <SiteHeader />
+      </MemoryRouter>,
+    )
+    expect(screen.getByText("Main")).toBeInTheDocument()
+    expect(screen.getByText("Chat")).toBeInTheDocument()
+  })
+
+  it("renders Dashboard breadcrumb for '/dashboard' fallback route", () => {
+    render(
+      <MemoryRouter initialEntries={["/dashboard"]}>
         <SiteHeader />
       </MemoryRouter>,
     )
