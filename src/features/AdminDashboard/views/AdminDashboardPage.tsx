@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select';
 import { Skeleton } from '@/shared/components/ui/skeleton';
 import { ToggleGroup, ToggleGroupItem } from '@/shared/components/ui/toggle-group';
@@ -6,16 +6,36 @@ import { OverviewCards } from '../components/OverviewCards';
 import { ChatIntelligenceSection } from '../components/ChatIntelligenceSection';
 import { UserActivitySection } from '../components/UserActivitySection';
 import { OrgActivitySection } from '../components/OrgActivitySection';
-import { useOverviewStats, useUserStats, useChatStats, useOrgStats } from '../hooks/useAdminDashboard';
+import { useOverviewStats, useUserStats, useChatStats, useOrgStats, useAvailableOrgs } from '../hooks/useAdminDashboard';
+import { useEffectiveSession } from '@/shared/hooks/useEffectiveSession';
+import { isSuperadminRole, getSessionUserRole } from '@/shared/utils/roles';
 import type { TimeRange } from '../types/adminDashboard.types';
 
 export function AdminDashboardPage() {
   const [range, setRange] = useState<TimeRange>('30d');
 
-  const overview = useOverviewStats();
-  const users = useUserStats(range);
-  const chat = useChatStats(range);
-  const orgs = useOrgStats();
+  const { data: session } = useEffectiveSession();
+  const isSuperadmin = isSuperadminRole(getSessionUserRole(session ?? null));
+  const activeOrgId = session?.session?.activeOrganizationId ?? null;
+
+  const { data: availableOrgs = [] } = useAvailableOrgs();
+
+  const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isSuperadmin && availableOrgs.length === 1) {
+      setSelectedOrgId(availableOrgs[0].id);
+    } else if (!isSuperadmin && activeOrgId && availableOrgs.some(o => o.id === activeOrgId)) {
+      setSelectedOrgId(activeOrgId);
+    }
+  }, [availableOrgs, isSuperadmin, activeOrgId]);
+
+  const showOrgSelector = isSuperadmin || availableOrgs.length > 1;
+
+  const overview = useOverviewStats(selectedOrgId);
+  const users = useUserStats(range, selectedOrgId);
+  const chat = useChatStats(range, selectedOrgId);
+  const orgs = useOrgStats(selectedOrgId);
 
   return (
     <div className="@container/main flex flex-1 flex-col gap-6 p-4 lg:p-6">
@@ -23,9 +43,34 @@ export function AdminDashboardPage() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Admin Analytics</h1>
-          <p className="text-muted-foreground text-sm">Platform-wide usage and growth metrics</p>
+          <p className="text-muted-foreground text-sm">
+            {selectedOrgId
+              ? `Showing data for: ${availableOrgs.find(o => o.id === selectedOrgId)?.name ?? 'Selected organization'}`
+              : 'Platform-wide usage and growth metrics'
+            }
+          </p>
         </div>
         <div className="flex items-center gap-2">
+          {showOrgSelector && (
+            <Select
+              value={selectedOrgId ?? '__all__'}
+              onValueChange={(v) => setSelectedOrgId(v === '__all__' ? null : v)}
+            >
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="All organizations" />
+              </SelectTrigger>
+              <SelectContent>
+                {isSuperadmin && (
+                  <SelectItem value="__all__">All organizations</SelectItem>
+                )}
+                {availableOrgs.map((org) => (
+                  <SelectItem key={org.id} value={org.id}>
+                    {org.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           <ToggleGroup
             type="single"
             value={range}

@@ -1,33 +1,46 @@
 import { fetchApi } from '@shared/lib/fetch-with-auth';
-import type { OverviewStatsDto, UserStatsDto, ChatStatsDto, OrgStatsDto, TimeRange } from '../types/adminDashboard.types';
+import type { OverviewStatsDto, UserStatsDto, ChatStatsDto, OrgStatsDto, OrgListItem, TimeRange } from '../types/adminDashboard.types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
+function appendOrgId(base: string, organizationId?: string | null): string {
+  if (!organizationId) return base;
+  const sep = base.includes('?') ? '&' : '?';
+  return `${base}${sep}organizationId=${encodeURIComponent(organizationId)}`;
+}
+
 export const adminDashboardService = {
-  getOverview(): Promise<OverviewStatsDto> {
+  getAvailableOrganizations(): Promise<OrgListItem[]> {
+    return fetchApi<OrgListItem[]>(
+      `${API_BASE_URL}/api/admin/dashboard/organizations/list`,
+      undefined,
+      'Failed to load available organizations',
+    );
+  },
+  getOverview(organizationId?: string | null): Promise<OverviewStatsDto> {
     return fetchApi<OverviewStatsDto>(
-      `${API_BASE_URL}/api/admin/dashboard/overview`,
+      appendOrgId(`${API_BASE_URL}/api/admin/dashboard/overview`, organizationId),
       undefined,
       'Failed to load overview stats',
     );
   },
-  getUserStats(range: TimeRange): Promise<UserStatsDto> {
+  getUserStats(range: TimeRange, organizationId?: string | null): Promise<UserStatsDto> {
     return fetchApi<UserStatsDto>(
-      `${API_BASE_URL}/api/admin/dashboard/users?range=${range}`,
+      appendOrgId(`${API_BASE_URL}/api/admin/dashboard/users?range=${range}`, organizationId),
       undefined,
       'Failed to load user stats',
     );
   },
-  getChatStats(range: TimeRange): Promise<ChatStatsDto> {
+  getChatStats(range: TimeRange, organizationId?: string | null): Promise<ChatStatsDto> {
     return fetchApi<ChatStatsDto>(
-      `${API_BASE_URL}/api/admin/dashboard/chat?range=${range}`,
+      appendOrgId(`${API_BASE_URL}/api/admin/dashboard/chat?range=${range}`, organizationId),
       undefined,
       'Failed to load chat stats',
     );
   },
-  getOrgStats(): Promise<OrgStatsDto> {
+  getOrgStats(organizationId?: string | null): Promise<OrgStatsDto> {
     return fetchApi<OrgStatsDto>(
-      `${API_BASE_URL}/api/admin/dashboard/organizations`,
+      appendOrgId(`${API_BASE_URL}/api/admin/dashboard/organizations`, organizationId),
       undefined,
       'Failed to load organization stats',
     );

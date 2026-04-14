@@ -1,5 +1,11 @@
 export type TimeRange = '7d' | '30d' | '90d';
 
+export interface OrgListItem {
+  id: string;
+  name: string;
+  slug: string;
+}
+
 export interface OverviewStatsDto {
   totalUsers: number;
   bannedUsers: number;
