@@ -2,7 +2,7 @@ import * as React from "react"
 import { useLocation } from "react-router-dom"
 import {
   IconBuilding,
-  IconDashboard,
+  IconChartBar,
   IconHome,
   IconInnerShadowTop,
   IconMessageCircle,
@@ -41,6 +41,15 @@ const getNavItems = (
     icon: typeof IconUsers
     isActive: boolean
   }> = []
+
+  if (can("dashboard", "view")) {
+    adminItems.push({
+      title: "Dashboard",
+      url: "/admin/dashboard",
+      icon: IconChartBar,
+      isActive: pathname.startsWith("/admin/dashboard"),
+    })
+  }
 
   if (can("user", "read")) {
     adminItems.push({
@@ -86,12 +95,6 @@ const getNavItems = (
         icon: IconHome,
         isActive: pathname === "/" || pathname.startsWith("/chat"),
         items: [
-          {
-            title: "Dashboard",
-            url: "/",
-            icon: IconDashboard,
-            isActive: pathname === "/",
-          },
           ...(can("chat", "read")
             ? [
                 {

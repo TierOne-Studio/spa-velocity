@@ -45,7 +45,7 @@ vi.mock("@/shared/components/ui/sidebar", () => ({
 
 vi.mock("@tabler/icons-react", () => ({
   IconBuilding: () => null,
-  IconDashboard: () => null,
+  IconChartBar: () => null,
   IconFolder: () => null,
   IconHome: () => null,
   IconInnerShadowTop: () => null,
