@@ -12,8 +12,6 @@ import {
   useAssignPermissions,
   usePermissions,
   usePermissionsGrouped,
-  useUserPermissions,
-  useCheckPermission,
   rbacKeys,
 } from "../useRoles";
 import { rbacService } from "../../services/rbacService";
@@ -245,53 +243,6 @@ describe("useRoles hooks", () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(result.current.data).toEqual(grouped);
-    });
-  });
-
-  describe("useUserPermissions", () => {
-    it("should fetch permissions for a role name", async () => {
-      const perms = [{ id: "p1", resource: "user", action: "read", description: null }];
-      (mockRbacService as any).getUserPermissions = vi.fn().mockResolvedValue(perms);
-
-      const { result } = renderHook(() => useUserPermissions("manager"), {
-        wrapper: createWrapper(),
-      });
-
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-      expect(result.current.data).toEqual(perms);
-      expect((mockRbacService as any).getUserPermissions).toHaveBeenCalledWith("manager");
-    });
-
-    it("should be disabled when roleName is empty", () => {
-      const { result } = renderHook(() => useUserPermissions(""), {
-        wrapper: createWrapper(),
-      });
-
-      expect(result.current.fetchStatus).toBe("idle");
-    });
-  });
-
-  describe("useCheckPermission", () => {
-    it("should check if a role has a permission", async () => {
-      (mockRbacService as any).checkPermission = vi.fn().mockResolvedValue(true);
-
-      const { result } = renderHook(
-        () => useCheckPermission("manager", "user", "read"),
-        { wrapper: createWrapper() },
-      );
-
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-      expect(result.current.data).toBe(true);
-      expect((mockRbacService as any).checkPermission).toHaveBeenCalledWith("manager", "user", "read");
-    });
-
-    it("should be disabled when roleName is empty", () => {
-      const { result } = renderHook(
-        () => useCheckPermission("", "user", "read"),
-        { wrapper: createWrapper() },
-      );
-
-      expect(result.current.fetchStatus).toBe("idle");
     });
   });
 

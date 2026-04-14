@@ -92,7 +92,7 @@ const getNavItems = (
             icon: IconDashboard,
             isActive: pathname === "/",
           },
-          ...(can("organization", "read")
+          ...(can("chat", "read")
             ? [
                 {
                   title: "Chat",
