@@ -13,6 +13,7 @@ import {
 } from "@features/Auth";
 import { DashboardPage, SettingsPage, AccountPage } from "@features/Dashboard";
 import { UsersPage, SessionsPage, OrganizationsPage, RolesPage } from "@features/Admin";
+import { AdminDashboardPage } from "@features/AdminDashboard/views/AdminDashboardPage";
 import { ChatPage } from "@features/Chat";
 import RootLayout from "./RootLayout";
 import { ThemeProvider } from "@shared/components/ui";
@@ -102,6 +103,14 @@ const AppRoutesContent = () => {
                       element={
                         <AdminRoute requiredPermission={{ resource: "role", action: "read" }}>
                           <RolesPage />
+                        </AdminRoute>
+                      }
+                    />
+                    <Route
+                      path="admin/dashboard"
+                      element={
+                        <AdminRoute requiredPermission={{ resource: "dashboard", action: "view" }}>
+                          <AdminDashboardPage />
                         </AdminRoute>
                       }
                     />

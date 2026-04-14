@@ -2,6 +2,7 @@ import * as React from "react"
 import { useLocation } from "react-router-dom"
 import {
   IconBuilding,
+  IconChartBar,
   IconDashboard,
   IconHome,
   IconInnerShadowTop,
@@ -41,6 +42,15 @@ const getNavItems = (
     icon: typeof IconUsers
     isActive: boolean
   }> = []
+
+  if (can("dashboard", "view")) {
+    adminItems.push({
+      title: "Analytics",
+      url: "/admin/dashboard",
+      icon: IconChartBar,
+      isActive: pathname.startsWith("/admin/dashboard"),
+    })
+  }
 
   if (can("user", "read")) {
     adminItems.push({
