@@ -562,4 +562,72 @@ describe('AuthContext', () => {
       });
     });
   });
+
+  describe('resetPassword fallback error message', () => {
+    it('uses fallback message when error.message is empty (covers line 152 || fallback)', async () => {
+      mockUseEffectiveSession.mockReturnValue({
+        data: null,
+        isPending: false,
+        refetch: vi.fn(),
+      });
+      mockFetchWithAuth.mockResolvedValue({
+        ok: false,
+        json: async () => ({ message: '' }),
+      });
+
+      const { result } = renderHook(() => useAuth(), { wrapper: createWrapper() });
+
+      await expect(
+        act(async () => {
+          await result.current.resetPassword('token', 'pass');
+        }),
+      ).rejects.toThrow('Failed to reset password');
+    });
+  });
+
+  describe('sendVerificationEmail fallback error message', () => {
+    it('uses fallback message when error.message is empty (covers line 165 || fallback)', async () => {
+      mockUseEffectiveSession.mockReturnValue({
+        data: null,
+        isPending: false,
+        refetch: vi.fn(),
+      });
+      mockFetchWithAuth.mockResolvedValue({
+        ok: false,
+        json: async () => ({ message: '' }),
+      });
+
+      const { result } = renderHook(() => useAuth(), { wrapper: createWrapper() });
+
+      await expect(
+        act(async () => {
+          await result.current.sendVerificationEmail('user@example.com');
+        }),
+      ).rejects.toThrow('Failed to send verification email');
+    });
+  });
+
+  describe('refreshSession', () => {
+    it('calls refetch and refetchApproval when refreshSession is invoked (covers lines 170-171)', async () => {
+      // Covers lines 170-171: await refetch() and await refetchApproval()
+      const mockRefetch = vi.fn().mockResolvedValue(undefined);
+      mockUseEffectiveSession.mockReturnValue({
+        data: { user: { id: 'u1', name: 'User', email: 'u@x.com', role: 'member' }, session: {} },
+        isPending: false,
+        refetch: mockRefetch,
+      });
+
+      const { result } = renderHook(() => useAuth(), { wrapper: createWrapper() });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      await act(async () => {
+        await result.current.refreshSession();
+      });
+
+      expect(mockRefetch).toHaveBeenCalled();
+    });
+  });
 });

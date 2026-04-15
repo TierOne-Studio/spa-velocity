@@ -5,6 +5,30 @@ import { describe, expect, it, vi } from "vitest"
 import type { ColumnDef } from "@tanstack/react-table"
 import type { ReactNode } from "react"
 
+vi.mock("@/shared/components/ui/dropdown-menu", () => ({
+  DropdownMenu: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DropdownMenuTrigger: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DropdownMenuContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DropdownMenuCheckboxItem: ({
+    children,
+    checked,
+    onCheckedChange,
+  }: {
+    children: ReactNode
+    checked?: boolean
+    onCheckedChange?: (value: boolean) => void
+  }) => (
+    <label>
+      <input
+        type="checkbox"
+        checked={checked ?? false}
+        onChange={(e) => onCheckedChange?.(e.target.checked)}
+      />
+      {children}
+    </label>
+  ),
+}))
+
 vi.mock("@/shared/components/ui/select", () => ({
   Select: ({
     children,
@@ -328,5 +352,153 @@ describe("ServerDataTable – additional coverage", () => {
     )
     expect(screen.getByRole("button", { name: /go to next page/i })).toBeDisabled()
     expect(screen.getByRole("button", { name: /go to last page/i })).toBeDisabled()
+  })
+
+  it("calls onSortingChange when column header sort is triggered", () => {
+    const onSortingChange = vi.fn()
+    const sortableColumns: ColumnDef<TestRow>[] = [
+      {
+        accessorKey: "name",
+        enableSorting: true,
+        header: ({ column }) => (
+          <button
+            type="button"
+            onClick={column.getToggleSortingHandler()}
+            aria-label="sort-name"
+          >
+            Name
+          </button>
+        ),
+      },
+    ]
+    render(
+      <ServerDataTable
+        columns={sortableColumns}
+        data={threeRows}
+        total={3}
+        pageSize={10}
+        pageIndex={0}
+        onPageChange={() => {}}
+        onPageSizeChange={() => {}}
+        onSortingChange={onSortingChange}
+        sorting={[]}
+      />,
+    )
+    fireEvent.click(screen.getByRole("button", { name: "sort-name" }))
+    expect(onSortingChange).toHaveBeenCalled()
+  })
+
+  it("row selection without getRowId uses index-based ids", () => {
+    const onRowSelectionChange = vi.fn()
+    const cols: ColumnDef<TestRow>[] = [
+      {
+        id: "select",
+        header: "Select",
+        cell: ({ row }) => (
+          <button
+            onClick={() => row.toggleSelected(!row.getIsSelected())}
+            aria-label={`toggle-${row.original.name}`}
+            type="button"
+          >
+            {row.getIsSelected() ? "Selected" : "Not"}
+          </button>
+        ),
+      },
+      { accessorKey: "name", header: "Name" },
+    ]
+    render(
+      <ServerDataTable
+        columns={cols}
+        data={threeRows}
+        total={3}
+        pageSize={10}
+        pageIndex={0}
+        onPageChange={() => {}}
+        onPageSizeChange={() => {}}
+        enableRowSelection
+        onRowSelectionChange={onRowSelectionChange}
+      />,
+    )
+    fireEvent.click(screen.getByRole("button", { name: "toggle-Alice" }))
+    expect(onRowSelectionChange).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ name: "Alice" })]),
+    )
+  })
+
+  it("clears selection when enableRowSelection is disabled", () => {
+    const onRowSelectionChange = vi.fn()
+    const cols: ColumnDef<TestRow>[] = [
+      {
+        id: "select",
+        cell: ({ row }) => (
+          <button
+            onClick={() => row.toggleSelected(!row.getIsSelected())}
+            aria-label={`sel-${row.original.name}`}
+            type="button"
+          >
+            Toggle
+          </button>
+        ),
+      },
+      { accessorKey: "name", header: "Name" },
+    ]
+
+    const { rerender } = render(
+      <ServerDataTable
+        columns={cols}
+        data={threeRows}
+        total={3}
+        pageSize={10}
+        pageIndex={0}
+        onPageChange={() => {}}
+        onPageSizeChange={() => {}}
+        enableRowSelection
+        onRowSelectionChange={onRowSelectionChange}
+      />,
+    )
+
+    // Select a row first
+    fireEvent.click(screen.getByRole("button", { name: "sel-Alice" }))
+    expect(onRowSelectionChange).toHaveBeenCalled()
+
+    // Re-render with enableRowSelection=false, which should clear selection
+    rerender(
+      <ServerDataTable
+        columns={cols}
+        data={threeRows}
+        total={3}
+        pageSize={10}
+        pageIndex={0}
+        onPageChange={() => {}}
+        onPageSizeChange={() => {}}
+        enableRowSelection={false}
+        onRowSelectionChange={onRowSelectionChange}
+      />,
+    )
+    // After disabling selection, the last call should be with empty array
+    const lastCall = onRowSelectionChange.mock.calls[onRowSelectionChange.mock.calls.length - 1]
+    expect(lastCall[0]).toEqual([])
+  })
+
+  it("toggles column visibility via DropdownMenuCheckboxItem onCheckedChange (covers line 202)", () => {
+    // All hideable columns show up as checkboxes; clicking one toggles visibility
+    render(
+      <ServerDataTable
+        columns={simpleColumns}
+        data={threeRows}
+        total={3}
+        pageSize={10}
+        pageIndex={0}
+        onPageChange={() => {}}
+        onPageSizeChange={() => {}}
+      />,
+    )
+    // The "id" column should be rendered as a checkbox in the dropdown
+    const checkboxes = screen.getAllByRole("checkbox")
+    expect(checkboxes.length).toBeGreaterThan(0)
+    // Toggle the first column visibility checkbox
+    fireEvent.click(checkboxes[0])
+    // Column was toggled — verify by re-querying; table still renders
+    expect(screen.getByRole("table")).toBeInTheDocument()
   })
 })

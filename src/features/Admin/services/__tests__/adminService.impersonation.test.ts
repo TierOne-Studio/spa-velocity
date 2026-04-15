@@ -162,6 +162,18 @@ describe('adminService.impersonateUser', () => {
             ).rejects.toThrow('Not a member');
         });
 
+        it('uses fallback message when error.message is empty (covers line 278 || branch)', async () => {
+            // Covers line 278: throw new Error(error.message || "Failed to impersonate user")
+            mockFetchWithAuth.mockResolvedValue({
+                ok: false,
+                json: () => Promise.resolve({ message: '' }),
+            });
+
+            await expect(
+                adminService.impersonateUser('user-1'),
+            ).rejects.toThrow('Failed to impersonate user');
+        });
+
         it('should throw when unified response has no sessionToken', async () => {
             mockFetchWithAuth.mockResolvedValue({
                 ok: true,
@@ -237,6 +249,38 @@ describe('adminService.stopImpersonating', () => {
             await expect(adminService.stopImpersonating()).rejects.toThrow('Internal error');
         });
 
+        it('uses response.status when error.statusCode is not a number (covers line 312 branch)', async () => {
+            // Covers line 312: : response.status (when typeof error.statusCode !== "number")
+            // When statusCode is missing from the error body, fall back to response.status
+            localStorageMock.setItem('original_bearer_token', 'original-token');
+            localStorageMock.setItem('impersonation_mode', 'custom');
+            vi.clearAllMocks();
+
+            mockFetchWithAuth.mockResolvedValue({
+                ok: false,
+                status: 500,
+                // No statusCode in the error JSON - forces the else branch at line 312
+                json: () => Promise.resolve({ message: 'Server error' }),
+            });
+
+            await expect(adminService.stopImpersonating()).rejects.toThrow('Server error');
+        });
+
+        it('uses fallback message when error.message is empty (covers line 322 || branch)', async () => {
+            // Covers line 322: throw new Error(error.message || "Failed to stop impersonating")
+            localStorageMock.setItem('original_bearer_token', 'original-token');
+            localStorageMock.setItem('impersonation_mode', 'custom');
+            vi.clearAllMocks();
+
+            mockFetchWithAuth.mockResolvedValue({
+                ok: false,
+                status: 500,
+                json: () => Promise.resolve({ message: '' }),
+            });
+
+            await expect(adminService.stopImpersonating()).rejects.toThrow('Failed to stop impersonating');
+        });
+
         it('should fallback to local token restore for legacy sessions without mode metadata', async () => {
             localStorageMock.setItem('bearer_token', 'impersonated-token');
             localStorageMock.setItem('original_bearer_token', 'original-token');
@@ -274,6 +318,28 @@ describe('adminService.stopImpersonating', () => {
 
             expect(mockFetchWithAuth).not.toHaveBeenCalled();
             expect(localStorageMock.removeItem).toHaveBeenCalledWith('impersonation_mode');
+        });
+
+        it('should clear admin mode when original token is missing (covers mode === "admin" branch)', async () => {
+            localStorageMock.setItem('impersonation_mode', 'admin');
+            vi.clearAllMocks();
+
+            await adminService.stopImpersonating();
+
+            expect(mockFetchWithAuth).not.toHaveBeenCalled();
+            expect(localStorageMock.removeItem).toHaveBeenCalledWith('impersonation_mode');
+        });
+
+        it('does nothing when original token is missing and mode is unrecognized', async () => {
+            // Covers the else branch (none of custom/org/admin) when originalToken is null
+            localStorageMock.setItem('impersonation_mode', 'unknown');
+            vi.clearAllMocks();
+
+            await adminService.stopImpersonating();
+
+            expect(mockFetchWithAuth).not.toHaveBeenCalled();
+            // Mode is not removed since it's not a recognized value
+            expect(localStorageMock.removeItem).not.toHaveBeenCalledWith('impersonation_mode');
         });
     });
 });

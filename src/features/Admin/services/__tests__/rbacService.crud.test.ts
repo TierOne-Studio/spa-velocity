@@ -42,6 +42,22 @@ describe("rbacService.getRoles", () => {
 
     await expect(rbacService.getRoles()).rejects.toThrow("Failed to fetch roles");
   });
+
+  it("fetches roles filtered by organizationId (covers line 27 branch)", async () => {
+    // Covers line 27: url.searchParams.set("organizationId", organizationId) when organizationId is truthy
+    const roles = [{ id: "org-role-1", name: "member", displayName: "Member", isSystem: false }];
+    mockFetchWithAuth.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: roles }),
+    });
+
+    const result = await rbacService.getRoles("org-abc");
+
+    expect(mockFetchWithAuth).toHaveBeenCalledWith(
+      expect.stringContaining("organizationId=org-abc"),
+    );
+    expect(result).toEqual(roles);
+  });
 });
 
 describe("rbacService.getRole", () => {
@@ -110,6 +126,23 @@ describe("rbacService.createRole", () => {
     await expect(rbacService.createRole({ name: "x", displayName: "X" })).rejects.toThrow(
       "Failed to create role",
     );
+  });
+
+  it("creates role with organizationId in URL (covers line 56 branch)", async () => {
+    // Covers line 56: url.searchParams.set("organizationId", organizationId) when provided
+    const newRole = { id: "org-role-3", name: "viewer", displayName: "Viewer", isSystem: false };
+    mockFetchWithAuth.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: newRole }),
+    });
+
+    const result = await rbacService.createRole({ name: "viewer", displayName: "Viewer" }, "org-abc");
+
+    expect(mockFetchWithAuth).toHaveBeenCalledWith(
+      expect.stringContaining("organizationId=org-abc"),
+      expect.any(Object),
+    );
+    expect(result).toEqual(newRole);
   });
 });
 

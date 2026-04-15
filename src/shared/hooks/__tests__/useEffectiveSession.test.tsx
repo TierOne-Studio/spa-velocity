@@ -264,4 +264,5 @@ describe("useEffectiveSession", () => {
 
     expect(mockFetchWithAuth).toHaveBeenCalledWith(expect.stringContaining("/api/auth/get-session"));
   });
+
 });

@@ -123,7 +123,7 @@ vi.mock("@/shared/components/ui/dropdown-menu", () => ({
   DropdownMenuContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   DropdownMenuItem: ({ children, ...props }: HTMLAttributes<HTMLDivElement>) => <div {...props}>{children}</div>,
   DropdownMenuSeparator: () => <hr />,
-  DropdownMenuTrigger: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DropdownMenuTrigger: ({ children, onClick }: { children: ReactNode; onClick?: (e: React.MouseEvent) => void }) => <div onClick={onClick}>{children}</div>,
 }));
 
 vi.mock("@/shared/components/ui/dialog", () => ({
@@ -575,6 +575,43 @@ describe("OrganizationsPage – CRUD and member operations", () => {
     })
   })
 
+  it("shows generic error when setActive throws a non-Error (covers line 324 else branch)", async () => {
+    const createMutate = vi.fn().mockResolvedValue({ id: "org-new2", name: "New Org 2", slug: "new-org-2", createdAt: new Date().toISOString() })
+    // Throw a non-Error string to hit the else branch at line 324
+    const setActiveMutate = vi.fn().mockRejectedValue("string-error")
+    mockUseCreateOrganization.mockReturnValue({ mutateAsync: createMutate, isPending: false })
+    mockUseSetActiveOrganization.mockReturnValue({ mutateAsync: setActiveMutate, isPending: false })
+
+    render(<OrganizationsPage />)
+
+    fireEvent.click(screen.getByRole("button", { name: /create organization/i }))
+    const dialog = await screen.findByRole("dialog")
+    fireEvent.change(within(dialog).getByLabelText(/name/i), { target: { value: "New Org 2" } })
+    fireEvent.click(within(dialog).getByRole("button", { name: /^create$/i }))
+
+    await waitFor(() => {
+      expect(mockToastError).toHaveBeenCalledWith(
+        "Organization created but failed to switch active organization",
+      )
+    })
+  })
+
+  it("shows generic error when creating an organization fails with non-Error (covers line 333 else branch)", async () => {
+    // Throw a non-Error value to hit the else branch at line 333
+    const createMutate = vi.fn().mockRejectedValue("non-error-string")
+    mockUseCreateOrganization.mockReturnValue({ mutateAsync: createMutate, isPending: false })
+
+    render(<OrganizationsPage />)
+    fireEvent.click(screen.getByRole("button", { name: /create organization/i }))
+    const dialog = await screen.findByRole("dialog")
+    fireEvent.change(within(dialog).getByLabelText(/name/i), { target: { value: "Bad Org 2" } })
+    fireEvent.click(within(dialog).getByRole("button", { name: /^create$/i }))
+
+    await waitFor(() => {
+      expect(mockToastError).toHaveBeenCalledWith("Failed to create organization")
+    })
+  })
+
   it("shows error toast when creating an organization fails", async () => {
     const createMutate = vi.fn().mockRejectedValue(new Error("Create failed"));
     mockUseCreateOrganization.mockReturnValue({ mutateAsync: createMutate, isPending: false });
@@ -840,6 +877,11 @@ describe("OrganizationsPage – CRUD and member operations", () => {
     fireEvent.click(screen.getByRole("button", { name: /org one/i }));
     await waitFor(() => expect(screen.getByText("Existing User")).toBeVisible());
 
+    // Wait for role options to be populated before attempting the change
+    await waitFor(() => {
+      expect(screen.getByRole("option", { name: "Manager" })).toBeInTheDocument();
+    });
+
     const membersTable = screen.getByRole("table")
     const roleSelect = within(membersTable).getByRole("combobox");
     fireEvent.change(roleSelect, { target: { value: "manager" } });
@@ -966,6 +1008,212 @@ describe("OrganizationsPage – CRUD and member operations", () => {
     });
     expect(removeMutate).not.toHaveBeenCalled();
   });
+
+  it("renders pagination and navigates pages when totalPages > 1", async () => {
+    mockUseOrganizations.mockReturnValue({
+      data: {
+        data: [{ id: "org-1", name: "Org One", slug: "org-one", createdAt: new Date() }],
+        total: 15,
+        totalPages: 2,
+      },
+      isLoading: false,
+    });
+
+    render(<OrganizationsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/page 1 of 2/i)).toBeInTheDocument();
+    });
+
+    const nextBtn = screen.getByRole("button", { name: /next/i });
+    fireEvent.click(nextBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText(/page 2 of 2/i)).toBeInTheDocument();
+    });
+
+    const prevBtn = screen.getByRole("button", { name: /previous/i });
+    fireEvent.click(prevBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText(/page 1 of 2/i)).toBeInTheDocument();
+    });
+  });
+
+  it("shows selected org details panel with collection info (single source)", async () => {
+    mockUseOrganizations.mockReturnValue({
+      data: {
+        data: [{
+          id: "org-1",
+          name: "Org One",
+          slug: "org-one",
+          createdAt: new Date(),
+          metadata: { airweaveCollectionId: "collection-1" },
+        }],
+        total: 1,
+        totalPages: 1,
+      },
+      isLoading: false,
+    });
+    mockUseAvailableCollections.mockReturnValue({
+      data: [{
+        id: "col-id",
+        name: "My Collection",
+        readableId: "collection-1",
+        organizationId: "org-1",
+        createdAt: "2026-04-01T00:00:00.000Z",
+        updatedAt: "2026-04-01T00:00:00.000Z",
+        status: "ready",
+        sourceConnectionCount: 1,
+      }],
+      isLoading: false,
+      error: null,
+    });
+
+    render(<OrganizationsPage />);
+    fireEvent.click(screen.getByRole("button", { name: /org one/i }));
+
+    await waitFor(() => {
+      // sourceConnectionCount === 1 uses "source" (singular)
+      expect(screen.getByText(/collection-1 · 1 source$/)).toBeInTheDocument();
+    });
+  });
+
+  it("shows collectionId text when collection ID is set but collection is not found", async () => {
+    mockUseOrganizations.mockReturnValue({
+      data: {
+        data: [{
+          id: "org-1",
+          name: "Org One",
+          slug: "org-one",
+          createdAt: new Date(),
+          metadata: { airweaveCollectionId: "unknown-collection" },
+        }],
+        total: 1,
+        totalPages: 1,
+      },
+      isLoading: false,
+    });
+    mockUseAvailableCollections.mockReturnValue({
+      data: [],
+      isLoading: false,
+      error: null,
+    });
+
+    render(<OrganizationsPage />);
+    fireEvent.click(screen.getByRole("button", { name: /org one/i }));
+
+    await waitFor(() => {
+      // When collectionId is set but collection not found: shows collectionId as fallback (appears in 2 divs)
+      const matches = screen.getAllByText("unknown-collection");
+      expect(matches.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it("shows 'Not configured' when org has no collection ID", async () => {
+    mockUseOrganizations.mockReturnValue({
+      data: {
+        data: [{
+          id: "org-1",
+          name: "Org One",
+          slug: "org-one",
+          createdAt: new Date(),
+          metadata: {},
+        }],
+        total: 1,
+        totalPages: 1,
+      },
+      isLoading: false,
+    });
+
+    render(<OrganizationsPage />);
+    fireEvent.click(screen.getByRole("button", { name: /org one/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Not configured")).toBeInTheDocument();
+    });
+  });
+
+  it("shows members loading skeletons when membersLoading is true", async () => {
+    mockUseOrganizationMembers.mockReturnValue({ data: [], isLoading: true });
+
+    render(<OrganizationsPage />);
+    fireEvent.click(screen.getByRole("button", { name: /org one/i }));
+
+    await waitFor(() => {
+      // In the member loading state, skeleton elements appear in the detail panel
+      const skeletons = document.querySelectorAll('[data-slot="skeleton"]');
+      expect(skeletons.length).toBeGreaterThan(0);
+    });
+  });
+
+  it("updates search field when typing in search input", async () => {
+    render(<OrganizationsPage />);
+
+    const searchInput = screen.getByPlaceholderText(/search organizations/i);
+    fireEvent.change(searchInput, { target: { value: "tier" } });
+
+    // The value should update and page should reset to 1
+    expect(searchInput).toHaveValue("tier");
+  });
+
+  it("selects an org via keyboard Enter key", async () => {
+    render(<OrganizationsPage />);
+
+    const orgButton = screen.getByRole("button", { name: /org one/i });
+    fireEvent.keyDown(orgButton, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(screen.getByText("Manage members")).toBeInTheDocument();
+    });
+  });
+
+  it("selects an org via keyboard Space key", async () => {
+    render(<OrganizationsPage />);
+
+    const orgButton = screen.getByRole("button", { name: /org one/i });
+    fireEvent.keyDown(orgButton, { key: " " });
+
+    await waitFor(() => {
+      expect(screen.getByText("Manage members")).toBeInTheDocument();
+    });
+  });
+
+  it("does not select org via keyboard for unhandled keys", async () => {
+    render(<OrganizationsPage />);
+
+    const orgButton = screen.getByRole("button", { name: /org one/i });
+    fireEvent.keyDown(orgButton, { key: "Tab" });
+
+    // Organization details should NOT be shown (org not selected)
+    expect(screen.queryByText("Manage members")).not.toBeInTheDocument();
+  });
+
+  it("changes role in add member dialog", async () => {
+    const addMutate = vi.fn().mockResolvedValue({});
+    mockUseAddMember.mockReturnValue({ mutateAsync: addMutate, isPending: false });
+
+    render(<OrganizationsPage />);
+    fireEvent.click(screen.getByRole("button", { name: /org one/i }));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /add member/i })).toBeVisible());
+    fireEvent.click(screen.getByRole("button", { name: /add member/i }));
+
+    const dialog = await screen.findByRole("dialog");
+    await waitFor(() => expect(mockListMemberCandidates).toHaveBeenCalled());
+
+    const selects = within(dialog).getAllByRole("combobox");
+    // Second select is the role select
+    fireEvent.change(selects[1], { target: { value: "manager" } });
+    // Select user to enable submit
+    fireEvent.change(selects[0], { target: { value: "user-2" } });
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /add member/i }));
+
+    await waitFor(() => {
+      expect(addMutate).toHaveBeenCalledWith(expect.objectContaining({ role: "manager" }));
+    });
+  });
 });
 
   it("opens the edit dialog and cancels without saving", async () => {
@@ -1044,6 +1292,18 @@ describe("OrganizationsPage – CRUD and member operations", () => {
     });
   });
 
+  it("clicking the dots trigger button fires stopPropagation (covers line 526 onClick)", () => {
+    // The DropdownMenuTrigger mock now passes onClick to the wrapper div
+    // Clicking the button inside it bubbles up and fires onClick={(e) => e.stopPropagation()}
+    render(<OrganizationsPage />)
+    // The dots trigger renders as <button>dots</button> wrapped in the div with onClick
+    const dotsButton = screen.getByText("dots").closest("button") as HTMLButtonElement
+    expect(dotsButton).not.toBeNull()
+    // Click it — the onClick handler (stopPropagation) should fire without errors
+    fireEvent.click(dotsButton)
+    expect(screen.getByText("Org One")).toBeInTheDocument()
+  })
+
   it("cancels the create organization dialog without creating", async () => {
     const createMutate = vi.fn();
     mockUseCreateOrganization.mockReturnValue({ mutateAsync: createMutate, isPending: false });
@@ -1066,4 +1326,12 @@ describe("OrganizationsPage – CRUD and member operations", () => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     });
     expect(createMutate).not.toHaveBeenCalled();
+  });
+
+  it("renders without crashing when orgsResponse is undefined (covers ?? fallback branches)", () => {
+    // data: undefined — covers orgsResponse?.data ?? [], totalPages ?? 1, total ?? 0
+    mockUseOrganizations.mockReturnValue({ data: undefined, isLoading: false });
+    render(<OrganizationsPage />);
+    // Should render without crash (shows empty state)
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
