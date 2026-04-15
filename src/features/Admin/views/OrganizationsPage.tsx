@@ -188,18 +188,18 @@ export function OrganizationsPage() {
     isSuperadmin || organizationId === currentActiveOrganizationId
   const canManageSelectedOrganization =
     !!selectedOrg && canManageOrganizationFromPage(selectedOrg.id)
-  const canReadCollections = can('project', 'read')
+  const canReadOrganizations = can('organization', 'read')
 
   // Queries
   const { data: orgsResponse, isLoading: orgsLoading } = useOrganizations({ page, limit: pageSize, search: search || undefined })
-  const { data: membersData, isLoading: membersLoading } = useOrganizationMembers(
+  const { data: membersData, isLoading: membersLoading, refetch: refetchMembers } = useOrganizationMembers(
     selectedOrg?.id ?? "",
   )
   const {
     data: availableCollections = [],
     isLoading: collectionsLoading,
     error: collectionsError,
-  } = useAirweaveCollections({ enabled: canReadCollections })
+  } = useAirweaveCollections({ enabled: canReadOrganizations })
 
   // Extract arrays from response data
   const organizations = orgsResponse?.data ?? []
@@ -229,7 +229,11 @@ export function OrganizationsPage() {
   useEffect(() => {
     setAvailableUsers([])
     setAddMemberData({ userId: "", role: "member" })
-  }, [selectedOrg?.id])
+
+    if (selectedOrg?.id && typeof refetchMembers === "function") {
+      void refetchMembers()
+    }
+  }, [refetchMembers, selectedOrg?.id])
 
   // Fetch organization roles metadata whenever the selected org changes
   useEffect(() => {
@@ -792,7 +796,7 @@ export function OrganizationsPage() {
               <Label htmlFor="org-airweave-collection">Airweave Collection</Label>
               <Select
                 value={newOrgData.airweaveCollectionId}
-                disabled={!canReadCollections || collectionsLoading || availableCollections.length === 0}
+                disabled={!canReadOrganizations || collectionsLoading || availableCollections.length === 0}
                 onValueChange={(value) => setNewOrgData({ ...newOrgData, airweaveCollectionId: value })}
               >
                 <SelectTrigger id="org-airweave-collection">
@@ -814,7 +818,7 @@ export function OrganizationsPage() {
               <p className="text-sm text-muted-foreground">
                 {collectionsError instanceof Error
                   ? collectionsError.message
-                  : !canReadCollections
+                  : !canReadOrganizations
                     ? "You need project read access to browse available collections."
                     : newOrgData.airweaveCollectionId
                       ? `Chat will use collection ${newOrgData.airweaveCollectionId}.`
@@ -864,7 +868,7 @@ export function OrganizationsPage() {
               <Label htmlFor="edit-org-airweave-collection">Airweave Collection</Label>
               <Select
                 value={editOrgData.airweaveCollectionId}
-                disabled={!canReadCollections || collectionsLoading || availableCollections.length === 0}
+                disabled={!canReadOrganizations || collectionsLoading || availableCollections.length === 0}
                 onValueChange={(value) => setEditOrgData({ ...editOrgData, airweaveCollectionId: value })}
               >
                 <SelectTrigger id="edit-org-airweave-collection">
@@ -891,7 +895,7 @@ export function OrganizationsPage() {
               <p className="text-sm text-muted-foreground">
                 {collectionsError instanceof Error
                   ? collectionsError.message
-                  : !canReadCollections
+                  : !canReadOrganizations
                     ? "You need project read access to browse available collections."
                     : editOrgData.airweaveCollectionId
                       ? `Chat will use collection ${editOrgData.airweaveCollectionId}.`

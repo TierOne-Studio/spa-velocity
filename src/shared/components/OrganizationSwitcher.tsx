@@ -184,7 +184,7 @@ export function OrganizationSwitcher() {
       }
     }
     fetchData()
-  }, [activeOrganizationId, effectiveRole, effectiveUser, getActiveMemberSafely, listOrganizationsViaApi, refreshAfterOrgChange, setActiveOrganization])
+  }, [activeOrganizationId, effectiveRole, effectiveUser, getActiveMemberSafely, listOrganizationsViaApi, setActiveOrganization])
 
   const [isLoading, setIsLoading] = useState(false)
 

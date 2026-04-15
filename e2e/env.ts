@@ -75,17 +75,12 @@ function resolveBackendEnvFile(backendProjectRoot: string): string {
  */
 function assertTestDatabaseUrl(url: string, source: string): void {
   const dbName = url.split('/').pop()?.split('?')[0] || '';
-  const normalizedDbName = dbName.toLowerCase();
-  const allowedMarkers = ['test', 'e2e'];
-  const hasAllowedMarker = allowedMarkers.some((marker) => normalizedDbName.includes(marker));
-
-  if (!hasAllowedMarker) {
+  if (!dbName.includes('test')) {
     throw new Error(
       `E2E safety check failed: DATABASE_URL from ${source} points to database "${dbName}" ` +
-      `which does not contain any recognized test marker in its name. Refusing to run E2E tests ` +
-      `against a non-test database to prevent data loss. ` +
-      `Expected a database name containing one of: ${allowedMarkers.join(', ')} ` +
-      `(e.g. nestjs-api-starter-test or nestjs_api_starter_e2e).`,
+      `which does not contain "test" in its name. Refusing to run E2E tests against a ` +
+      `non-test database to prevent data loss. ` +
+      `Expected a database name containing "test" (e.g. nestjs-api-starter-test).`,
     );
   }
 }
