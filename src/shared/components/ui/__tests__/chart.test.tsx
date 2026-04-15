@@ -151,7 +151,6 @@ describe("ChartTooltipContent", () => {
         value: 42,
         color: "red",
         payload: { count: 42 },
-        type: "dot",
       },
     ];
     render(
@@ -170,7 +169,6 @@ describe("ChartTooltipContent", () => {
         value: 10,
         color: "blue",
         payload: { count: 10 },
-        type: "dot",
       },
     ];
     // With hideLabel, the tooltipLabel should be null so no label div is rendered
@@ -223,7 +221,6 @@ describe("ChartTooltipContent – additional branches", () => {
         value: 42,
         color: "red",
         payload: { count: 42 },
-        type: "dot",
       },
     ];
     render(
@@ -249,7 +246,6 @@ describe("ChartTooltipContent – additional branches", () => {
         value: 5,
         color: "red",
         payload: {},
-        type: "dot",
       },
     ];
     // When label is empty string, !value => true, tooltipLabel return null
@@ -272,7 +268,6 @@ describe("ChartTooltipContent – additional branches", () => {
         value: 42,
         color: "red",
         payload: { count: 42 },
-        type: "dot",
       },
     ];
     render(
@@ -291,7 +286,6 @@ describe("ChartTooltipContent – additional branches", () => {
         value: 42,
         color: "red",
         payload: { count: 42 },
-        type: "dot",
       },
     ];
     render(
@@ -304,8 +298,8 @@ describe("ChartTooltipContent – additional branches", () => {
 
   it("renders with multiple payload items (nestLabel=false)", () => {
     const payload = [
-      { name: "count", dataKey: "count", value: 42, color: "red", payload: { count: 42 }, type: "dot" },
-      { name: "visits", dataKey: "visits", value: 100, color: "blue", payload: { visits: 100 }, type: "dot" },
+      { name: "count", dataKey: "count", value: 42, color: "red", payload: { count: 42 } },
+      { name: "visits", dataKey: "visits", value: 100, color: "blue", payload: { visits: 100 } },
     ];
     render(
       <ChartContainer config={sampleConfig}>
@@ -318,7 +312,7 @@ describe("ChartTooltipContent – additional branches", () => {
 
   it("renders with formatter function", () => {
     const payload = [
-      { name: "count", dataKey: "count", value: 42, color: "red", payload: { count: 42 }, type: "dot" },
+      { name: "count", dataKey: "count", value: 42, color: "red", payload: { count: 42 } },
     ];
     render(
       <ChartContainer config={sampleConfig}>
@@ -334,7 +328,7 @@ describe("ChartTooltipContent – additional branches", () => {
 
   it("uses labelKey to get the config label", () => {
     const payload = [
-      { name: "count", dataKey: "count", value: 42, color: "red", payload: { myKey: "count" }, type: "dot" },
+      { name: "count", dataKey: "count", value: 42, color: "red", payload: { myKey: "count" } },
     ];
     render(
       <ChartContainer config={sampleConfig}>
@@ -346,7 +340,7 @@ describe("ChartTooltipContent – additional branches", () => {
 
   it("renders with hideIndicator=true", () => {
     const payload = [
-      { name: "count", dataKey: "count", value: 42, color: "red", payload: { count: 42 }, type: "dot" },
+      { name: "count", dataKey: "count", value: 42, color: "red", payload: { count: 42 } },
     ];
     render(
       <ChartContainer config={sampleConfig}>
@@ -358,7 +352,7 @@ describe("ChartTooltipContent – additional branches", () => {
 
   it("uses nameKey when resolving config", () => {
     const payload = [
-      { name: "count", dataKey: "count", value: 42, color: "red", payload: { count: "count" }, type: "dot" },
+      { name: "count", dataKey: "count", value: 42, color: "red", payload: { count: "count" } },
     ];
     // When nameKey is provided, it's used as the key for getPayloadConfigFromPayload
     // The payload has payload.count = "count" (a string), so configLabelKey becomes "count"

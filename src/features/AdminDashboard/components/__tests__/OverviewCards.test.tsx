@@ -17,7 +17,6 @@ const mockData: OverviewStatsDto = {
 describe("OverviewCards", () => {
   it("renders loading skeletons when isLoading is true", () => {
     render(<OverviewCards isLoading={true} />);
-    const skeletons = document.querySelectorAll(".animate-pulse, [class*='skeleton'], [class*='animate']");
     // There should be multiple skeleton elements in loading state
     const allDivs = document.querySelectorAll("div");
     expect(allDivs.length).toBeGreaterThan(0);

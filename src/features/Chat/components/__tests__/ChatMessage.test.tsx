@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { ChatMessage } from "../ChatMessage";
 import type { ChatSource } from "../../types";
@@ -53,8 +53,8 @@ describe("ChatMessage", () => {
 
   it("renders sources when provided", () => {
     const sources: ChatSource[] = [
-      { name: "React Docs", sourceName: "GitHub", webUrl: "https://github.com/facebook/react" },
-      { name: "Internal Doc", sourceName: "Confluence", webUrl: "https://confluence.example.com/page" },
+      { name: "React Docs", sourceName: "GitHub", webUrl: "https://github.com/facebook/react", entityType: "document" },
+      { name: "Internal Doc", sourceName: "Confluence", webUrl: "https://confluence.example.com/page", entityType: "document" },
     ];
     render(<ChatMessage content="With sources" role="assistant" sources={sources} />);
     expect(screen.getByText("Sources")).toBeInTheDocument();
@@ -64,7 +64,7 @@ describe("ChatMessage", () => {
 
   it("renders safe URLs as links", () => {
     const sources: ChatSource[] = [
-      { name: "Safe Link", sourceName: "GitHub", webUrl: "https://github.com/example" },
+      { name: "Safe Link", sourceName: "GitHub", webUrl: "https://github.com/example", entityType: "document" },
     ];
     render(<ChatMessage content="Test" role="assistant" sources={sources} />);
     const link = screen.getByRole("link");
@@ -75,7 +75,7 @@ describe("ChatMessage", () => {
 
   it("renders unsafe URLs as spans (not links)", () => {
     const sources: ChatSource[] = [
-      { name: "Unsafe Link", sourceName: "Internal", webUrl: "javascript:alert(1)" },
+      { name: "Unsafe Link", sourceName: "Internal", webUrl: "javascript:alert(1)", entityType: "document" },
     ];
     render(<ChatMessage content="Test" role="assistant" sources={sources} />);
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
