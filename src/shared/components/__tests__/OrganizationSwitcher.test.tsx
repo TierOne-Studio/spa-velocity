@@ -783,4 +783,220 @@ describe("OrganizationSwitcher", () => {
       expect(screen.getByText("Org One")).toBeInTheDocument()
     })
   })
+
+  it("reads organizations from a direct array payload (line 36 branch)", async () => {
+    // Covers line 36: readOrganizationsPayload returns payload when it IS an array
+    mockUseEffectiveSession.mockReturnValue({
+      data: {
+        session: { activeOrganizationId: "org-1" },
+        user: { role: "admin" },
+      },
+    })
+    mockFetchWithAuth.mockReset()
+    mockFetchWithAuth.mockImplementation((url: unknown) => {
+      const requestUrl = String(url)
+      if (requestUrl.includes("/api/auth/organization/list")) {
+        // Return an array directly (not wrapped in .data)
+        return Promise.resolve({ ok: true, json: async () => [ORG] })
+      }
+      if (requestUrl.includes("/api/auth/organization/get-active-member")) {
+        return Promise.resolve({ ok: true, json: async () => ({ data: { organizationId: "org-1" } }) })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    })
+
+    render(<OrganizationSwitcher />)
+
+    await waitFor(() => {
+      expect(screen.getByText("Test Org")).toBeInTheDocument()
+    })
+  })
+
+  it("returns null from readActiveMemberPayload when data field is truthy but not an object", async () => {
+    // Covers line 74: candidate is `record` when both record.data and record.member are non-objects
+    // and then candidate fails the typeof check
+    mockFetchWithAuth.mockImplementation((url: unknown) => {
+      const requestUrl = String(url)
+      if (requestUrl.includes("/api/auth/organization/list")) {
+        return Promise.resolve({ ok: true, json: async () => ({ data: [ORG] }) })
+      }
+      if (requestUrl.includes("/api/auth/organization/get-active-member")) {
+        // data is a string (truthy, not object), member is a string - so candidate falls to `record`
+        // record itself has no organizationId key, which makes member.organizationId falsy -> return null
+        return Promise.resolve({ ok: true, json: async () => ({ data: "invalid", member: "invalid" }) })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    })
+
+    render(<OrganizationSwitcher />)
+
+    await waitFor(() => {
+      expect(screen.getByText("Test Org")).toBeInTheDocument()
+    })
+  })
+
+  it("handles list API returning an object with no data or organizations arrays", async () => {
+    // Covers line 52: readOrganizationsPayload returns [] when object has no .data or .organizations array
+    mockUseEffectiveSession.mockReturnValue({ data: { session: {} } })
+    mockFetchWithAuth.mockReset()
+    mockFetchWithAuth.mockImplementation((url: unknown) => {
+      const requestUrl = String(url)
+      if (requestUrl.includes("/api/auth/organization/list")) {
+        return Promise.resolve({ ok: true, json: async () => ({ someOtherKey: "value" }) })
+      }
+      if (requestUrl.includes("/api/auth/organization/get-active-member")) {
+        return Promise.resolve({ ok: true, json: async () => ({ data: null }) })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    })
+
+    render(<OrganizationSwitcher />)
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /no organization/i })).toBeDisabled()
+    })
+  })
+
+  it("handles list API returning a non-object non-array primitive", async () => {
+    // Covers line 40: readOrganizationsPayload returns [] when payload is not array and not object
+    mockUseEffectiveSession.mockReturnValue({ data: { session: {} } })
+    mockFetchWithAuth.mockReset()
+    mockFetchWithAuth.mockImplementation((url: unknown) => {
+      const requestUrl = String(url)
+      if (requestUrl.includes("/api/auth/organization/list")) {
+        return Promise.resolve({ ok: true, json: async () => null })
+      }
+      if (requestUrl.includes("/api/auth/organization/get-active-member")) {
+        return Promise.resolve({ ok: true, json: async () => ({ data: null }) })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    })
+
+    render(<OrganizationSwitcher />)
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /no organization/i })).toBeDisabled()
+    })
+  })
+
+  it("handles getActiveMember returning a non-object response (null member payload)", async () => {
+    // Covers line 57: readActiveMemberPayload returns null when payload is not an object
+    mockFetchWithAuth.mockImplementation((url: unknown) => {
+      const requestUrl = String(url)
+      if (requestUrl.includes("/api/auth/organization/list")) {
+        return Promise.resolve({ ok: true, json: async () => ({ data: [ORG] }) })
+      }
+      if (requestUrl.includes("/api/auth/organization/get-active-member")) {
+        // Returns a non-object (null) to hit the !payload || typeof !== "object" branch
+        return Promise.resolve({ ok: true, json: async () => null })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    })
+
+    render(<OrganizationSwitcher />)
+
+    await waitFor(() => {
+      expect(screen.getByText("Test Org")).toBeInTheDocument()
+    })
+  })
+
+  it("handles getActiveMember returning object where candidate has no organizationId", async () => {
+    // Covers line 78: returns null when organizationId is falsy
+    mockFetchWithAuth.mockImplementation((url: unknown) => {
+      const requestUrl = String(url)
+      if (requestUrl.includes("/api/auth/organization/list")) {
+        return Promise.resolve({ ok: true, json: async () => ({ data: [ORG] }) })
+      }
+      if (requestUrl.includes("/api/auth/organization/get-active-member")) {
+        return Promise.resolve({ ok: true, json: async () => ({ member: { noOrgId: true } }) })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    })
+
+    render(<OrganizationSwitcher />)
+
+    await waitFor(() => {
+      expect(screen.getByText("Test Org")).toBeInTheDocument()
+    })
+  })
+
+  it("handles getActiveMember throwing an error (catch returns null)", async () => {
+    // Covers line 115: catch block in getActiveMemberSafely returns null
+    mockFetchWithAuth.mockImplementation((url: unknown) => {
+      const requestUrl = String(url)
+      if (requestUrl.includes("/api/auth/organization/list")) {
+        return Promise.resolve({ ok: true, json: async () => ({ data: [ORG] }) })
+      }
+      if (requestUrl.includes("/api/auth/organization/get-active-member")) {
+        return Promise.reject(new Error("Network error"))
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    })
+
+    render(<OrganizationSwitcher />)
+
+    await waitFor(() => {
+      expect(screen.getByText("Test Org")).toBeInTheDocument()
+    })
+  })
+
+  it("uses null effectiveRole when user role is an empty array (covers line 93 ?? null branch)", async () => {
+    // When role is an empty array, role[0] is undefined, triggering the ?? null fallback
+    mockUseAuth.mockReturnValue({
+      user: { id: "user-1", role: [] },
+      refreshSession: vi.fn().mockResolvedValue(undefined),
+    })
+    mockUseEffectiveSession.mockReturnValue({
+      data: {
+        user: { id: "user-1", role: [] },
+        session: { activeOrganizationId: "org-1" },
+      },
+    })
+    mockFetchWithAuth.mockImplementation((url: unknown) => {
+      const requestUrl = String(url)
+      if (requestUrl.includes("/api/auth/organization/list")) {
+        return Promise.resolve({ ok: true, json: async () => ({ data: [ORG] }) })
+      }
+      if (requestUrl.includes("/api/auth/organization/get-active-member")) {
+        return Promise.resolve({ ok: true, json: async () => ({ data: { organizationId: "org-1" } }) })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    })
+
+    render(<OrganizationSwitcher />)
+
+    await waitFor(() => {
+      expect(screen.getByText("Test Org")).toBeInTheDocument()
+    })
+  })
+
+  it("uses effectiveUser from useAuth when session has no user (covers line 90 ?? branch)", async () => {
+    // When session has no user, effectiveUser falls back to user from useAuth
+    mockUseAuth.mockReturnValue({
+      user: { id: "user-auth", role: "admin" },
+      refreshSession: vi.fn().mockResolvedValue(undefined),
+    })
+    mockUseEffectiveSession.mockReturnValue({
+      data: {
+        // no user property — session only has session
+        session: { activeOrganizationId: "org-1" },
+      },
+    })
+    mockFetchWithAuth.mockImplementation((url: unknown) => {
+      const requestUrl = String(url)
+      if (requestUrl.includes("/api/auth/organization/list")) {
+        return Promise.resolve({ ok: true, json: async () => ({ data: [ORG] }) })
+      }
+      if (requestUrl.includes("/api/auth/organization/get-active-member")) {
+        return Promise.resolve({ ok: true, json: async () => ({ data: { organizationId: "org-1" } }) })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    })
+
+    render(<OrganizationSwitcher />)
+
+    await waitFor(() => {
+      expect(screen.getByText("Test Org")).toBeInTheDocument()
+    })
+  })
 })

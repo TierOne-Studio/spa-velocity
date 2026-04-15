@@ -98,6 +98,22 @@ describe("AppSidebar", () => {
     expect(screen.getByTestId("nav-main").textContent).not.toContain("Chat");
   });
 
+  it("uses fallback name and email when user is null (covers lines 133-134 ?? fallbacks)", () => {
+    mockUseAuth.mockReturnValue({ user: null });
+    mockUsePermissionsContext.mockReturnValue({
+      can: () => false,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <AppSidebar />
+      </MemoryRouter>,
+    );
+
+    // Component should render without crashing (user?.name ?? "User" and user?.email ?? "")
+    expect(screen.getByTestId("nav-main")).toBeInTheDocument();
+  });
+
   it("hides the organization switcher for superadmin", () => {
     mockUseAuth.mockReturnValue({
       user: { name: "Super Admin", email: "superadmin@example.com", role: "superadmin" },

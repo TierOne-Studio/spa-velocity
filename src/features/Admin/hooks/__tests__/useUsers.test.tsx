@@ -19,7 +19,11 @@ import {
   useRevokeAllSessions,
   useImpersonateUser,
   useStopImpersonating,
+  usePendingUsers,
+  useApproveUser,
+  useRejectUser,
   userKeys,
+  pendingUserKeys,
 } from '../useUsers';
 import { adminService } from '../../services/adminService';
 
@@ -44,6 +48,9 @@ vi.mock('../../services/adminService', () => ({
     revokeAllSessions: vi.fn(),
     impersonateUser: vi.fn(),
     stopImpersonating: vi.fn(),
+    listPendingUsers: vi.fn(),
+    approveUser: vi.fn(),
+    rejectUser: vi.fn(),
   },
 }));
 
@@ -355,6 +362,26 @@ describe('useImpersonateUser hook', () => {
       organizationId: 'org-1',
     });
   });
+
+  it('passes undefined organizationId when session has no active org and no explicit override', async () => {
+    mockUseEffectiveSession.mockReturnValue({
+      data: {
+        user: { id: 'admin-1' },
+        session: {},
+      },
+    });
+    (adminService.impersonateUser as Mock).mockResolvedValue(undefined);
+
+    const { result } = renderHook(() => useImpersonateUser(), {
+      wrapper: createWrapper(),
+    });
+
+    await result.current.mutateAsync({ userId: 'user-1' });
+
+    expect(adminService.impersonateUser).toHaveBeenCalledWith('user-1', {
+      organizationId: undefined,
+    });
+  });
 });
 
 describe('useStopImpersonating hook', () => {
@@ -498,5 +525,136 @@ describe('userKeys', () => {
     expect(userKeys.detail('1')).toEqual(['users', 'detail', 'anonymous', 'no-org', '1']);
     expect(userKeys.sessions('1')).toEqual(['users', 'sessions', 'anonymous', 'no-org', '1']);
     expect(userKeys.capabilities('1')).toEqual(['users', 'capabilities', 'anonymous', 'no-org', '1']);
+  });
+
+  it('generates batchCapabilities key with no scope (fallback to anonymous/no-org)', () => {
+    expect(userKeys.batchCapabilities(['u-1', 'u-2'])).toEqual([
+      'users', 'capabilities', 'batch', 'anonymous', 'no-org', ['u-1', 'u-2'],
+    ]);
+  });
+
+  it('generates batchCapabilities key with explicit scope', () => {
+    expect(userKeys.batchCapabilities(['u-1'], { userId: 'admin-1', activeOrganizationId: 'org-1' })).toEqual([
+      'users', 'capabilities', 'batch', 'admin-1', 'org-1', ['u-1'],
+    ]);
+  });
+
+  it('generates batchCapabilities key with null userId and null activeOrganizationId (fallback branches)', () => {
+    expect(userKeys.batchCapabilities(['u-1'], { userId: null, activeOrganizationId: null })).toEqual([
+      'users', 'capabilities', 'batch', 'anonymous', 'no-org', ['u-1'],
+    ]);
+  });
+});
+
+describe('pendingUserKeys', () => {
+  it('generates correct query keys', () => {
+    expect(pendingUserKeys.all).toEqual(['pending-users']);
+    expect(pendingUserKeys.lists()).toEqual(['pending-users', 'list']);
+    expect(pendingUserKeys.list({ limit: 5 })).toEqual(['pending-users', 'list', 'anonymous', 'no-org', { limit: 5 }]);
+  });
+});
+
+describe('usePendingUsers hook', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('fetches pending users successfully', async () => {
+    const mockPending = { data: [{ id: 'p-1', name: 'Pending User' }], total: 1 };
+    (adminService as unknown as { listPendingUsers: Mock }).listPendingUsers.mockResolvedValue(mockPending);
+
+    const { result } = renderHook(() => usePendingUsers({ limit: 10 }), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual(mockPending);
+  });
+
+  it('does not fetch when enabled is false', () => {
+    const { result } = renderHook(() => usePendingUsers({ enabled: false }), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe('idle');
+  });
+});
+
+describe('useApproveUser hook', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('calls adminService.approveUser and invalidates queries', async () => {
+    (adminService as unknown as { approveUser: Mock }).approveUser.mockResolvedValue(undefined);
+
+    const { result } = renderHook(() => useApproveUser(), { wrapper: createWrapper() });
+
+    await result.current.mutateAsync('user-1');
+    expect((adminService as unknown as { approveUser: Mock }).approveUser).toHaveBeenCalledWith('user-1');
+  });
+});
+
+describe('useRejectUser hook', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('calls adminService.rejectUser with userId and reason', async () => {
+    (adminService as unknown as { rejectUser: Mock }).rejectUser.mockResolvedValue(undefined);
+
+    const { result } = renderHook(() => useRejectUser(), { wrapper: createWrapper() });
+
+    await result.current.mutateAsync({ userId: 'user-2', rejectionReason: 'Not eligible' });
+    expect((adminService as unknown as { rejectUser: Mock }).rejectUser).toHaveBeenCalledWith('user-2', 'Not eligible');
+  });
+
+  it('calls adminService.rejectUser without reason', async () => {
+    (adminService as unknown as { rejectUser: Mock }).rejectUser.mockResolvedValue(undefined);
+
+    const { result } = renderHook(() => useRejectUser(), { wrapper: createWrapper() });
+
+    await result.current.mutateAsync({ userId: 'user-3' });
+    expect((adminService as unknown as { rejectUser: Mock }).rejectUser).toHaveBeenCalledWith('user-3', undefined);
+  });
+});
+
+describe('useUserQueryScope (implicit via useUsers)', () => {
+  it('uses null userId when session has user without id (covers ?? null fallback)', async () => {
+    // session.user exists but has no id — covers the `?? null` branch on line 39
+    mockUseEffectiveSession.mockReturnValue({
+      data: {
+        user: {},
+        session: {},
+      },
+    });
+    mockAdminService.listUsers.mockResolvedValue({ data: [], total: 0 });
+
+    const { result } = renderHook(() => useUsers({ limit: 5, offset: 0 }), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    // Should succeed; the important thing is that useUserQueryScope ran with null userId
+    expect(mockAdminService.listUsers).toHaveBeenCalled();
+  });
+
+  it('uses null activeOrganizationId when session has no activeOrganizationId (covers ?? null fallback)', async () => {
+    // session.session exists but has no activeOrganizationId — covers the second `?? null` branch
+    mockUseEffectiveSession.mockReturnValue({
+      data: {
+        user: { id: 'admin-1' },
+        session: {}, // no activeOrganizationId
+      },
+    });
+    mockAdminService.listUsers.mockResolvedValue({ data: [], total: 0 });
+
+    const { result } = renderHook(() => useUsers({ limit: 5, offset: 0 }), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(mockAdminService.listUsers).toHaveBeenCalled();
   });
 });

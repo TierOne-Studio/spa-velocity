@@ -22,7 +22,7 @@ vi.mock("@shared/lib/auth-client", () => ({
   organization: {},
 }));
 
-import { getOrganizationRolesMetadata } from "../adminService";
+import { getOrganizationRolesMetadata, adminService } from "../adminService";
 
 describe("getOrganizationRolesMetadata", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -67,6 +67,135 @@ describe("getOrganizationRolesMetadata", () => {
     });
 
     await expect(getOrganizationRolesMetadata()).rejects.toThrow("Failed to get organization roles metadata");
+  });
+});
+
+describe("getOrganizationRolesMetadata with organizationId", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("appends organizationId to URL when provided", async () => {
+    mockFetchWithAuth.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ roles: [], assignableRoles: [] }),
+    });
+
+    await getOrganizationRolesMetadata("org-42");
+    const url: string = mockFetchWithAuth.mock.calls[0][0];
+    expect(url).toContain("organizationId=org-42");
+  });
+});
+
+describe("adminService.selfApproveInvited", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("sends POST to self-approve-invited endpoint", async () => {
+    mockFetchWithAuth.mockResolvedValue({ ok: true, status: 204, json: () => Promise.resolve(undefined) });
+
+    await adminService.selfApproveInvited();
+
+    expect(mockFetchWithAuth).toHaveBeenCalledWith(
+      expect.stringContaining("/api/admin/users/self-approve-invited"),
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("throws on error response", async () => {
+    mockFetchWithAuth.mockResolvedValue({
+      ok: false,
+      json: () => Promise.resolve({ message: "Not invited" }),
+    });
+
+    await expect(adminService.selfApproveInvited()).rejects.toThrow("Not invited");
+  });
+});
+
+describe("adminService.listPendingUsers", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("fetches pending users with defaults", async () => {
+    const data = { data: [], total: 0 };
+    mockFetchWithAuth.mockResolvedValue({ ok: true, json: () => Promise.resolve(data) });
+
+    const result = await adminService.listPendingUsers();
+    const url: string = mockFetchWithAuth.mock.calls[0][0];
+    expect(url).toContain("/api/admin/users/pending");
+    expect(url).toContain("limit=10");
+    expect(url).toContain("offset=0");
+    expect(result).toEqual(data);
+  });
+
+  it("appends searchValue when provided", async () => {
+    mockFetchWithAuth.mockResolvedValue({ ok: true, json: () => Promise.resolve({ data: [], total: 0 }) });
+
+    await adminService.listPendingUsers({ searchValue: "alice" });
+    const url: string = mockFetchWithAuth.mock.calls[0][0];
+    expect(url).toContain("searchValue=alice");
+  });
+
+  it("does not append searchValue when not provided", async () => {
+    mockFetchWithAuth.mockResolvedValue({ ok: true, json: () => Promise.resolve({ data: [], total: 0 }) });
+
+    await adminService.listPendingUsers();
+    const url: string = mockFetchWithAuth.mock.calls[0][0];
+    expect(url).not.toContain("searchValue");
+  });
+});
+
+describe("adminService.approveUser", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("sends POST to approve endpoint", async () => {
+    mockFetchWithAuth.mockResolvedValue({ ok: true, status: 204, json: () => Promise.resolve(undefined) });
+
+    await adminService.approveUser("user-5");
+    expect(mockFetchWithAuth).toHaveBeenCalledWith(
+      expect.stringContaining("/api/admin/users/user-5/approve"),
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("throws on error response", async () => {
+    mockFetchWithAuth.mockResolvedValue({ ok: false, json: () => Promise.resolve({ message: "Forbidden" }) });
+    await expect(adminService.approveUser("user-5")).rejects.toThrow("Forbidden");
+  });
+});
+
+describe("adminService.rejectUser", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("sends POST to reject endpoint with rejection reason", async () => {
+    mockFetchWithAuth.mockResolvedValue({ ok: true, status: 204, json: () => Promise.resolve(undefined) });
+
+    await adminService.rejectUser("user-6", "Not eligible");
+    expect(mockFetchWithAuth).toHaveBeenCalledWith(
+      expect.stringContaining("/api/admin/users/user-6/reject"),
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining("Not eligible"),
+      }),
+    );
+  });
+
+  it("sends POST without reason", async () => {
+    mockFetchWithAuth.mockResolvedValue({ ok: true, status: 204, json: () => Promise.resolve(undefined) });
+
+    await adminService.rejectUser("user-7");
+    expect(mockFetchWithAuth).toHaveBeenCalledWith(
+      expect.stringContaining("/api/admin/users/user-7/reject"),
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+});
+
+describe("adminService.listUsers with organizationId", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("appends organizationId when provided", async () => {
+    mockFetchWithAuth.mockResolvedValue({ ok: true, json: () => Promise.resolve({ data: [], total: 0 }) });
+
+    await adminService.listUsers({ organizationId: "org-99" });
+    const url: string = mockFetchWithAuth.mock.calls[0][0];
+    expect(url).toContain("organizationId=org-99");
   });
 });
 

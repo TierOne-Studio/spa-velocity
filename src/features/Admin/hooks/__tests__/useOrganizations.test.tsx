@@ -22,6 +22,7 @@ import {
   useLeaveOrganization,
   useSetActiveOrganization,
   useCheckSlug,
+  useInvitation,
   organizationKeys,
 } from "../useOrganizations"
 import { organizationService } from "../../services/adminService"
@@ -50,6 +51,7 @@ vi.mock("../../services/adminService", () => ({
     leaveOrganization: vi.fn(),
     setActive: vi.fn(),
     checkSlug: vi.fn(),
+    getInvitation: vi.fn(),
   },
 }))
 
@@ -78,6 +80,7 @@ const mockOrgService = organizationService as unknown as {
   leaveOrganization: Mock
   setActive: Mock
   checkSlug: Mock
+  getInvitation: Mock
 }
 
 // Create a wrapper with QueryClientProvider
@@ -469,6 +472,97 @@ describe("useOrganizations hooks", () => {
 
     it("should generate details key", () => {
       expect(organizationKeys.details()).toEqual(["organizations", "detail"])
+    })
+
+    it("falls back to anonymous/no-org for list key when userId and activeOrganizationId are null", () => {
+      expect(organizationKeys.list({}, { userId: null, activeOrganizationId: null })).toEqual(
+        ["organizations", "list", "anonymous", "no-org", {}]
+      )
+    })
+
+    it("falls back to anonymous/no-org for detail key when scope has null values", () => {
+      expect(organizationKeys.detail("org-1", { userId: null, activeOrganizationId: null })).toEqual(
+        ["organizations", "detail", "anonymous", "no-org", "org-1"]
+      )
+    })
+
+    it("falls back to anonymous/no-org for members key when scope has null values", () => {
+      expect(organizationKeys.members("org-1", { userId: null, activeOrganizationId: null })).toEqual(
+        ["organizations", "members", "anonymous", "no-org", "org-1"]
+      )
+    })
+
+    it("falls back to anonymous/no-org for invitations key when scope has null values", () => {
+      expect(organizationKeys.invitations("org-1", { userId: null, activeOrganizationId: null })).toEqual(
+        ["organizations", "invitations", "anonymous", "no-org", "org-1"]
+      )
+    })
+  })
+
+  describe("useInvitation", () => {
+    it("should fetch invitation details when invitationId is provided", async () => {
+      const mockInvitation = { id: "inv-1", email: "user@example.com", role: "member", status: "pending" }
+      mockOrgService.getInvitation.mockResolvedValue(mockInvitation)
+
+      const { result } = renderHook(() => useInvitation("inv-1"), {
+        wrapper: createWrapper(),
+      })
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true))
+      expect(result.current.data).toEqual(mockInvitation)
+      expect(mockOrgService.getInvitation).toHaveBeenCalledWith("inv-1")
+    })
+
+    it("should be disabled when invitationId is empty", () => {
+      const { result } = renderHook(() => useInvitation(""), {
+        wrapper: createWrapper(),
+      })
+
+      expect(result.current.fetchStatus).toBe("idle")
+    })
+  })
+
+  describe("useOrganizationQueryScope (implicit via useOrganizations)", () => {
+    it("uses null userId when session.user has no id (covers line 31 ?? null fallback)", async () => {
+      // session.user exists but has no id — covers `session?.user?.id ?? null`
+      mockUseEffectiveSession.mockReturnValue({
+        data: {
+          user: {},
+          session: {},
+        },
+      })
+      mockOrgService.listOrganizations.mockResolvedValue([])
+
+      const { result } = renderHook(() => useOrganizations(), {
+        wrapper: createWrapper(),
+      })
+
+      await waitFor(() => {
+        expect(result.current.isSuccess).toBe(true)
+      })
+
+      expect(mockOrgService.listOrganizations).toHaveBeenCalled()
+    })
+
+    it("uses null activeOrganizationId when session has no activeOrganizationId (covers line 32-33 ?? null fallback)", async () => {
+      // session.session exists but has no activeOrganizationId
+      mockUseEffectiveSession.mockReturnValue({
+        data: {
+          user: { id: "user-1" },
+          session: {}, // no activeOrganizationId
+        },
+      })
+      mockOrgService.listOrganizations.mockResolvedValue([])
+
+      const { result } = renderHook(() => useOrganizations(), {
+        wrapper: createWrapper(),
+      })
+
+      await waitFor(() => {
+        expect(result.current.isSuccess).toBe(true)
+      })
+
+      expect(mockOrgService.listOrganizations).toHaveBeenCalled()
     })
   })
 })

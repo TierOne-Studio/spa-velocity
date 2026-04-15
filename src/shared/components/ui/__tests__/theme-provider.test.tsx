@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import { renderHook } from '@testing-library/react';
 
@@ -173,6 +173,44 @@ describe('ThemeProvider', () => {
     // matchMedia mock returns matches: false, so system resolves to light
     expect(document.documentElement.classList.contains('light')).toBe(true);
   });
+
+  it('applies dark class when system theme and matchMedia returns true for dark (covers line 41 dark branch)', () => {
+    // Override matchMedia to return matches: true (dark mode)
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: true,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
+
+    render(<ThemeProvider defaultTheme="system"><span>child</span></ThemeProvider>);
+
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
+    expect(document.documentElement.classList.contains('light')).toBe(false);
+
+    // Restore matchMedia to default
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
+  });
+
 });
 
 describe('useTheme outside provider', () => {
@@ -183,5 +221,14 @@ describe('useTheme outside provider', () => {
     const { result } = renderHook(() => useTheme());
     expect(result.current.theme).toBe('system');
     expect(typeof result.current.setTheme).toBe('function');
+  });
+
+  it('calling the default setTheme (from initialState) returns null (covers line 18)', () => {
+    // Covers line 18: setTheme: () => null — the initialState default function
+    // When useTheme is called outside a provider, setTheme is the no-op that returns null
+    const { result } = renderHook(() => useTheme());
+    // Calling the default setTheme (outside provider) should return null
+    const returnValue = result.current.setTheme('light');
+    expect(returnValue).toBeNull();
   });
 });

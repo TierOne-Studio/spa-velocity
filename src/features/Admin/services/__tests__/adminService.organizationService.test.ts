@@ -467,6 +467,12 @@ describe("organizationService.checkSlug", () => {
 
     await expect(organizationService.checkSlug("bad-slug")).rejects.toThrow("Check failed");
   });
+
+  it("uses fallback message when error.message is empty (covers line 519 || fallback)", async () => {
+    mockOrganization.checkSlug.mockResolvedValue({ data: null, error: { message: "" } });
+
+    await expect(organizationService.checkSlug("bad-slug")).rejects.toThrow("Failed to check slug");
+  });
 });
 
 describe("organizationService.setActive", () => {
@@ -517,6 +523,12 @@ describe("organizationService.acceptInvitation", () => {
 
     await expect(organizationService.acceptInvitation("inv-1")).rejects.toThrow("Invitation expired");
   });
+
+  it("throws fallback message when error has no message", async () => {
+    mockOrganization.acceptInvitation.mockResolvedValue({ data: null, error: {} });
+
+    await expect(organizationService.acceptInvitation("inv-1")).rejects.toThrow("Failed to accept invitation");
+  });
 });
 
 describe("organizationService.rejectInvitation", () => {
@@ -532,6 +544,12 @@ describe("organizationService.rejectInvitation", () => {
     mockOrganization.rejectInvitation.mockResolvedValue({ error: { message: "Reject failed" } });
 
     await expect(organizationService.rejectInvitation("inv-1")).rejects.toThrow("Reject failed");
+  });
+
+  it("throws fallback message when error has no message", async () => {
+    mockOrganization.rejectInvitation.mockResolvedValue({ error: {} });
+
+    await expect(organizationService.rejectInvitation("inv-1")).rejects.toThrow("Failed to reject invitation");
   });
 });
 
@@ -549,6 +567,12 @@ describe("organizationService.getInvitation", () => {
     mockOrganization.getInvitation.mockResolvedValue({ data: null, error: { message: "Not found" } });
 
     await expect(organizationService.getInvitation("inv-1")).rejects.toThrow("Not found");
+  });
+
+  it("throws fallback message when error has no message", async () => {
+    mockOrganization.getInvitation.mockResolvedValue({ data: null, error: {} });
+
+    await expect(organizationService.getInvitation("inv-1")).rejects.toThrow("Failed to get invitation");
   });
 });
 
@@ -573,6 +597,12 @@ describe("organizationService.listUserInvitations", () => {
     mockOrganization.listUserInvitations.mockResolvedValue({ data: null, error: { message: "List failed" } });
 
     await expect(organizationService.listUserInvitations()).rejects.toThrow("List failed");
+  });
+
+  it("throws fallback message when error has no message", async () => {
+    mockOrganization.listUserInvitations.mockResolvedValue({ data: null, error: {} });
+
+    await expect(organizationService.listUserInvitations()).rejects.toThrow("Failed to list user invitations");
   });
 });
 

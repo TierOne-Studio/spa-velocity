@@ -149,6 +149,27 @@ describe("useRoles hooks", () => {
         color: "blue",
       });
     });
+
+    it("should create a role with organizationId scope", async () => {
+      const newRole = { id: "4", name: "reviewer", displayName: "Reviewer", color: "green", isSystem: false };
+      mockRbacService.createRole.mockResolvedValue(newRole);
+
+      const { result } = renderHook(() => useCreateRole(), {
+        wrapper: createWrapper(),
+      });
+
+      await result.current.mutateAsync({
+        name: "reviewer",
+        displayName: "Reviewer",
+        color: "green",
+        organizationId: "org-1",
+      });
+
+      expect(mockRbacService.createRole).toHaveBeenCalledWith(
+        { name: "reviewer", displayName: "Reviewer", color: "green" },
+        "org-1",
+      );
+    });
   });
 
   describe("useDeleteRole", () => {
