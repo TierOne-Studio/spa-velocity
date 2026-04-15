@@ -12,9 +12,13 @@ export async function fetchWithAuth(
     headers.set("Authorization", `Bearer ${token}`);
   }
 
+  // Bearer-first architecture: omit cookies by default so the backend never
+  // sees a stale session cookie alongside the Authorization header. Keeping
+  // both caused impersonation to resolve the original admin's session because
+  // Better Auth's bearer plugin appends (not replaces) the session cookie.
   return fetch(url, {
     ...options,
-    credentials: options.credentials ?? "include",
+    credentials: options.credentials ?? "omit",
     headers,
   });
 }

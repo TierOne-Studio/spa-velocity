@@ -63,20 +63,20 @@ describe('fetchWithAuth (PR#5 - Bearer token auth)', () => {
         expect(headers.get('Authorization')).toBe('Bearer test-token');
     });
 
-    it('should include credentials by default for cookie-backed auth flows', async () => {
+    it('should omit credentials by default so cookies never conflict with the bearer token', async () => {
         await fetchWithAuth('http://localhost:3000/api/test');
 
         const callArgs = mockFetch.mock.calls[0];
-        expect(callArgs[1].credentials).toBe('include');
+        expect(callArgs[1].credentials).toBe('omit');
     });
 
     it('should preserve explicit credentials when provided', async () => {
         await fetchWithAuth('http://localhost:3000/api/test', {
-            credentials: 'omit',
+            credentials: 'include',
         });
 
         const callArgs = mockFetch.mock.calls[0];
-        expect(callArgs[1].credentials).toBe('omit');
+        expect(callArgs[1].credentials).toBe('include');
     });
 
     it('should forward method and body options', async () => {
