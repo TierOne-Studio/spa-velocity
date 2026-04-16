@@ -2,6 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 
 import { TEST_USER } from './env';
 import {
+  ensureTestUserExists,
   escapeRegExp,
   ensureUserRecord,
   loginWithCredentials,
@@ -47,8 +48,10 @@ async function selectUser(page: Page, params: { searchTerm: string; expectedText
 test.describe('Sessions edge behavior', () => {
   test.beforeAll(async () => {
     // Restore test user to admin in case a previous spec left it in another role
-    await withDatabase(async (pool) => {
-      await pool.query(`UPDATE "user" SET role = 'superadmin' WHERE email = $1`, [TEST_USER.email]);
+    await ensureTestUserExists({
+      email: TEST_USER.email,
+      password: TEST_USER.password,
+      name: 'Test User',
     });
 
     // Use direct DB insert to guarantee users exist with correct names

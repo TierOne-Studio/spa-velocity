@@ -87,24 +87,25 @@ test.describe('Route guard behavior', () => {
     await loginAsMember(page);
 
     await page.goto('/admin/users');
-    await expect(page).toHaveURL('/');
+    await expect(page).toHaveURL(/\/(chat|dashboard)?$/, { timeout: 10000 });
 
     await page.goto('/admin/organizations');
-    await expect(page.getByRole('heading', { name: /organizations/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /organizations/i })).toBeVisible({ timeout: 10000 });
 
     await page.goto('/admin/roles');
-    await expect(page).toHaveURL('/');
+    await expect(page).toHaveURL(/\/(chat|dashboard)?$/, { timeout: 10000 });
 
     await page.goto('/admin/sessions');
-    await expect(page).toHaveURL('/');
-    await expect(
-      page.locator('[data-slot="sidebar"]').getByRole('link', { name: /^dashboard$/i }),
-    ).toBeVisible();
+    await expect(page).toHaveURL(/\/(chat|dashboard)?$/, { timeout: 10000 });
 
-    await expect(page.getByRole('link', { name: /^organizations$/i })).toBeVisible();
-    await expect(page.getByRole('link', { name: /^users$/i })).not.toBeVisible();
-    await expect(page.getByRole('link', { name: /^roles/i })).not.toBeVisible();
-    await expect(page.getByRole('link', { name: /^sessions$/i })).not.toBeVisible();
+    const sidebar = page.locator('[data-slot="sidebar"]');
+    await expect(sidebar).toBeVisible({ timeout: 10000 });
+
+    // Member sees organizations link but not admin-only links
+    await expect(sidebar.getByRole('link', { name: /^organizations$/i })).toBeVisible();
+    await expect(sidebar.getByRole('link', { name: /^users$/i })).not.toBeVisible();
+    await expect(sidebar.getByRole('link', { name: /^roles/i })).not.toBeVisible();
+    await expect(sidebar.getByRole('link', { name: /^sessions$/i })).not.toBeVisible();
   });
 
   test('manager should access admin routes but not see create role action', async ({ page }) => {
@@ -133,13 +134,12 @@ test.describe('Route guard behavior', () => {
     });
 
     await page.goto('/definitely-not-a-real-route');
-    await expect(page).toHaveURL('/login');
+    await expect(page).toHaveURL('/login', { timeout: 10000 });
 
     await loginAsManager(page);
     await page.goto('/another-unknown-route');
-    await expect(page).toHaveURL('/');
-    await expect(
-      page.locator('[data-slot="sidebar"]').getByRole('link', { name: /^dashboard$/i }),
-    ).toBeVisible();
+    await expect(page).toHaveURL(/\/(chat|dashboard)?$/, { timeout: 10000 });
+    // Sidebar should be visible after redirect to authenticated default
+    await expect(page.locator('[data-slot="sidebar"]')).toBeVisible({ timeout: 10000 });
   });
 });

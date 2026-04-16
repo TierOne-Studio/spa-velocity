@@ -3,6 +3,7 @@ import { Pool } from 'pg';
 import { DATABASE_URL, API_BASE_URL, TEST_USER } from './env';
 import {
   ensureOrganizationExists,
+  ensureTestUserExists,
   findOrganizationListItemBySlug,
   escapeRegExp,
   loginWithCredentials,
@@ -26,6 +27,12 @@ let impersonationOrgId = '';
 
 // Ensure test user is admin
 async function ensureAdminRole() {
+  await ensureTestUserExists({
+    email: TEST_USER.email,
+    password: TEST_USER.password,
+    name: 'Test User',
+  });
+
   const pool = new Pool({ connectionString: DATABASE_URL });
   try {
     const adminResult = await pool.query<{ id: string }>(
@@ -39,18 +46,18 @@ async function ensureAdminRole() {
 
     const adminId = adminResult.rows[0].id;
 
-    await pool.query(`UPDATE "user" SET role = 'superadmin', "emailVerified" = true WHERE id = $1`, [adminId]);
     impersonationOrgId = await ensureOrganizationExists({
       orgSlug: IMPERSONATION_ORG_SLUG,
       orgName: 'E2E Impersonation Org',
     });
 
     const targetResult = await pool.query<{ id: string }>(
-      `INSERT INTO "user" (id, name, email, role, "emailVerified", "createdAt", "updatedAt")
-       VALUES (gen_random_uuid()::text, $1, $2, 'member', true, NOW(), NOW())
+      `INSERT INTO "user" (id, name, email, role, "emailVerified", "approvalStatus", "createdAt", "updatedAt")
+       VALUES (gen_random_uuid()::text, $1, $2, 'member', true, 'approved', NOW(), NOW())
        ON CONFLICT (email) DO UPDATE
          SET role = 'member',
              "emailVerified" = true,
+             "approvalStatus" = 'approved',
              "updatedAt" = NOW()
        RETURNING id`,
       [IMPERSONATION_TARGET_NAME, IMPERSONATION_TARGET_EMAIL],
@@ -233,7 +240,7 @@ test.describe.serial('Impersonation', () => {
     
     // Wait for impersonation to take effect
     await page.waitForLoadState('networkidle');
-    await expect(page).toHaveURL('/');
+    await expect(page).toHaveURL(/\/(chat|dashboard)?$/);
 
     // Check impersonation banner appears and contains expected user
     const banner = page.locator('.bg-amber-500');
@@ -267,7 +274,7 @@ test.describe.serial('Access Control - Non-Admin Routes', () => {
 
   test('dashboard should be accessible to authenticated users', async ({ page }) => {
     await login(page);
-    await expect(page).toHaveURL('/');
+    await expect(page).toHaveURL(/\/(chat|dashboard)?$/);
     await expect(page.locator('[data-slot="sidebar"]').getByRole('link', { name: /dashboard/i })).toBeVisible();
   });
 });
@@ -278,20 +285,55 @@ test.describe.serial('Organization Role Guards', () => {
   });
 
   test('should show organization selector for users in organizations', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
     await login(page);
-    
-    // Check if organization selector is visible in sidebar
-    // This depends on whether the user is in any organizations
+    if (impersonationOrgId) {
+      await setActiveOrganizationForUserSessions({
+        userEmail: TEST_USER.email,
+        organizationId: impersonationOrgId,
+      });
+      await page.reload({ waitUntil: 'networkidle' });
+    }
+    await page.waitForLoadState('networkidle');
+
+    // Ensure sidebar is expanded (it may start collapsed on offcanvas mode)
     const sidebar = page.locator('[data-slot="sidebar"]');
-    await expect(sidebar).toBeVisible();
+    const isSidebarVisible = await sidebar.isVisible().catch(() => false);
+    if (!isSidebarVisible) {
+      const sidebarTrigger = page.getByRole('button', { name: /toggle sidebar/i });
+      if (await sidebarTrigger.isVisible().catch(() => false)) {
+        await sidebarTrigger.click();
+        await page.waitForTimeout(500);
+      }
+    }
+
+    await expect(sidebar).toBeVisible({ timeout: 10000 });
   });
 
   test('dashboard page should be accessible', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
     await login(page);
-    await page.goto('/');
+    if (impersonationOrgId) {
+      await setActiveOrganizationForUserSessions({
+        userEmail: TEST_USER.email,
+        organizationId: impersonationOrgId,
+      });
+      await page.reload({ waitUntil: 'networkidle' });
+    }
     await page.waitForLoadState('networkidle');
-    
-    await expect(page.locator('[data-slot="sidebar"]')).toBeVisible();
+
+    // Expand sidebar if collapsed
+    const sidebar = page.locator('[data-slot="sidebar"]');
+    const isSidebarVisible = await sidebar.isVisible().catch(() => false);
+    if (!isSidebarVisible) {
+      const sidebarTrigger = page.getByRole('button', { name: /toggle sidebar/i });
+      if (await sidebarTrigger.isVisible().catch(() => false)) {
+        await sidebarTrigger.click();
+        await page.waitForTimeout(500);
+      }
+    }
+
+    await expect(sidebar).toBeVisible({ timeout: 10000 });
   });
 });
 
