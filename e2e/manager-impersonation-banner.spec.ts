@@ -148,7 +148,7 @@ test.describe.serial('Manager impersonation banner flow', () => {
     await page.getByRole('menuitem', { name: /impersonate user|impersonate/i }).click();
 
     await page.waitForLoadState('networkidle');
-    await expect(page).toHaveURL('/');
+    await expect(page).toHaveURL(/\/(chat|dashboard)?$/);
 
     const banner = page.locator('.bg-amber-500');
     await expect(banner).toBeVisible({ timeout: 15000 });

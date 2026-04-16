@@ -17,7 +17,7 @@ async function login(page: Page) {
   await page.getByLabel('Email').fill(TEST_USER.email);
   await page.getByLabel('Password').fill(TEST_USER.password);
   await page.getByRole('button', { name: /^login$/i }).click();
-  await expect(page).toHaveURL('/', { timeout: 15000 });
+  await expect(page).toHaveURL(/\/(chat|dashboard)?$/, { timeout: 15000 });
 }
 
 test.describe('Invitation acceptance continuation flow', () => {

@@ -94,6 +94,47 @@ async function seedDefaultOrganizationRoles(pool: Pool, organizationId: string):
   }
 }
 
+/**
+ * Ensures the test user exists via the signup API and sets them as superadmin.
+ * Call this in beforeAll blocks of test files that run later in the suite,
+ * in case an earlier test inadvertently removed the user.
+ */
+export async function ensureTestUserExists(params: {
+  email: string;
+  password: string;
+  name: string;
+}): Promise<void> {
+  const exists = await withDatabase(async (pool) => {
+    const res = await pool.query(`SELECT id FROM "user" WHERE email = $1`, [params.email]);
+    return (res.rowCount ?? 0) > 0;
+  });
+
+  if (!exists) {
+    await fetch(`${API_BASE_URL}/api/auth/sign-up/email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: params.email,
+        password: params.password,
+        name: params.name,
+      }),
+    });
+  }
+
+  await withDatabase(async (pool) => {
+    await pool.query(
+      `UPDATE "user"
+       SET role = 'superadmin', "emailVerified" = true, "approvalStatus" = 'approved', "updatedAt" = NOW()
+       WHERE email = $1`,
+      [params.email],
+    );
+    await pool.query(
+      `DELETE FROM session WHERE "userId" IN (SELECT id FROM "user" WHERE email = $1)`,
+      [params.email],
+    );
+  });
+}
+
 export async function withDatabase<T>(fn: (pool: Pool) => Promise<T>): Promise<T> {
   const pool = new Pool({ connectionString: DATABASE_URL });
   try {
@@ -163,7 +204,7 @@ export async function ensureUserWithRole(params: {
   const userId = await withDatabase(async (pool) => {
     const result = await pool.query<{ id: string }>(
       `UPDATE "user"
-       SET role = $1, "emailVerified" = true, "updatedAt" = NOW()
+       SET role = $1, "emailVerified" = true, "approvalStatus" = 'approved', "updatedAt" = NOW()
        WHERE email = $2
        RETURNING id`,
       [params.role, params.email],
@@ -196,12 +237,13 @@ export async function ensureUserRecord(params: {
 }): Promise<{ id: string; email: string }> {
   const userId = await withDatabase(async (pool) => {
     const result = await pool.query<{ id: string }>(
-      `INSERT INTO "user" (id, name, email, role, "emailVerified", "createdAt", "updatedAt")
-       VALUES (gen_random_uuid()::text, $1, $2, $3, true, NOW(), NOW())
+      `INSERT INTO "user" (id, name, email, role, "emailVerified", "approvalStatus", "createdAt", "updatedAt")
+       VALUES (gen_random_uuid()::text, $1, $2, $3, true, 'approved', NOW(), NOW())
        ON CONFLICT (email) DO UPDATE
          SET name = EXCLUDED.name,
              role = EXCLUDED.role,
              "emailVerified" = true,
+             "approvalStatus" = 'approved',
              "updatedAt" = NOW()
        RETURNING id`,
       [params.name, params.email, params.role],
@@ -233,7 +275,8 @@ export async function loginWithCredentials(page: Page, email: string, password: 
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: /^login$/i }).click();
-  await expect(page).toHaveURL('/', { timeout: 15000 });
+  // Root route (/) redirects to /chat, so wait until we leave /login
+  await page.waitForURL((url) => !url.toString().includes('/login'), { timeout: 15000 });
   await page.waitForLoadState('networkidle');
 }
 

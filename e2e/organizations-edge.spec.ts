@@ -3,6 +3,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { TEST_USER } from './env';
 import {
   ensureOrganizationMembership,
+  ensureTestUserExists,
   ensureUserRecord,
   escapeRegExp,
   findOrganizationListItemBySlug,
@@ -110,6 +111,11 @@ async function openOrganizationsPage(page: Page) {
 
 test.describe('Organizations edge cases', () => {
   test.beforeAll(async () => {
+    await ensureTestUserExists({
+      email: TEST_USER.email,
+      password: TEST_USER.password,
+      name: 'Test User',
+    });
     await ensureOrganization(EXISTING_ORG_SLUG, 'E2E Existing Organization');
     await ensureOrganization(MANAGE_ORG_SLUG, 'E2E Manage Organization');
     await ensureUserRecord({

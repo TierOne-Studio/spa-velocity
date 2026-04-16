@@ -126,7 +126,7 @@ async function login(page: import('@playwright/test').Page) {
   await page.getByLabel('Email').fill(TEST_USER.email);
   await page.getByLabel('Password').fill(TEST_USER.password);
   await page.getByRole('button', { name: /^login$/i }).click();
-  await expect(page).toHaveURL('/', { timeout: 10000 });
+  await expect(page).toHaveURL(/\/(chat|dashboard)?$/, { timeout: 10000 });
 }
 
 async function activateAdminOrganizationSession() {
@@ -183,7 +183,7 @@ test.describe('Admin Panel E2E Tests', () => {
   test.describe('Basic Access', () => {
     test('should login and access dashboard', async ({ page }) => {
       await login(page);
-      await expect(page).toHaveURL('/');
+      await expect(page).toHaveURL(/\/(chat|dashboard)?$/);
       // Check sidebar has dashboard link
       await expect(page.locator('[data-slot="sidebar"]').getByRole('link', { name: /dashboard/i })).toBeVisible();
     });
@@ -309,7 +309,7 @@ test.describe('Admin Panel E2E Tests', () => {
 
       // Dashboard is inside the Main group (expanded by default) - use sidebar link
       await page.locator('[data-slot="sidebar"]').getByRole('link', { name: /dashboard/i }).click();
-      await expect(page).toHaveURL('/');
+      await expect(page).toHaveURL(/\/(chat|dashboard)?$/);
     });
 
     test('should show breadcrumbs for navigation', async ({ page }) => {

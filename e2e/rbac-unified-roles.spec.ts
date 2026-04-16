@@ -1,7 +1,7 @@
 import { test, expect, type APIRequestContext, type Locator, Page } from '@playwright/test';
 import { Pool } from 'pg';
 import { DATABASE_URL, API_BASE_URL, TEST_USER } from './env';
-import { ensureOrganizationMembership, findOrganizationListItemBySlug } from './test-helpers';
+import { ensureOrganizationMembership, ensureTestUserExists, findOrganizationListItemBySlug } from './test-helpers';
 import { resendTestEmail } from '../src/shared/utils/resendTestEmail';
 
 /**
@@ -185,7 +185,7 @@ async function login(page: Page) {
   await page.getByLabel('Email').fill(TEST_USER.email);
   await page.getByLabel('Password').fill(TEST_USER.password);
   await page.getByRole('button', { name: /^login$/i }).click();
-  await expect(page).toHaveURL('/', { timeout: 15000 });
+  await expect(page).toHaveURL(/\/(chat|dashboard)?$/, { timeout: 15000 });
   await page.waitForLoadState('networkidle');
 }
 
@@ -233,6 +233,11 @@ test.describe('Admin Role - Full Platform Access', () => {
   let adminOrgId: string;
 
   test.beforeAll(async () => {
+    await ensureTestUserExists({
+      email: TEST_USER.email,
+      password: TEST_USER.password,
+      name: 'Test User',
+    });
     await setUserRole('superadmin');
     const { organizationId } = await ensureOrganizationForTestUser({
       orgSlug: 'admin-org',
@@ -485,8 +490,9 @@ test.describe('Manager Role - Organization-Scoped Access', () => {
   });
 
   test('should login successfully and see dashboard', async ({ page }) => {
-    await expect(page).toHaveURL('/');
-    await expect(page.locator('[data-slot="sidebar"]').getByRole('link', { name: /dashboard/i })).toBeVisible();
+    await expect(page).toHaveURL(/\/(chat|dashboard)?$/);
+    // Verify sidebar is visible (dashboard link depends on dashboard:view permission)
+    await expect(page.locator('[data-slot="sidebar"]')).toBeVisible({ timeout: 10000 });
   });
 
   test('should see admin navigation items (manager allowed)', async ({ page }) => {
@@ -669,12 +675,13 @@ test.describe('Member Role - Basic Read Access', () => {
   });
 
   test('should login successfully and see dashboard', async ({ page }) => {
-    await expect(page).toHaveURL('/');
-    await expect(page.locator('[data-slot="sidebar"]').getByRole('link', { name: /dashboard/i })).toBeVisible();
+    await expect(page).toHaveURL(/\/(chat|dashboard)?$/);
+    // Verify sidebar is visible (dashboard link depends on dashboard:view permission)
+    await expect(page.locator('[data-slot="sidebar"]')).toBeVisible({ timeout: 10000 });
   });
 
   test('should see read-only admin navigation items in sidebar', async ({ page }) => {
-    await expect(page).toHaveURL('/');
+    await expect(page).toHaveURL(/\/(chat|dashboard)?$/);
     await page.waitForLoadState('networkidle');
 
     await expect(page.getByRole('link', { name: /^organizations$/i })).toBeVisible();
@@ -688,7 +695,7 @@ test.describe('Member Role - Basic Read Access', () => {
     await expect(page.getByRole('heading', { name: /organizations/i })).toBeVisible();
 
     await page.goto('/admin/users');
-    await expect(page).toHaveURL('/');
+    await expect(page).toHaveURL(/\/(chat|dashboard)?$/);
   });
 });
 

@@ -1,17 +1,35 @@
 import { test, expect } from '@playwright/test';
 
 import { TEST_USER } from './env';
-import { escapeRegExp, loginWithCredentials } from './test-helpers';
+import { ensureTestUserExists, escapeRegExp, loginWithCredentials } from './test-helpers';
 
 test.describe('Navigation integrity', () => {
+  test.beforeAll(async () => {
+    await ensureTestUserExists({
+      email: TEST_USER.email,
+      password: TEST_USER.password,
+      name: 'Test User',
+    });
+  });
+
   test.beforeEach(async ({ page }) => {
     await loginWithCredentials(page, TEST_USER.email, TEST_USER.password);
   });
 
   test('settings menu entry should not break navigation', async ({ page }) => {
     await page.waitForLoadState('networkidle');
-    const userMenuButton = page
-      .locator('[data-slot="sidebar"]')
+
+    // Ensure sidebar is expanded
+    const sidebar = page.locator('[data-slot="sidebar"]');
+    if (!(await sidebar.isVisible().catch(() => false))) {
+      const sidebarTrigger = page.getByRole('button', { name: /toggle sidebar/i });
+      if (await sidebarTrigger.isVisible().catch(() => false)) {
+        await sidebarTrigger.click();
+        await page.waitForTimeout(500);
+      }
+    }
+
+    const userMenuButton = sidebar
       .getByRole('button', { name: new RegExp(escapeRegExp(TEST_USER.email), 'i') });
     await expect(userMenuButton).toBeVisible({ timeout: 10000 });
     await userMenuButton.click();

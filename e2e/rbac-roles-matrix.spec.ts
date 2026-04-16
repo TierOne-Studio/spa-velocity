@@ -100,7 +100,7 @@ test.describe.serial('RBAC Roles matrix (UI-aligned)', () => {
   test('member is redirected from roles page without role:read permission', async ({ page }) => {
     await loginAs(page, 'member');
     await page.goto('/admin/roles');
-    await expect(page).toHaveURL('/');
+    await expect(page).toHaveURL(/\/(chat|dashboard)?$/);
   });
 
   test('admin sees create role action and all system role cards', async ({ page }) => {

@@ -138,9 +138,9 @@ async function globalSetup() {
       }
     }
 
-    // Set test user as admin with verified email
+    // Set test user as admin with verified email and approved status
     const result = await pool.query(
-      `UPDATE "user" SET role = 'superadmin', "emailVerified" = true WHERE email = $1 RETURNING id, email, role`,
+      `UPDATE "user" SET role = 'superadmin', "emailVerified" = true, "approvalStatus" = 'approved' WHERE email = $1 RETURNING id, email, role`,
       [TEST_USER_EMAIL]
     );
 
