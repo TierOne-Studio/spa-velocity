@@ -11,7 +11,7 @@ import {
   PendingApprovalPage,
   AccountRejectedPage,
 } from "@features/Auth";
-import { DashboardPage, SettingsPage, AccountPage } from "@features/Dashboard";
+import { SettingsPage, AccountPage } from "@features/Dashboard";
 import { UsersPage, SessionsPage, OrganizationsPage, RolesPage } from "@features/Admin";
 import { AdminDashboardPage } from "@features/AdminDashboard/views/AdminDashboardPage";
 import { ChatPage } from "@features/Chat";
@@ -56,14 +56,13 @@ const AppRoutesContent = () => {
                     }
                   >
                     <Route index element={<Navigate to="/chat" replace />} />
-                    <Route path="dashboard" element={<DashboardPage />} />
 
                     {/* Admin routes */}
                     <Route
                       path="chat"
                       element={
                         <AdminRoute
-                          fallbackPath="/dashboard"
+                          fallbackPath="/account"
                           requiredPermission={{ resource: "chat", action: "read" }}
                         >
                           <ChatPage />
@@ -74,7 +73,7 @@ const AppRoutesContent = () => {
                       path="chat/:conversationId"
                       element={
                         <AdminRoute
-                          fallbackPath="/dashboard"
+                          fallbackPath="/account"
                           requiredPermission={{ resource: "chat", action: "read" }}
                         >
                           <ChatPage />

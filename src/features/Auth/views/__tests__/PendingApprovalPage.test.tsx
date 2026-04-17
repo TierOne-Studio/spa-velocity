@@ -66,7 +66,7 @@ describe("PendingApprovalPage", () => {
     });
   });
 
-  it("navigates to dashboard when user is approved", () => {
+  it("navigates to home when user is approved", () => {
     mockUseAuth.mockReturnValue({
       user: { approvalStatus: "approved" },
       refreshSession: mockRefreshSession,

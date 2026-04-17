@@ -3,12 +3,15 @@ import { API_BASE_URL, TEST_USER } from '../env';
 import {
   setUserRole,
   ensureOrganizationForTestUser,
+  ensureUserInOrganization,
+  findOrganizationListItemBySlug,
   login,
   setActiveOrganizationForUserSessions,
 } from '../rbac-role-helpers';
 
 test.describe.serial('Unified Role Dropdowns - Database-Driven', () => {
   let dropdownAdminOrgId: string;
+  let dropdownMemberEmail: string;
 
   test.beforeAll(async () => {
     await setUserRole('admin');
@@ -18,6 +21,14 @@ test.describe.serial('Unified Role Dropdowns - Database-Driven', () => {
       memberRole: 'admin',
     });
     dropdownAdminOrgId = organizationId;
+
+    const member = await ensureUserInOrganization({
+      emailPrefix: 'dropdowns-member',
+      userRole: 'member',
+      organizationId,
+      memberRole: 'member',
+    });
+    dropdownMemberEmail = member.email;
   });
 
   test.beforeEach(async ({ page }) => {
@@ -51,29 +62,20 @@ test.describe.serial('Unified Role Dropdowns - Database-Driven', () => {
   test('Organizations page member role dropdown should show database roles', async ({ page }) => {
     await page.goto('/admin/organizations');
 
-    // Wait for organizations to load and select one
-    await page.waitForSelector('text=Organizations');
+    await expect(page.getByRole('heading', { name: /organizations/i })).toBeVisible();
+    const orgRow = await findOrganizationListItemBySlug(page, 'dropdowns-admin-org');
+    await orgRow.click();
 
-    // Find an organization card and click it
-    const orgCard = page.locator('[class*="cursor-pointer"]').filter({ hasText: /test/i }).first();
-    if (await orgCard.isVisible()) {
-      await orgCard.click();
-      await page.waitForLoadState('networkidle');
+    const memberRow = page.locator('table tbody tr', { hasText: dropdownMemberEmail }).first();
+    await expect(memberRow).toBeVisible({ timeout: 15000 });
 
-      // Check if there are any members with role dropdowns
-      const roleSelect = page.locator('button[role="combobox"]').first();
-      if (await roleSelect.isVisible()) {
-        await roleSelect.click();
+    const roleSelect = memberRow.getByRole('combobox').first();
+    await expect(roleSelect).toBeEnabled({ timeout: 10000 });
+    await roleSelect.click();
 
-        // Verify database roles are shown (not hardcoded owner/admin/member)
-        const options = page.locator('[role="option"]');
-        const count = await options.count();
-        expect(count).toBeGreaterThanOrEqual(3);
-
-        // Check for Admin, Manager, Member (database roles)
-        await expect(page.getByRole('option', { name: /admin/i })).toBeVisible();
-      }
-    }
+    await expect(page.getByRole('option', { name: /admin/i })).toBeVisible();
+    await expect(page.getByRole('option', { name: /manager/i })).toBeVisible();
+    await expect(page.getByRole('option', { name: /member/i })).toBeVisible();
   });
 
   test('API /api/platform-admin/organizations/roles-metadata returns database roles', async ({ request }) => {

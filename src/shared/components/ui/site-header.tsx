@@ -19,7 +19,6 @@ const routeConfig: Record<string, { label: string; parent?: string }> = {
   "/": { label: "Chat", parent: "/main" },
   "/main": { label: "Main", parent: undefined },
   "/chat": { label: "Chat", parent: "/main" },
-  "/dashboard": { label: "Dashboard" },
   "/admin/dashboard": { label: "Admin Dashboard", parent: "/admin" },
   "/admin/users": { label: "Users", parent: "/admin" },
   "/admin/sessions": { label: "Sessions", parent: "/admin" },

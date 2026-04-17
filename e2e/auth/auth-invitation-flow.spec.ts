@@ -17,7 +17,7 @@ async function login(page: Page) {
   await page.getByLabel('Email').fill(TEST_USER.email);
   await page.getByLabel('Password').fill(TEST_USER.password);
   await page.getByRole('button', { name: /^login$/i }).click();
-  await expect(page).toHaveURL(/\/(chat|dashboard)?$/, { timeout: 15000 });
+  await expect(page).toHaveURL(/\/(chat(\/.*)?|account|dashboard)?$/, { timeout: 15000 });
 }
 
 test.describe('Invitation acceptance continuation flow', () => {
@@ -79,7 +79,7 @@ test.describe('Invitation acceptance continuation flow', () => {
 
     await expect(page.getByText('Organization Invitation')).toBeVisible();
     await expect(page.getByText(/something went wrong/i)).toBeVisible({ timeout: 20000 });
-    await expect(page.getByRole('button', { name: /go to dashboard/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /go to home/i })).toBeVisible();
     await expect(page.getByText(/processing your invitation/i)).not.toBeVisible();
   });
 });

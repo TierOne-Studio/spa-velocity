@@ -88,25 +88,26 @@ export async function setActiveOrganization(page: Page, organizationId: string) 
 export async function ensureMemberUser(emailPrefix: string) {
   return await withDatabase(async (pool) => {
     const email = resendTestEmail('delivered', emailPrefix);
-    const userRow = await pool.query(`SELECT id FROM "user" WHERE email = $1`, [email]);
-    let userId: string;
-    if (userRow.rowCount === 0) {
-      const insert = await pool.query(
-        `INSERT INTO "user" (id, name, email, role, "emailVerified", "createdAt", "updatedAt")
-         VALUES (gen_random_uuid()::text, $1, $2, 'member', true, NOW(), NOW())
-         RETURNING id`,
-        [`Member ${emailPrefix}`, email],
-      );
-      userId = insert.rows[0].id;
-      await pool.query(
-        `INSERT INTO account (id, "accountId", "providerId", "userId", "createdAt", "updatedAt")
-         VALUES (gen_random_uuid()::text, $1, 'credential', $1, NOW(), NOW())
-         ON CONFLICT DO NOTHING`,
-        [userId],
-      );
-    } else {
-      userId = userRow.rows[0].id;
-    }
+    const name = `Member ${emailPrefix}`;
+    const userResult = await pool.query<{ id: string }>(
+      `INSERT INTO "user" (id, name, email, role, "emailVerified", "approvalStatus", "createdAt", "updatedAt")
+       VALUES (gen_random_uuid()::text, $1, $2, 'member', true, 'approved', NOW(), NOW())
+       ON CONFLICT (email) DO UPDATE
+         SET name = EXCLUDED.name,
+             role = 'member',
+             "emailVerified" = true,
+             "approvalStatus" = 'approved',
+             "updatedAt" = NOW()
+       RETURNING id`,
+      [name, email],
+    );
+    const userId = userResult.rows[0].id;
+    await pool.query(
+      `INSERT INTO account (id, "accountId", "providerId", "userId", "createdAt", "updatedAt")
+       VALUES (gen_random_uuid()::text, $1, 'credential', $1, NOW(), NOW())
+       ON CONFLICT DO NOTHING`,
+      [userId],
+    );
     return { userId, email };
   });
 }
@@ -138,11 +139,12 @@ export async function ensureUserInOrganization(params: {
     const email = resendTestEmail('delivered', params.emailPrefix);
 
     const userResult = await pool.query<{ id: string }>(
-      `INSERT INTO "user" (id, name, email, role, "emailVerified", "createdAt", "updatedAt")
-       VALUES (gen_random_uuid()::text, $1, $2, $3, true, NOW(), NOW())
+      `INSERT INTO "user" (id, name, email, role, "emailVerified", "approvalStatus", "createdAt", "updatedAt")
+       VALUES (gen_random_uuid()::text, $1, $2, $3, true, 'approved', NOW(), NOW())
        ON CONFLICT (email) DO UPDATE
          SET role = EXCLUDED.role,
              "emailVerified" = true,
+         "approvalStatus" = 'approved',
              "updatedAt" = NOW()
        RETURNING id`,
       [`${params.userRole} ${params.emailPrefix}`, email, params.userRole],
@@ -176,7 +178,7 @@ export async function login(page: Page) {
   await page.getByLabel('Email').fill(TEST_USER.email);
   await page.getByLabel('Password').fill(TEST_USER.password);
   await page.getByRole('button', { name: /^login$/i }).click();
-  await expect(page).toHaveURL(/\/(chat|dashboard)?$/, { timeout: 15000 });
+  await expect(page).toHaveURL(/\/(chat(\/.*)?|account|dashboard)?$/, { timeout: 15000 });
   await page.waitForLoadState('networkidle');
 }
 
@@ -197,9 +199,14 @@ export async function signInAndGetAuthHeaders(request: APIRequestContext): Promi
 }
 
 export async function findUserRowByEmail(page: Page, email: string): Promise<Locator> {
+  const searchTerm = await withDatabase(async (pool) => {
+    const result = await pool.query<{ name: string }>(`SELECT name FROM "user" WHERE email = $1`, [email]);
+    return result.rows[0]?.name ?? email;
+  });
+
   const searchInput = page.getByPlaceholder(/search users/i);
   await expect(searchInput).toBeVisible({ timeout: 10000 });
-  await searchInput.fill(email);
+  await searchInput.fill(searchTerm);
   await page.waitForTimeout(800);
 
   const targetRow = page.locator('table tbody tr', { hasText: email }).first();

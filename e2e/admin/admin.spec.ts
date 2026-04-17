@@ -7,6 +7,8 @@ import { resendTestEmail } from '../../src/shared/utils/resendTestEmail';
 const AUX_ORG_SLUG = 'e2e-admin-org';
 const AUX_MEMBER_EMAIL = resendTestEmail('delivered', 'e2e-admin-member');
 const AUX_MANAGER_EMAIL = resendTestEmail('delivered', 'e2e-admin-manager');
+const AUX_MEMBER_NAME = 'E2E Admin Member';
+const AUX_MANAGER_NAME = 'E2E Admin Manager';
 
 let adminOrganizationId = '';
 
@@ -31,7 +33,7 @@ async function findOrganizationCardBySlug(page: import('@playwright/test').Page,
 
 async function selectOrganizationOnRolesPage(page: import('@playwright/test').Page, organizationName: string) {
   const organizationSelect = page.getByRole('combobox', { name: /organization/i });
-  const fallbackSelect = page.locator('button').filter({ hasText: /all organizations/i }).first();
+  const fallbackSelect = page.getByRole('combobox').first();
   const trigger = await organizationSelect.isVisible({ timeout: 1000 }).catch(() => false)
     ? organizationSelect
     : fallbackSelect;
@@ -91,11 +93,12 @@ async function ensureAdminFixtures(): Promise<void> {
 
     const ensureUser = async (email: string, role: 'manager' | 'member', name: string) => {
       const userResult = await pool.query<{ id: string }>(
-        `INSERT INTO "user" (id, name, email, role, "emailVerified", "createdAt", "updatedAt")
-         VALUES (gen_random_uuid()::text, $1, $2, $3, true, NOW(), NOW())
+        `INSERT INTO "user" (id, name, email, role, "emailVerified", "approvalStatus", "createdAt", "updatedAt")
+         VALUES (gen_random_uuid()::text, $1, $2, $3, true, 'approved', NOW(), NOW())
          ON CONFLICT (email) DO UPDATE
            SET role = EXCLUDED.role,
                "emailVerified" = true,
+               "approvalStatus" = 'approved',
                "updatedAt" = NOW()
          RETURNING id`,
         [name, email, role],
@@ -111,8 +114,8 @@ async function ensureAdminFixtures(): Promise<void> {
       );
     };
 
-    await ensureUser(AUX_MEMBER_EMAIL, 'member', 'E2E Admin Member');
-    await ensureUser(AUX_MANAGER_EMAIL, 'manager', 'E2E Admin Manager');
+    await ensureUser(AUX_MEMBER_EMAIL, 'member', AUX_MEMBER_NAME);
+    await ensureUser(AUX_MANAGER_EMAIL, 'manager', AUX_MANAGER_NAME);
 
     await pool.query(`DELETE FROM session WHERE "userId" = $1`, [adminId]);
   });
@@ -126,7 +129,7 @@ async function login(page: import('@playwright/test').Page) {
   await page.getByLabel('Email').fill(TEST_USER.email);
   await page.getByLabel('Password').fill(TEST_USER.password);
   await page.getByRole('button', { name: /^login$/i }).click();
-  await expect(page).toHaveURL(/\/(chat|dashboard)?$/, { timeout: 10000 });
+  await expect(page).toHaveURL(/\/(chat(\/.*)?|account|dashboard)?$/, { timeout: 10000 });
 }
 
 async function activateAdminOrganizationSession() {
@@ -183,7 +186,7 @@ test.describe('Admin Panel E2E Tests', () => {
   test.describe('Basic Access', () => {
     test('should login and access dashboard', async ({ page }) => {
       await login(page);
-      await expect(page).toHaveURL(/\/(chat|dashboard)?$/);
+      await expect(page).toHaveURL(/\/(chat(\/.*)?|account|dashboard)?$/);
       // Check sidebar has dashboard link
       await expect(page.locator('[data-slot="sidebar"]').getByRole('link', { name: /dashboard/i })).toBeVisible();
     });
@@ -309,7 +312,7 @@ test.describe('Admin Panel E2E Tests', () => {
 
       // Dashboard is inside the Main group (expanded by default) - use sidebar link
       await page.locator('[data-slot="sidebar"]').getByRole('link', { name: /dashboard/i }).click();
-      await expect(page).toHaveURL(/\/(chat|dashboard)?$/);
+      await expect(page).toHaveURL(/\/(chat(\/.*)?|account|dashboard)?$/);
     });
 
     test('should show breadcrumbs for navigation', async ({ page }) => {
@@ -550,14 +553,14 @@ test.describe('Admin Panel E2E Tests', () => {
 
       const searchInput = page.getByPlaceholder(/search users/i);
       await expect(searchInput).toBeVisible({ timeout: 10000 });
-      await searchInput.fill(AUX_MEMBER_EMAIL);
+      await searchInput.fill(AUX_MEMBER_NAME);
       await page.waitForTimeout(800);
       
       // Wait for deterministic fixture row and open actions
       const targetRow = page.locator('table tbody tr', { hasText: AUX_MEMBER_EMAIL }).first();
       await expect(targetRow).toBeVisible({ timeout: 15000 });
 
-      const actionButton = targetRow.getByRole('button');
+      const actionButton = targetRow.getByRole('button', { name: /open menu/i });
       await actionButton.click();
       await expect(page.getByRole('menuitem', { name: /change role/i })).toBeVisible();
       await page.keyboard.press('Escape');

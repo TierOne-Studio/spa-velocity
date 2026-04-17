@@ -240,7 +240,7 @@ test.describe.serial('Impersonation', () => {
     
     // Wait for impersonation to take effect
     await page.waitForLoadState('networkidle');
-    await expect(page).toHaveURL(/\/(chat|dashboard)?$/);
+    await expect(page).toHaveURL(/\/(chat(\/.*)?|account|dashboard)?$/);
 
     // Check impersonation banner appears and contains expected user
     const banner = page.locator('.bg-amber-500');
@@ -274,7 +274,7 @@ test.describe.serial('Access Control - Non-Admin Routes', () => {
 
   test('dashboard should be accessible to authenticated users', async ({ page }) => {
     await login(page);
-    await expect(page).toHaveURL(/\/(chat|dashboard)?$/);
+    await expect(page).toHaveURL(/\/(chat(\/.*)?|account|dashboard)?$/);
     await expect(page.locator('[data-slot="sidebar"]').getByRole('link', { name: /dashboard/i })).toBeVisible();
   });
 });

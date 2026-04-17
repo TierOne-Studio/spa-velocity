@@ -49,7 +49,7 @@ export default function LoginPage() {
                 console.log("LoginPage: Redirecting to accept-invitation:", pendingInvitationId);
                 navigate(`/accept-invitation/${pendingInvitationId}`, { replace: true });
             } else {
-                console.log("LoginPage: No pending invitation, redirecting to dashboard");
+                console.log("LoginPage: No pending invitation, redirecting to home");
                 navigate("/", { replace: true });
             }
         }

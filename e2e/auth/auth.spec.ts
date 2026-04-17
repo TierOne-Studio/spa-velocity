@@ -92,7 +92,7 @@ test.describe('Authentication E2E Tests', () => {
       await page.getByRole('button', { name: /^login$/i }).click();
 
       // Should redirect to dashboard after successful login
-      await expect(page).toHaveURL(/\/(chat|dashboard)?$/, { timeout: 10000 });
+      await expect(page).toHaveURL(/\/(chat(\/.*)?|account|dashboard)?$/, { timeout: 10000 });
     });
 
     test('should navigate to signup page from login', async ({ page }) => {
@@ -155,7 +155,7 @@ test.describe('Authentication E2E Tests', () => {
       }
 
       // Test mode / verification-disabled mode: signup may authenticate immediately.
-      await expect(page).toHaveURL(/\/(chat|dashboard)?$/);
+      await expect(page).toHaveURL(/\/(chat(\/.*)?|account|dashboard)?$/);
     });
 
     test('should navigate to forgot password page', async ({ page }) => {
@@ -262,7 +262,7 @@ test.describe('Authentication E2E Tests', () => {
       await page.getByRole('button', { name: /^login$/i }).click();
 
       // Wait for dashboard
-      await expect(page).toHaveURL(/\/(chat|dashboard)?$/, { timeout: 10000 });
+      await expect(page).toHaveURL(/\/(chat(\/.*)?|account|dashboard)?$/, { timeout: 10000 });
 
       // Ensure sidebar is expanded
       const sidebar = page.locator('[data-slot="sidebar"]');
@@ -303,7 +303,7 @@ test.describe('Authentication E2E Tests', () => {
       await page.getByLabel('Email').fill(TEST_USER.email);
       await page.getByLabel('Password').fill(TEST_USER.password);
       await page.getByRole('button', { name: /^login$/i }).click();
-      await expect(page).toHaveURL(/\/(chat|dashboard)?$/, { timeout: 10000 });
+      await expect(page).toHaveURL(/\/(chat(\/.*)?|account|dashboard)?$/, { timeout: 10000 });
 
       // Inject fake tokens to verify cleanup
       await page.evaluate(() => {
@@ -356,7 +356,7 @@ test.describe('Authentication E2E Tests', () => {
       await page.getByLabel('Password').fill(TEST_USER.password);
       await page.getByRole('button', { name: /^login$/i }).click();
 
-      await expect(page).toHaveURL(/\/(chat|dashboard)?$/, { timeout: 10000 });
+      await expect(page).toHaveURL(/\/(chat(\/.*)?|account|dashboard)?$/, { timeout: 10000 });
     });
 
     test('should NOT stay on login page after valid credentials', async ({ page }) => {
@@ -376,7 +376,7 @@ test.describe('Authentication E2E Tests', () => {
       await page.getByLabel('Email').fill(TEST_USER.email);
       await page.getByLabel('Password').fill(TEST_USER.password);
       await page.getByRole('button', { name: /^login$/i }).click();
-      await expect(page).toHaveURL(/\/(chat|dashboard)?$/, { timeout: 10000 });
+      await expect(page).toHaveURL(/\/(chat(\/.*)?|account|dashboard)?$/, { timeout: 10000 });
 
       expect(page.url()).not.toContain('/login');
     });
@@ -386,7 +386,7 @@ test.describe('Authentication E2E Tests', () => {
       await page.getByLabel('Email').fill(TEST_USER.email);
       await page.getByLabel('Password').fill(TEST_USER.password);
       await page.getByRole('button', { name: /^login$/i }).click();
-      await expect(page).toHaveURL(/\/(chat|dashboard)?$/, { timeout: 10000 });
+      await expect(page).toHaveURL(/\/(chat(\/.*)?|account|dashboard)?$/, { timeout: 10000 });
 
       const result = await page.evaluate(async (apiUrl) => {
         localStorage.setItem('bearer_token', 'test-bearer-e2e-token');

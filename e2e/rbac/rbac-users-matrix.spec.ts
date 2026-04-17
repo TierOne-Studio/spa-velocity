@@ -153,7 +153,7 @@ test.describe.serial('RBAC Users matrix (UI-aligned)', () => {
   test('member is redirected from users page without user:read permission', async ({ page }) => {
     await loginAs(page, 'member');
     await page.goto('/admin/users');
-    await expect(page).toHaveURL(/\/(chat|dashboard)?$/);
+    await expect(page).toHaveURL(/\/(chat(\/.*)?|account|dashboard)?$/);
   });
 
   test('admin on self: only edit + reset password actions are visible', async ({ page }) => {
