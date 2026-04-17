@@ -41,7 +41,7 @@ test.describe.serial('Manager Role - Organization-Scoped Access', () => {
   });
 
   test('should login successfully and see dashboard', async ({ page }) => {
-    await expect(page).toHaveURL(/\/(chat|dashboard)?$/);
+    await expect(page).toHaveURL(/\/(chat(\/.*)?|account|dashboard)?$/);
     // Verify sidebar is visible (dashboard link depends on dashboard:view permission)
     await expect(page.locator('[data-slot="sidebar"]')).toBeVisible({ timeout: 10000 });
   });

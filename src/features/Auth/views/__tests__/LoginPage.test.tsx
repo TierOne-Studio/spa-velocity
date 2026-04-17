@@ -122,7 +122,7 @@ describe("LoginPage", () => {
     });
   });
 
-  it("redirects to dashboard when already authenticated", async () => {
+  it("redirects to home when already authenticated", async () => {
     mockUseAuth.mockReturnValue({
       login: mockLogin,
       isAuthenticated: true,

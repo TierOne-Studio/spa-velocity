@@ -142,7 +142,7 @@ test.describe.serial('RBAC Sessions matrix (UI-aligned)', () => {
 
     await loginAs(page, 'member');
     await page.goto('/admin/sessions');
-    await expect(page).toHaveURL(/\/(chat|dashboard)?$/, { timeout: 10000 });
+    await expect(page).toHaveURL(/\/(chat(\/.*)?|account|dashboard)?$/, { timeout: 10000 });
     // Member is redirected to default page — sidebar should be visible
     await expect(page.locator('[data-slot="sidebar"]')).toBeVisible({ timeout: 10000 });
   });

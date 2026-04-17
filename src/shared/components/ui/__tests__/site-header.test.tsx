@@ -66,14 +66,15 @@ describe("SiteHeader", () => {
     expect(screen.getByText("Chat")).toBeInTheDocument()
   })
 
-  it("renders Dashboard breadcrumb for '/dashboard' fallback route", () => {
+  it("renders Main > Chat breadcrumb for legacy '/dashboard' paths", () => {
     render(
       <MemoryRouter initialEntries={["/dashboard"]}>
         <SiteHeader />
       </MemoryRouter>,
     )
 
-    expect(screen.getByText("Dashboard")).toBeInTheDocument()
+    expect(screen.getByText("Main")).toBeInTheDocument()
+    expect(screen.getByText("Chat")).toBeInTheDocument()
   })
 
   it("renders /admin route with just Admin breadcrumb", () => {

@@ -17,6 +17,12 @@ Use MUST / SHOULD / MAY exactly as written.
 
 ## P0 — PERMISSIONS (NON-NEGOTIABLE)
 
+### Git — MAIN BRANCH IS OFF-LIMITS (ABSOLUTE)
+
+- MUST NEVER commit, push, force-push, merge, or revert directly to `main`. No exceptions, no matter the reason.
+- All changes MUST go through a feature branch and PR.
+- If a fix is needed on `main`, MUST be validated by the user first and should be creating a hotfix branch and PR instead.
+
 ### Frontend Security & Sensitive Data — UNSAFE EXPOSURE REQUIRES EXPLICIT APPROVAL
 
 - Allowed:
@@ -38,6 +44,9 @@ Workflow for any sensitive-data-affecting change:
 
 ### Git & GitHub — COMMIT/PUSH REQUIRES EXPLICIT APPROVAL
 
+- Before any commit or push, MUST run `git branch --show-current` and confirm it matches the PR branch the user is working on.
+- MUST run `gh pr view --json headRefName` to verify the branch belongs to the intended PR
+  before pushing fix commits.
 - Allowed: review, suggestions, plain-text diffs/patches, preparing commands
 - Not allowed without explicit approval: git commit, git push, branches, PRs, merges, force operations
 

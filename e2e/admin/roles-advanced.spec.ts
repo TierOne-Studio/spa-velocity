@@ -22,6 +22,13 @@ async function loginAsAdmin(page: Page) {
 async function openRolesPage(page: Page) {
   await page.goto('/admin/roles', { waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('networkidle');
+
+  if (page.url().includes('/login')) {
+    await loginAsAdmin(page);
+    await page.goto('/admin/roles', { waitUntil: 'domcontentloaded' });
+    await page.waitForLoadState('networkidle');
+  }
+
   await expect(page.getByRole('heading', { name: /roles/i })).toBeVisible({ timeout: 15000 });
 }
 
@@ -38,6 +45,14 @@ test.describe('Roles — advanced flows', () => {
       role: 'admin',
       orgSlug: ORG_SLUG,
       orgName: ORG_NAME,
+    });
+  });
+
+  test.beforeEach(async () => {
+    await ensureTestUserExists({
+      email: TEST_USER.email,
+      password: TEST_USER.password,
+      name: 'Test User',
     });
   });
 

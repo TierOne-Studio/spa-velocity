@@ -27,13 +27,13 @@ test.describe.serial('Member Role - Basic Read Access', () => {
   });
 
   test('should login successfully and see dashboard', async ({ page }) => {
-    await expect(page).toHaveURL(/\/(chat|dashboard)?$/);
+    await expect(page).toHaveURL(/\/(chat(\/.*)?|account|dashboard)?$/);
     // Verify sidebar is visible (dashboard link depends on dashboard:view permission)
     await expect(page.locator('[data-slot="sidebar"]')).toBeVisible({ timeout: 10000 });
   });
 
   test('should see read-only admin navigation items in sidebar', async ({ page }) => {
-    await expect(page).toHaveURL(/\/(chat|dashboard)?$/);
+    await expect(page).toHaveURL(/\/(chat(\/.*)?|account|dashboard)?$/);
     await page.waitForLoadState('networkidle');
 
     await expect(page.getByRole('link', { name: /^organizations$/i })).toBeVisible();
@@ -47,6 +47,6 @@ test.describe.serial('Member Role - Basic Read Access', () => {
     await expect(page.getByRole('heading', { name: /organizations/i })).toBeVisible();
 
     await page.goto('/admin/users');
-    await expect(page).toHaveURL(/\/(chat|dashboard)?$/);
+    await expect(page).toHaveURL(/\/(chat(\/.*)?|account|dashboard)?$/);
   });
 });

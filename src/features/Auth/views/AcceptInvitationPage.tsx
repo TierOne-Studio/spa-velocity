@@ -110,7 +110,7 @@ export function AcceptInvitationPage() {
             <>
               <CheckCircle className="h-12 w-12 text-green-500" />
               <p className="text-center text-muted-foreground">
-                You have successfully joined the organization. Redirecting to dashboard...
+                You have successfully joined the organization. Redirecting to home...
               </p>
             </>
           )}
@@ -120,7 +120,7 @@ export function AcceptInvitationPage() {
               <XCircle className="h-12 w-12 text-destructive" />
               <p className="text-center text-muted-foreground">{errorMessage}</p>
               <Button onClick={() => navigate("/")} variant="outline">
-                Go to Dashboard
+                Go to Home
               </Button>
             </>
           )}

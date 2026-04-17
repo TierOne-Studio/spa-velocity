@@ -15,7 +15,6 @@ vi.mock("@features/Auth", () => ({
 }));
 
 vi.mock("@features/Dashboard", () => ({
-  DashboardPage: () => <div>Dashboard</div>,
   SettingsPage: () => <div>Settings</div>,
   AccountPage: () => <div>Account</div>,
 }));
@@ -110,12 +109,13 @@ describe("AppRoutes", () => {
     expect(screen.queryByText("Dashboard")).not.toBeInTheDocument();
   });
 
-  it("renders the dashboard fallback route", () => {
+  it("redirects the legacy dashboard route to chat", () => {
     window.history.pushState({}, "", "/dashboard");
 
     render(<AppRoutes />);
 
-    expect(screen.getByText("Dashboard")).toBeInTheDocument();
+    expect(screen.getByText("Chat")).toBeInTheDocument();
+    expect(screen.queryByText("Dashboard")).not.toBeInTheDocument();
   });
 
   it("redirects removed project routes to chat", () => {

@@ -173,7 +173,7 @@ test.describe('Layout and navigation', () => {
       await page.waitForLoadState('networkidle');
 
       // Unknown routes should redirect to / (which redirects to /chat or /dashboard)
-      await expect(page).toHaveURL(/\/(chat|dashboard)?$/, { timeout: 15000 });
+      await expect(page).toHaveURL(/\/(chat(\/.*)?|account|dashboard)?$/, { timeout: 15000 });
     });
 
     test('should redirect unknown routes to login for unauthenticated users', async ({ page }) => {

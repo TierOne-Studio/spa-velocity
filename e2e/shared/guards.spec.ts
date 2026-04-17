@@ -87,16 +87,16 @@ test.describe('Route guard behavior', () => {
     await loginAsMember(page);
 
     await page.goto('/admin/users');
-    await expect(page).toHaveURL(/\/(chat|dashboard)?$/, { timeout: 10000 });
+    await expect(page).toHaveURL(/\/(chat(\/.*)?|account|dashboard)?$/, { timeout: 10000 });
 
     await page.goto('/admin/organizations');
     await expect(page.getByRole('heading', { name: /organizations/i })).toBeVisible({ timeout: 10000 });
 
     await page.goto('/admin/roles');
-    await expect(page).toHaveURL(/\/(chat|dashboard)?$/, { timeout: 10000 });
+    await expect(page).toHaveURL(/\/(chat(\/.*)?|account|dashboard)?$/, { timeout: 10000 });
 
     await page.goto('/admin/sessions');
-    await expect(page).toHaveURL(/\/(chat|dashboard)?$/, { timeout: 10000 });
+    await expect(page).toHaveURL(/\/(chat(\/.*)?|account|dashboard)?$/, { timeout: 10000 });
 
     const sidebar = page.locator('[data-slot="sidebar"]');
     await expect(sidebar).toBeVisible({ timeout: 10000 });
@@ -138,7 +138,7 @@ test.describe('Route guard behavior', () => {
 
     await loginAsManager(page);
     await page.goto('/another-unknown-route');
-    await expect(page).toHaveURL(/\/(chat|dashboard)?$/, { timeout: 10000 });
+    await expect(page).toHaveURL(/\/(chat(\/.*)?|account|dashboard)?$/, { timeout: 10000 });
     // Sidebar should be visible after redirect to authenticated default
     await expect(page.locator('[data-slot="sidebar"]')).toBeVisible({ timeout: 10000 });
   });

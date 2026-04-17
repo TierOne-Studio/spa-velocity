@@ -16,28 +16,24 @@ test.describe('User-facing pages', () => {
     });
   });
 
-  test.describe('Dashboard page', () => {
-    test('should render dashboard page with heading content', async ({ page }) => {
+  test.describe('Legacy dashboard route', () => {
+    test('should redirect /dashboard to chat for authenticated users', async ({ page }) => {
       await loginAsAdmin(page);
       await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
       await page.waitForLoadState('networkidle');
 
-      // DashboardPage renders SectionCards, ChartAreaInteractive, and DataTable
-      // Verify the page loaded without redirect
-      await expect(page).toHaveURL('/dashboard');
+      await expect(page).toHaveURL(/\/chat(\/.*)?$/);
+      await expect(page.getByText(/^chats$/i)).toBeVisible({ timeout: 10000 });
     });
 
-    test('should display chart and data table sections', async ({ page }) => {
+    test('should render chat content after redirecting from /dashboard', async ({ page }) => {
       await loginAsAdmin(page);
       await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
       await page.waitForLoadState('networkidle');
 
-      // Wait for content to load
-      await page.waitForTimeout(2000);
-
-      // The page should have rendered content (not be empty)
       const mainContent = page.locator('main[data-slot="sidebar-inset"]');
       await expect(mainContent).toBeVisible();
+      await expect(page).toHaveURL(/\/chat(\/.*)?$/);
     });
   });
 

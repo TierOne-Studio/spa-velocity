@@ -59,7 +59,7 @@ test.describe('Chat permissions and states', () => {
     await page.waitForTimeout(3000);
 
     const url = page.url();
-    const wasRedirected = url.includes('/dashboard') || url.includes('/login');
+    const wasRedirected = url.includes('/account') || url.includes('/login');
     if (wasRedirected) {
       // Redirected away from chat — permission enforcement works
       expect(url).not.toContain('/chat');

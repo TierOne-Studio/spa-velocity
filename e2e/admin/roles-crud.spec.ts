@@ -33,13 +33,13 @@ async function login(page: Page) {
   await page.getByLabel('Email').fill(TEST_USER.email);
   await page.getByLabel('Password').fill(TEST_USER.password);
   await page.getByRole('button', { name: /^login$/i }).click();
-  await expect(page).toHaveURL(/\/(chat|dashboard)?$/, { timeout: 15000 });
+  await expect(page).toHaveURL(/\/(chat(\/.*)?|account|dashboard)?$/, { timeout: 15000 });
   await page.waitForLoadState('networkidle');
 }
 
 async function selectFirstOrganizationOnRolesPage(page: Page) {
   const organizationSelect = page.getByRole('combobox', { name: /organization/i });
-  const fallbackSelect = page.locator('button').filter({ hasText: /all organizations/i }).first();
+  const fallbackSelect = page.getByRole('combobox').first();
   const trigger = await organizationSelect.isVisible({ timeout: 1000 }).catch(() => false)
     ? organizationSelect
     : fallbackSelect;
@@ -101,7 +101,7 @@ test.describe.serial('Role Management - Full CRUD', () => {
       await descriptionInput.fill('A custom role for testing');
     }
 
-    await page.getByRole('button', { name: /create/i }).click();
+    await page.getByRole('dialog').getByRole('button', { name: /^create$/i }).click();
 
     // Wait for dialog to close
     await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 10000 });

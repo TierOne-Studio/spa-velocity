@@ -69,13 +69,13 @@ describe("AdminRoute", () => {
     mockUsePermissionsContext.mockReturnValue(permissionsDenied);
 
     render(
-      <AdminRoute fallbackPath="/dashboard" requiredPermission={{ resource: "user", action: "create" }}>
+      <AdminRoute fallbackPath="/account" requiredPermission={{ resource: "user", action: "create" }}>
         <div data-testid="child">Admin Content</div>
       </AdminRoute>,
     );
 
     const nav = screen.getByTestId("navigate");
-    expect(nav.getAttribute("data-to")).toBe("/dashboard");
+    expect(nav.getAttribute("data-to")).toBe("/account");
   });
 
   it("redirects to default fallback '/' when no fallbackPath is provided and permission is denied", () => {

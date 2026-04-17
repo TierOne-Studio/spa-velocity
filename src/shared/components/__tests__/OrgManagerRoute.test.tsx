@@ -54,13 +54,13 @@ describe("OrgManagerRoute", () => {
     mockUseOrgRole.mockReturnValue({ isInOrganization: false });
 
     render(
-      <OrgManagerRoute fallbackPath="/dashboard">
+      <OrgManagerRoute fallbackPath="/account">
         <div data-testid="child">Org Manager Content</div>
       </OrgManagerRoute>,
     );
 
     const nav = screen.getByTestId("navigate");
-    expect(nav.getAttribute("data-to")).toBe("/dashboard");
+    expect(nav.getAttribute("data-to")).toBe("/account");
     expect(screen.queryByTestId("child")).toBeNull();
   });
 

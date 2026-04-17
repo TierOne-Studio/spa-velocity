@@ -104,7 +104,7 @@ async function login(page: import('@playwright/test').Page): Promise<void> {
   await page.getByLabel('Email').fill(TEST_USER.email);
   await page.getByLabel('Password').fill(TEST_USER.password);
   await page.getByRole('button', { name: /^login$/i }).click();
-  await expect(page).toHaveURL(/\/(chat|dashboard)?$/, { timeout: 15000 });
+  await expect(page).toHaveURL(/\/(chat(\/.*)?|account|dashboard)?$/, { timeout: 15000 });
   await page.waitForLoadState('networkidle');
 }
 
