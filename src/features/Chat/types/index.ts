@@ -3,6 +3,9 @@ export interface ChatConversation {
   title: string | null;
   organizationId: string;
   userId: string;
+  projectId: string | null;
+  projectName: string | null;
+  projectSourceCount: number;
   createdAt: string;
   updatedAt: string;
   lastMessagePreview: string | null;
@@ -33,6 +36,7 @@ export interface ChatMessage {
 export interface CreateConversationInput {
   title?: string | null;
   organizationId?: string;
+  projectId: string;
 }
 
 export interface SendChatMessageInput {

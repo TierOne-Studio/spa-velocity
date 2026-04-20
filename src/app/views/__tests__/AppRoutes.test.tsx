@@ -30,6 +30,10 @@ vi.mock("@features/Chat", () => ({
   ChatPage: () => <div>Chat</div>,
 }));
 
+vi.mock("@features/Projects", () => ({
+  ProjectsPage: () => <div>Projects Page</div>,
+}));
+
 vi.mock("../RootLayout", async () => {
   const router = await vi.importActual<typeof import("react-router-dom")>("react-router-dom");
 
@@ -118,11 +122,12 @@ describe("AppRoutes", () => {
     expect(screen.queryByText("Dashboard")).not.toBeInTheDocument();
   });
 
-  it("redirects removed project routes to chat", () => {
+  it("renders the projects route", () => {
     window.history.pushState({}, "", "/projects");
 
     render(<AppRoutes />);
 
-    expect(screen.getByText("Chat")).toBeInTheDocument();
+    expect(screen.getByText("Projects Page")).toBeInTheDocument();
   });
+
 });

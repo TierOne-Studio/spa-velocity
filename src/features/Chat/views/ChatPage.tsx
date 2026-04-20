@@ -1,16 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { IconLayoutSidebarLeftCollapse, IconLayoutSidebarLeftExpand, IconPlus, IconTrash } from "@tabler/icons-react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { IconArrowsRightLeft, IconBooks, IconLayoutSidebarLeftCollapse, IconLayoutSidebarLeftExpand, IconPlus, IconTrash } from "@tabler/icons-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { usePermissionsContext } from "@/shared/context/PermissionsContext";
 import { useEffectiveSession } from "@/shared/hooks/useEffectiveSession";
 import { cn } from "@/shared/lib/utils";
-import { isSuperadminRole, getActiveOrganizationId, getSessionUserRole } from "@/shared/utils/roles";
-import { useOrganizations } from "@/features/Admin/hooks/useOrganizations";
+import { getActiveOrganizationId } from "@/shared/utils/roles";
 import { Button } from "@/shared/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card";
-import { Label } from "@/shared/components/ui/label";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { ScrollArea } from "@/shared/components/ui/scroll-area";
 import {
   Sheet,
@@ -20,10 +18,8 @@ import {
   SheetTitle,
 } from "@/shared/components/ui/sheet";
 import { Skeleton } from "@/shared/components/ui/skeleton";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
 import { useSidebar } from "@/shared/components/ui/sidebar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/components/ui/tooltip";
-import { fetchWithAuth } from "@/shared/lib/fetch-with-auth";
 import { chatService } from "../services/chatService";
 import {
   chatKeys,
@@ -36,9 +32,8 @@ import type { ChatConversation, ChatMessage, ChatSource } from "../types";
 import { ChatMessage as ChatMessageComponent } from "../components/ChatMessage";
 import { GenerationStatus, type GenerationStage } from "../components/GenerationStatus";
 import { ChatInput } from "../components/ChatInput";
-
-const CHAT_LAST_ORG_KEY = "chat_last_org_id";
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+import { PickProjectDialog } from "../components/PickProjectDialog";
+import { ProjectSourcesDrawer } from "../components/ProjectSourcesDrawer";
 
 type StreamingState = {
   conversationId: string;
@@ -47,13 +42,10 @@ type StreamingState = {
   content: string;
 };
 
-type OrganizationOption = {
-  id: string;
-  name: string;
-};
-
 type ConversationGroup = {
   label: string;
+  projectId: string | null;
+  projectSourceCount: number;
   conversations: ChatConversation[];
 };
 
@@ -107,53 +99,41 @@ function formatConversationPreview(value: string | null) {
     .trim();
 }
 
-function startOfDay(value: Date) {
-  const next = new Date(value);
-  next.setHours(0, 0, 0, 0);
-  return next;
-}
-
-function getConversationGroupLabel(value: string | null) {
-  if (!value) {
-    return "Older";
-  }
-
-  const today = startOfDay(new Date());
-  const target = startOfDay(new Date(value));
-  const diffDays = Math.round((today.getTime() - target.getTime()) / 86_400_000);
-
-  if (diffDays <= 0) {
-    return "Today";
-  }
-
-  if (diffDays === 1) {
-    return "Yesterday";
-  }
-
-  if (diffDays < 7) {
-    return "Previous 7 Days";
-  }
-
-  return "Older";
-}
-
 function groupConversations(conversations: ChatConversation[]): ConversationGroup[] {
-  const order = ["Today", "Yesterday", "Previous 7 Days", "Older"] as const;
-  const grouped = new Map<string, ChatConversation[]>();
+  const groups = new Map<
+    string,
+    { label: string; projectId: string | null; projectSourceCount: number; conversations: ChatConversation[] }
+  >();
 
   for (const conversation of conversations) {
-    const label = getConversationGroupLabel(conversation.lastMessageAt ?? conversation.updatedAt);
-    const existing = grouped.get(label) ?? [];
-    existing.push(conversation);
-    grouped.set(label, existing);
+    const key = conversation.projectId ?? "__no_project__";
+    const existing = groups.get(key);
+    if (existing) {
+      existing.conversations.push(conversation);
+      existing.projectSourceCount = Math.max(
+        existing.projectSourceCount,
+        conversation.projectSourceCount ?? 0,
+      );
+    } else {
+      groups.set(key, {
+        label: conversation.projectName ?? "Unassigned",
+        projectId: conversation.projectId ?? null,
+        projectSourceCount: conversation.projectSourceCount ?? 0,
+        conversations: [conversation],
+      });
+    }
   }
 
-  return order
-    .map((label) => ({
-      label,
-      conversations: grouped.get(label) ?? [],
+  return Array.from(groups.values())
+    .map((group) => ({
+      ...group,
+      conversations: [...group.conversations].sort((a, b) => {
+        const aTime = new Date(a.lastMessageAt ?? a.updatedAt).getTime();
+        const bTime = new Date(b.lastMessageAt ?? b.updatedAt).getTime();
+        return bTime - aTime;
+      }),
     }))
-    .filter((group) => group.conversations.length > 0);
+    .sort((a, b) => a.label.localeCompare(b.label));
 }
 
 function getSources(message: ChatMessage): ChatSource[] {
@@ -214,9 +194,21 @@ function ConversationRailContent({
             </div>
           ) : (
             groups.map((group) => (
-              <div key={group.label} className="flex flex-col gap-1.5">
-                <div className="px-2 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                  {group.label}
+              <div
+                key={group.projectId ?? group.label}
+                className="flex flex-col gap-1.5"
+                data-testid={`rail-project-group-${group.projectId ?? "unassigned"}`}
+              >
+                <div className="flex items-center justify-between gap-2 px-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <IconBooks className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <div className="truncate text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                      {group.label}
+                    </div>
+                  </div>
+                  <span className="shrink-0 rounded-full border px-2 py-0.5 text-[10px] text-muted-foreground">
+                    {group.projectSourceCount} {group.projectSourceCount === 1 ? "source" : "sources"}
+                  </span>
                 </div>
                 {group.conversations.map((conversation) => {
                   const isActive = conversation.id === resolvedConversationId;
@@ -274,47 +266,16 @@ export function ChatPage() {
   }, []);
   const { data: session } = useEffectiveSession();
   const activeOrganizationId = getActiveOrganizationId(session);
-  const isSuperadmin = isSuperadminRole(getSessionUserRole(session));
-  const [selectedOrganizationId, setSelectedOrganizationId] = useState(
-    () => localStorage.getItem(CHAT_LAST_ORG_KEY) ?? activeOrganizationId ?? "",
-  );
   const [pendingConversationId, setPendingConversationId] = useState<string | null>(null);
   const [isRailOpen, setIsRailOpen] = useState(true);
   const [isMobileRailOpen, setIsMobileRailOpen] = useState(false);
   const [streaming, setStreaming] = useState<StreamingState | null>(null);
+  const [isPickProjectOpen, setIsPickProjectOpen] = useState(false);
+  const [isSwitchProjectOpen, setIsSwitchProjectOpen] = useState(false);
+  const [isSourcesDrawerOpen, setIsSourcesDrawerOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const { data: organizationsResponse, isLoading: areOrganizationsLoading } = useOrganizations(
-    { page: 1, limit: 100 },
-    { enabled: isSuperadmin },
-  );
-  const organizations = useMemo<OrganizationOption[]>(
-    () => organizationsResponse?.data ?? [],
-    [organizationsResponse?.data],
-  );
 
-  const { data: userOrgsRaw, isLoading: areUserOrgsLoading } = useQuery({
-    queryKey: ["chat", "user-orgs"],
-    queryFn: async () => {
-      const res = await fetchWithAuth(`${API_BASE_URL}/api/auth/organization/list`);
-      if (!res.ok) return [] as OrganizationOption[];
-      const payload = await res.json();
-      const list: Array<{ id: string; name: string }> = Array.isArray(payload)
-        ? payload
-        : Array.isArray(payload?.data)
-          ? payload.data
-          : [];
-      return list.map((o) => ({ id: o.id, name: o.name })) as OrganizationOption[];
-    },
-    enabled: !isSuperadmin,
-    staleTime: 5 * 60 * 1000,
-  });
-  const userOrgs = userOrgsRaw ?? [];
-  const isMultiOrgUser = !isSuperadmin && userOrgs.length > 1;
-  const showOrgDropdown = isSuperadmin || isMultiOrgUser;
-  const dropdownOrgs = isSuperadmin ? organizations : userOrgs;
-  const areDropdownOrgsLoading = isSuperadmin ? areOrganizationsLoading : areUserOrgsLoading;
-
-  const resolvedOrganizationId = selectedOrganizationId || activeOrganizationId || null;
+  const resolvedOrganizationId = activeOrganizationId || null;
 
   const { data: conversations = [], isLoading: areConversationsLoading } = useChatConversations({
     organizationId: resolvedOrganizationId,
@@ -331,23 +292,6 @@ export function ChatPage() {
 
   const createConversation = useCreateConversation();
   const deleteConversation = useDeleteConversation();
-
-  useEffect(() => {
-    const validOrgs = isSuperadmin ? organizations : userOrgs;
-    if (validOrgs.length === 0 && !activeOrganizationId) return;
-
-    setSelectedOrganizationId((current) => {
-      const isValid = (id: string) =>
-        validOrgs.length > 0 ? validOrgs.some((o) => o.id === id) : id === activeOrganizationId;
-      const stored = localStorage.getItem(CHAT_LAST_ORG_KEY) ?? "";
-
-      if (stored && isValid(stored)) return stored;
-      if (activeOrganizationId && isValid(activeOrganizationId)) return activeOrganizationId;
-      if (current && isValid(current)) return current;
-      if (validOrgs.length > 0) return validOrgs[0].id;
-      return activeOrganizationId ?? current;
-    });
-  }, [activeOrganizationId, isSuperadmin, organizations, userOrgs]);
 
   useEffect(() => {
     if (!streaming || resolvedConversationId !== streaming.conversationId) {
@@ -389,16 +333,14 @@ export function ChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streaming]);
 
-  const handleOrganizationChange = (organizationId: string) => {
-    localStorage.setItem(CHAT_LAST_ORG_KEY, organizationId);
-    setSelectedOrganizationId(organizationId);
-    setPendingConversationId(null);
-    setIsMobileRailOpen(false);
-    setStreaming(null);
-    navigate("/chat", { replace: true });
+  const handleCreateConversation = () => {
+    if (!resolvedOrganizationId) {
+      return;
+    }
+    setIsPickProjectOpen(true);
   };
 
-  const handleCreateConversation = async () => {
+  const handleCreateConversationForProject = async (projectId: string) => {
     if (!resolvedOrganizationId) {
       return;
     }
@@ -406,9 +348,11 @@ export function ChatPage() {
     try {
       const conversation = await createConversation.mutateAsync({
         organizationId: resolvedOrganizationId,
+        projectId,
       });
       setPendingConversationId(conversation.id);
       setIsMobileRailOpen(false);
+      setIsPickProjectOpen(false);
       setStreaming(null);
       navigate(`/chat/${conversation.id}`);
     } catch (error) {
@@ -432,15 +376,11 @@ export function ChatPage() {
     }
 
     try {
-      let nextConversationId = resolvedConversationId;
+      const nextConversationId = resolvedConversationId;
 
       if (!nextConversationId) {
-        const conversation = await createConversation.mutateAsync({
-          organizationId: resolvedOrganizationId,
-        });
-        nextConversationId = conversation.id;
-        setPendingConversationId(conversation.id);
-        navigate(`/chat/${conversation.id}`);
+        setIsPickProjectOpen(true);
+        return;
       }
 
       setStreaming({ conversationId: nextConversationId, stage: "thinking", content: "" });
@@ -533,53 +473,15 @@ export function ChatPage() {
   }
 
   if (!resolvedOrganizationId) {
-    if (areDropdownOrgsLoading) {
-      return (
-        <div className="flex flex-1 flex-col gap-4 p-4 lg:p-6">
-          <Skeleton className="h-32 w-full max-w-sm rounded-2xl" />
-        </div>
-      );
-    }
-
     return (
       <div className="flex flex-1 flex-col gap-4 p-4 lg:p-6">
         <Card>
           <CardHeader>
             <CardTitle>Select an organization first</CardTitle>
             <CardDescription>
-              {isSuperadmin
-                ? "Superadmin chat can target any organization and its linked Airweave collection."
-                : "Chat is scoped to your active organization and its linked Airweave collection."}
+              Use the Organization switcher in the sidebar to pick an organization. Projects and conversations are scoped to the active organization.
             </CardDescription>
           </CardHeader>
-          {showOrgDropdown && (
-            <CardContent className="max-w-sm">
-              <div className="grid gap-2">
-                <Label htmlFor="chat-organization-select">Organization</Label>
-                <Select
-                  value={selectedOrganizationId}
-                  disabled={dropdownOrgs.length === 0}
-                  onValueChange={handleOrganizationChange}
-                >
-                  <SelectTrigger id="chat-organization-select" className="w-full">
-                    <SelectValue placeholder="Select organization" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {dropdownOrgs.map((organization) => (
-                      <SelectItem key={organization.id} value={organization.id}>
-                        {organization.name}
-                      </SelectItem>
-                    ))}
-                    {dropdownOrgs.length === 0 && (
-                      <SelectItem value="no-organizations" disabled>
-                        No organizations available
-                      </SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardContent>
-          )}
         </Card>
       </div>
     );
@@ -663,37 +565,40 @@ export function ChatPage() {
                 <div className="min-w-0">
                   <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Chat</div>
                   <h1 className="truncate text-lg font-semibold">{selectedConversation?.title || "New conversation"}</h1>
-                  <p className="text-sm text-muted-foreground">
-                    Ask organization-scoped questions against the linked Airweave collection.
-                  </p>
+                  {selectedConversation?.projectName ? (
+                    <button
+                      type="button"
+                      onClick={() => setIsSourcesDrawerOpen(true)}
+                      className="mt-1 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs hover:bg-accent"
+                      data-testid="chat-project-chip"
+                    >
+                      <IconBooks className="h-3 w-3" />
+                      <span className="font-medium">{selectedConversation.projectName}</span>
+                      <span className="text-muted-foreground">
+                        · {selectedConversation.projectSourceCount}{" "}
+                        {selectedConversation.projectSourceCount === 1 ? "source" : "sources"}
+                      </span>
+                    </button>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Ask project-scoped questions against the linked data sources.
+                    </p>
+                  )}
                 </div>
               </div>
 
               <div className="flex flex-wrap items-end gap-3 lg:justify-end">
-                {showOrgDropdown && (
-                  <div className="grid gap-2">
-                    <Label htmlFor="chat-organization-active-select" className="text-xs text-muted-foreground">
-                      Organization
-                    </Label>
-                    <Select
-                      value={selectedOrganizationId}
-                      disabled={areDropdownOrgsLoading || dropdownOrgs.length === 0}
-                      onValueChange={handleOrganizationChange}
-                    >
-                      <SelectTrigger id="chat-organization-active-select" className="w-[220px]">
-                        <SelectValue placeholder={areDropdownOrgsLoading ? "Loading..." : "Select organization"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {dropdownOrgs.map((organization) => (
-                          <SelectItem key={organization.id} value={organization.id}>
-                            {organization.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                {resolvedConversationId && can("chat", "create") && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setIsSwitchProjectOpen(true)}
+                    data-testid="chat-switch-project-button"
+                  >
+                    <IconArrowsRightLeft className="mr-2 h-4 w-4" />
+                    Switch project
+                  </Button>
                 )}
-
                 {resolvedConversationId && can("chat", "delete") && (
                   <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={handleDeleteConversation}>
                     <IconTrash className="mr-2 h-4 w-4" />
@@ -714,7 +619,7 @@ export function ChatPage() {
                 <div className="flex min-h-[45vh] flex-col items-center justify-center gap-3 text-center">
                   <div className="text-xl font-semibold">New conversation</div>
                   <div className="max-w-md text-sm text-muted-foreground">
-                    Ask a question about this organization to start the conversation.
+                    Ask a question about this project to start the conversation.
                   </div>
                 </div>
               ) : (
@@ -757,6 +662,31 @@ export function ChatPage() {
           </div>
         </div>
       </div>
+
+      <PickProjectDialog
+        open={isPickProjectOpen}
+        onOpenChange={setIsPickProjectOpen}
+        organizationId={resolvedOrganizationId}
+        onSelect={(projectId) => void handleCreateConversationForProject(projectId)}
+      />
+
+      <PickProjectDialog
+        open={isSwitchProjectOpen}
+        onOpenChange={setIsSwitchProjectOpen}
+        organizationId={resolvedOrganizationId}
+        currentProjectId={selectedConversation?.projectId ?? null}
+        onSelect={(projectId) => {
+          setIsSwitchProjectOpen(false);
+          if (projectId === selectedConversation?.projectId) return;
+          void handleCreateConversationForProject(projectId);
+        }}
+      />
+
+      <ProjectSourcesDrawer
+        projectId={selectedConversation?.projectId ?? null}
+        open={isSourcesDrawerOpen}
+        onOpenChange={setIsSourcesDrawerOpen}
+      />
     </div>
   );
 }

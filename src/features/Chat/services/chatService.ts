@@ -127,10 +127,16 @@ async function parseStreamResponse(
 }
 
 export const chatService = {
-  async getConversations(organizationId?: string | null): Promise<ChatConversation[]> {
+  async getConversations(
+    organizationId?: string | null,
+    projectId?: string | null,
+  ): Promise<ChatConversation[]> {
     const url = new URL(`${API_BASE_URL}/api/chat/conversations`);
     if (organizationId) {
       url.searchParams.set("organizationId", organizationId);
+    }
+    if (projectId) {
+      url.searchParams.set("projectId", projectId);
     }
 
     const response = await fetchWithAuth(url.toString());

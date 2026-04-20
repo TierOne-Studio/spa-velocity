@@ -1,6 +1,7 @@
 import * as React from "react"
 import { Link, useLocation } from "react-router-dom"
 import {
+  IconBooks,
   IconBuilding,
   IconChartBar,
   IconHome,
@@ -28,7 +29,6 @@ import {
 import { OrganizationSwitcher } from "@/shared/components/OrganizationSwitcher"
 import { useAuth } from "@/shared/context/AuthContext"
 import { usePermissionsContext } from "@/shared/context/PermissionsContext"
-import { isSuperadminRole } from "@/shared/utils/roles"
 
 // Navigation configuration
 const getNavItems = (
@@ -93,7 +93,10 @@ const getNavItems = (
       {
         title: "Main",
         icon: IconHome,
-        isActive: pathname === "/" || pathname.startsWith("/chat"),
+        isActive:
+          pathname === "/" ||
+          pathname.startsWith("/chat") ||
+          pathname.startsWith("/projects"),
         items: [
           ...(can("chat", "read")
             ? [
@@ -102,6 +105,16 @@ const getNavItems = (
                   url: "/chat",
                   icon: IconMessageCircle,
                   isActive: pathname.startsWith("/chat"),
+                },
+              ]
+            : []),
+          ...(can("project", "read")
+            ? [
+                {
+                  title: "Projects",
+                  url: "/projects",
+                  icon: IconBooks,
+                  isActive: pathname.startsWith("/projects"),
                 },
               ]
             : []),
@@ -127,7 +140,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { can } = usePermissionsContext()
   const location = useLocation()
   const navItems = getNavItems(location.pathname, can)
-  const isSuperadmin = isSuperadminRole(user?.role)
 
   const userData = {
     name: user?.name ?? "User",
@@ -153,7 +165,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        {user && !isSuperadmin && (
+        {user && (
           <SidebarGroup>
             <SidebarGroupLabel>Organization</SidebarGroupLabel>
             <div className="px-2">

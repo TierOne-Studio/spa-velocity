@@ -150,18 +150,28 @@ test.describe('Chat Conversations', () => {
   });
 
   test('should show delete button when a conversation is selected', async ({ page }) => {
-    // Seed a conversation
+    // Seed a conversation (project_id is NOT NULL; use the org's General project)
     let conversationId: string | undefined;
     await withDatabase(async (pool) => {
       const userId = await pool.query<{ id: string }>(
         `SELECT id FROM "user" WHERE email = $1`,
         [TEST_USER.email],
       );
-      const result = await pool.query<{ id: string }>(
-        `INSERT INTO conversation (title, user_id, organization_id)
-         VALUES ('Test Conversation', $1, $2)
+      // Ensure a project exists for this org — backfill only runs for orgs
+      // that existed at migration time, so freshly created test orgs need one.
+      const upsert = await pool.query<{ id: string }>(
+        `INSERT INTO project (organization_id, name, description, created_by_user_id)
+         VALUES ($1, 'General', 'Auto-created for e2e', $2)
+         ON CONFLICT (organization_id, name) DO UPDATE SET name = EXCLUDED.name
          RETURNING id`,
-        [userId.rows[0].id, organizationId],
+        [organizationId, userId.rows[0].id],
+      );
+      const projectId = upsert.rows[0].id;
+      const result = await pool.query<{ id: string }>(
+        `INSERT INTO conversation (title, user_id, organization_id, project_id)
+         VALUES ('Test Conversation', $1, $2, $3)
+         RETURNING id`,
+        [userId.rows[0].id, organizationId, projectId],
       );
       conversationId = result.rows[0].id;
     });
