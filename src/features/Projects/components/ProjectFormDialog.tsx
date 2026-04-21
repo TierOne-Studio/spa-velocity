@@ -18,7 +18,10 @@ import {
 } from "@/shared/components/ui/multi-select-combobox";
 import { OrgTargetField } from "@/shared/components/forms/OrgTargetField";
 import { useOrgCapabilities } from "@/shared/hooks/useOrgCapabilities";
-import { useOrganizations } from "@/features/Admin/hooks/useOrganizations";
+import {
+  useOrganization,
+  useOrganizations,
+} from "@/features/Admin/hooks/useOrganizations";
 import { useAirweaveCollections } from "@/features/Admin/hooks/useAirweaveCollections";
 
 import {
@@ -108,10 +111,21 @@ export function ProjectFormDialog({ open, onOpenChange, project }: Props) {
   const addSource = useAddProjectSource();
   const removeSource = useRemoveProjectSource();
 
-  const selectedOrg = useMemo(
-    () => organizations.find((o) => o.id === organizationId),
-    [organizations, organizationId],
+  // Superadmin: selectedOrg comes from the full orgs list (it has metadata).
+  // Non-superadmin: the orgs list query is disabled, so fall back to fetching
+  // the single organization by id to read its metadata-driven allowlist.
+  const { data: selectedOrgFull } = useOrganization(
+    !isSuperadmin && open && organizationId ? organizationId : "",
   );
+
+  const selectedOrg = useMemo(() => {
+    const fromList = organizations.find((o) => o.id === organizationId);
+    if (fromList) return fromList;
+    if (selectedOrgFull && selectedOrgFull.id === organizationId) {
+      return selectedOrgFull;
+    }
+    return undefined;
+  }, [organizations, organizationId, selectedOrgFull]);
 
   const allowedCollectionIds = useMemo(() => {
     if (isSuperadmin) return null;

@@ -59,6 +59,15 @@ vi.mock("@/shared/hooks/useOrgCapabilities", () => ({
 
 vi.mock("@/features/Admin/hooks/useOrganizations", () => ({
   useOrganizations: () => mockUseOrganizations(),
+  // Non-superadmin path inside ProjectFormDialog falls back to useOrganization()
+  // because the orgs list query is disabled for them. Resolve from the same
+  // fixture so existing tests keep passing without extra setup.
+  useOrganization: (organizationId: string) => {
+    if (!organizationId) return { data: undefined, isLoading: false };
+    const list = mockUseOrganizations()?.data?.data ?? [];
+    const match = list.find((o: { id: string }) => o.id === organizationId);
+    return { data: match, isLoading: false };
+  },
 }));
 
 vi.mock("@/features/Admin/hooks/useAirweaveCollections", () => ({

@@ -259,6 +259,13 @@ export function ChatPage() {
   const [isPickProjectOpen, setIsPickProjectOpen] = useState(false);
   const [isSwitchProjectOpen, setIsSwitchProjectOpen] = useState(false);
   const [isSourcesDrawerOpen, setIsSourcesDrawerOpen] = useState(false);
+  // Buffers the first message when the user submits before a conversation
+  // exists. The picker opens, and once they pick a project we dispatch this
+  // message against the newly-created conversation. Cancelling the picker
+  // clears the buffer so a stale message can't leak into the next create.
+  const [pendingFirstMessage, setPendingFirstMessage] = useState<string | null>(
+    null,
+  );
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const resolvedOrganizationId = activeOrganizationId || null;
@@ -326,6 +333,70 @@ export function ChatPage() {
     setIsPickProjectOpen(true);
   };
 
+  // Streams a message against a known conversation id. Extracted so that the
+  // "create conversation → send first message" flow can target the freshly
+  // created id without waiting for `resolvedConversationId` to settle.
+  const dispatchSend = async (
+    targetConversationId: string,
+    content: string,
+  ) => {
+    if (!resolvedOrganizationId || !content || !targetConversationId) {
+      return;
+    }
+
+    try {
+      setStreaming({ conversationId: targetConversationId, stage: "thinking", content: "" });
+
+      await chatService.sendMessage({
+        conversationId: targetConversationId,
+        content,
+        organizationId: resolvedOrganizationId,
+        onEvent: (event) => {
+          if (event.type === "thinking") {
+            setStreaming((current) => {
+              if (!current || current.conversationId !== targetConversationId) return current;
+              return { ...current, stage: "thinking" };
+            });
+          }
+
+          if (event.type === "searching") {
+            setStreaming((current) => {
+              if (!current || current.conversationId !== targetConversationId) return current;
+              return { ...current, stage: "searching", searchQuery: event.query };
+            });
+          }
+
+          if (event.type === "chunk") {
+            setStreaming((current) => {
+              if (!current || current.conversationId !== targetConversationId) {
+                return { conversationId: targetConversationId, stage: "responding", content: event.content };
+              }
+
+              return {
+                ...current,
+                stage: "responding",
+                content: `${current.content}${event.content}`,
+              };
+            });
+          }
+
+          if (event.type === "complete") {
+            setStreaming({
+              conversationId: targetConversationId,
+              stage: "idle",
+              content: event.data.assistantMessage.content,
+            });
+          }
+        },
+      });
+
+      await queryClient.invalidateQueries({ queryKey: chatKeys.all });
+    } catch (error) {
+      setStreaming(null);
+      toast.error(error instanceof Error ? error.message : "Failed to send message");
+    }
+  };
+
   const handleCreateConversationForProject = async (projectId: string) => {
     if (!resolvedOrganizationId) {
       return;
@@ -341,6 +412,15 @@ export function ChatPage() {
       setIsPickProjectOpen(false);
       setStreaming(null);
       navigate(`/chat/${conversation.id}`);
+
+      // If the user typed a message before picking a project, dispatch it now
+      // against the freshly-created conversation id (do not wait for the URL
+      // param to propagate through `resolvedConversationId`).
+      const buffered = pendingFirstMessage;
+      if (buffered) {
+        setPendingFirstMessage(null);
+        void dispatchSend(conversation.id, buffered);
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to create conversation");
     }
@@ -361,64 +441,16 @@ export function ChatPage() {
       return;
     }
 
-    try {
-      const nextConversationId = resolvedConversationId;
-
-      if (!nextConversationId) {
-        setIsPickProjectOpen(true);
-        return;
-      }
-
-      setStreaming({ conversationId: nextConversationId, stage: "thinking", content: "" });
-
-      await chatService.sendMessage({
-        conversationId: nextConversationId,
-        content,
-        organizationId: resolvedOrganizationId,
-        onEvent: (event) => {
-          if (event.type === "thinking") {
-            setStreaming((current) => {
-              if (!current || current.conversationId !== nextConversationId) return current;
-              return { ...current, stage: "thinking" };
-            });
-          }
-
-          if (event.type === "searching") {
-            setStreaming((current) => {
-              if (!current || current.conversationId !== nextConversationId) return current;
-              return { ...current, stage: "searching", searchQuery: event.query };
-            });
-          }
-
-          if (event.type === "chunk") {
-            setStreaming((current) => {
-              if (!current || current.conversationId !== nextConversationId) {
-                return { conversationId: nextConversationId, stage: "responding", content: event.content };
-              }
-
-              return {
-                ...current,
-                stage: "responding",
-                content: `${current.content}${event.content}`,
-              };
-            });
-          }
-
-          if (event.type === "complete") {
-            setStreaming({
-              conversationId: nextConversationId,
-              stage: "idle",
-              content: event.data.assistantMessage.content,
-            });
-          }
-        },
-      });
-
-      await queryClient.invalidateQueries({ queryKey: chatKeys.all });
-    } catch (error) {
-      setStreaming(null);
-      toast.error(error instanceof Error ? error.message : "Failed to send message");
+    // No conversation yet: buffer the message, open the project picker, and
+    // dispatch it once the conversation is created. Avoids silently dropping
+    // the first prompt the user typed (ChatInput clears its own buffer on send).
+    if (!resolvedConversationId) {
+      setPendingFirstMessage(content);
+      setIsPickProjectOpen(true);
+      return;
     }
+
+    await dispatchSend(resolvedConversationId, content);
   };
 
   const handleStopGeneration = () => {
@@ -651,7 +683,13 @@ export function ChatPage() {
 
       <PickProjectDialog
         open={isPickProjectOpen}
-        onOpenChange={setIsPickProjectOpen}
+        onOpenChange={(open) => {
+          setIsPickProjectOpen(open);
+          // If the user dismisses the picker without picking, drop the buffered
+          // first message so it can't auto-send against a future, unrelated
+          // conversation they create later.
+          if (!open) setPendingFirstMessage(null);
+        }}
         organizationId={resolvedOrganizationId}
         onSelect={(projectId) => void handleCreateConversationForProject(projectId)}
       />

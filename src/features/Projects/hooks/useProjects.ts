@@ -54,7 +54,7 @@ export function useProjects(options?: {
     queryKey: projectsKeys.list({ ...scope, scopeAll }),
     queryFn: () =>
       projectsService.list(
-        scopeAll ? null : options?.organizationId,
+        scopeAll ? null : scope.organizationId,
         scopeAll ? { scope: "all" } : undefined,
       ),
     enabled: options?.enabled ?? true,

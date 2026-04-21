@@ -55,6 +55,10 @@ vi.mock("@/shared/hooks/useOrgCapabilities", () => ({
 
 vi.mock("@/features/Admin/hooks/useOrganizations", () => ({
   useOrganizations: (...args: unknown[]) => mockUseOrganizations(...args),
+  // ProjectFormDialog (mounted by ProjectsPage) consumes useOrganization() on
+  // the non-superadmin branch. Stub it here so the page tree doesn't error
+  // on the missing export during render.
+  useOrganization: () => ({ data: undefined, isLoading: false }),
 }));
 
 vi.mock("@/features/Admin/hooks/useAirweaveCollections", () => ({

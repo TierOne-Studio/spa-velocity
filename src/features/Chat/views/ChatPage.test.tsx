@@ -297,12 +297,8 @@ describe("ChatPage", () => {
       });
     });
 
-    // Click send again now that a conversation exists to trigger the actual send
-    fireEvent.change(screen.getByPlaceholderText(/ask a question about this project/i), {
-      target: { value: "How do deployments work?" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
-
+    // Picking a project auto-dispatches the buffered first message — the page
+    // no longer drops it waiting for a second Send click.
     await waitFor(() => {
       expect(mockChatServiceSendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -393,21 +389,18 @@ describe("ChatPage", () => {
 
     renderPage("/chat");
 
-    // Send a message — first send opens picker
+    // Type + Send with no conversation: the page buffers the message and opens
+    // the picker. Picking a project creates the conversation and auto-dispatches
+    // the buffered message — which triggers streaming (stop button appears).
     fireEvent.change(screen.getByPlaceholderText(/ask a question about this project/i), {
       target: { value: "How do deployments work?" },
     });
     fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
     await pickFirstProject();
 
-    // Now type and send again — this triggers the real stream
     await waitFor(() => {
       expect(screen.queryByTestId("pick-project-dialog")).not.toBeInTheDocument();
     });
-    fireEvent.change(screen.getByPlaceholderText(/ask a question about this project/i), {
-      target: { value: "How do deployments work?" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
 
     // Wait for streaming state to be set (stop button appears)
     await waitFor(() => {
@@ -435,6 +428,9 @@ describe("ChatPage", () => {
 
     renderPage("/chat");
 
+    // Type + Send with no conversation: page buffers and opens picker. After
+    // pickFirstProject, the buffered message is auto-dispatched — which is
+    // what we want to see fail with the mocked "Network error".
     fireEvent.change(screen.getByPlaceholderText(/ask a question about this project/i), {
       target: { value: "How do deployments work?" },
     });
@@ -444,11 +440,6 @@ describe("ChatPage", () => {
     await waitFor(() => {
       expect(createMutateAsync).toHaveBeenCalled();
     });
-
-    fireEvent.change(screen.getByPlaceholderText(/ask a question about this project/i), {
-      target: { value: "How do deployments work?" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
 
     await waitFor(() => {
       expect(mockToastError).toHaveBeenCalledWith("Network error");
@@ -557,6 +548,11 @@ describe("ChatPage", () => {
 
     renderPage("/chat");
 
+    // Type, click Send — there's no active conversation, so the page buffers
+    // the message and opens the project picker. Picking a project creates the
+    // conversation and auto-dispatches the buffered message. The old behavior
+    // silently dropped the first message and required a second click; the new
+    // flow exercises the auto-dispatch.
     fireEvent.change(screen.getByPlaceholderText(/ask a question about this project/i), {
       target: { value: "How do deployments work?" },
     });
@@ -566,11 +562,6 @@ describe("ChatPage", () => {
     await waitFor(() => {
       expect(createMock).toHaveBeenCalled();
     });
-
-    fireEvent.change(screen.getByPlaceholderText(/ask a question about this project/i), {
-      target: { value: "How do deployments work?" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
 
     await waitFor(() => {
       expect(mockChatServiceSendMessage).toHaveBeenCalled();
@@ -597,6 +588,9 @@ describe("ChatPage", () => {
 
     renderPage("/chat");
 
+    // Type + Send with no conversation: buffers, opens picker. Picking a
+    // project creates the conversation and auto-dispatches the buffered
+    // message, which captures `onEvent` so we can drive chunk events below.
     fireEvent.change(screen.getByPlaceholderText(/ask a question about this project/i), {
       target: { value: "Two chunks test" },
     });
@@ -606,11 +600,6 @@ describe("ChatPage", () => {
     await waitFor(() => {
       expect(createMock).toHaveBeenCalled();
     });
-
-    fireEvent.change(screen.getByPlaceholderText(/ask a question about this project/i), {
-      target: { value: "Two chunks test" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
 
     await waitFor(() => {
       expect(mockChatServiceSendMessage).toHaveBeenCalled();

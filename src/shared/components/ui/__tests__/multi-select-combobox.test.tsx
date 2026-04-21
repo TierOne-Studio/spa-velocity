@@ -6,7 +6,7 @@ import { MultiSelectCombobox } from "../multi-select-combobox";
 
 const options = [
   { value: "col-1", label: "General Knowledge" },
-  { value: "col-2", label: "Engineering Docs", description: "Github + Confluence" },
+  { value: "col-2", label: "Engineering Docs", description: "GitHub + Confluence" },
   { value: "col-3", label: "Sales Playbooks" },
 ];
 
