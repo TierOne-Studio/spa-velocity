@@ -13,18 +13,11 @@ import {
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/shared/components/ui/select";
-import {
   MultiSelectCombobox,
   type MultiSelectOption,
 } from "@/shared/components/ui/multi-select-combobox";
-import { useEffectiveSession } from "@/shared/hooks/useEffectiveSession";
-import { getActiveOrganizationId } from "@/shared/utils/roles";
+import { OrgTargetField } from "@/shared/components/forms/OrgTargetField";
+import { useOrgCapabilities } from "@/shared/hooks/useOrgCapabilities";
 import { useOrganizations } from "@/features/Admin/hooks/useOrganizations";
 import { useAirweaveCollections } from "@/features/Admin/hooks/useAirweaveCollections";
 
@@ -78,17 +71,7 @@ function getAirweaveSourceIdByReadableId(
 
 export function ProjectFormDialog({ open, onOpenChange, project }: Props) {
   const isEdit = !!project;
-  const { data: session } = useEffectiveSession();
-  const activeOrgId = getActiveOrganizationId(session);
-
-  const rawSessionRole = (session?.user as { role?: string | string[] } | undefined)?.role;
-  const isSuperadmin = Array.isArray(rawSessionRole)
-    ? rawSessionRole.includes("superadmin")
-    : String(rawSessionRole ?? "")
-        .split(",")
-        .map((r) => r.trim())
-        .filter(Boolean)
-        .includes("superadmin");
+  const { isSuperadmin, activeOrganizationId: activeOrgId } = useOrgCapabilities();
 
   const { data: orgsResponse } = useOrganizations(
     { page: 1, limit: 100 },
@@ -152,8 +135,6 @@ export function ProjectFormDialog({ open, onOpenChange, project }: Props) {
     updateProject.isPending ||
     addSource.isPending ||
     removeSource.isPending;
-
-  const orgDisabled = isEdit || !isSuperadmin;
 
   async function handleSubmit() {
     if (!name.trim()) {
@@ -279,47 +260,27 @@ export function ProjectFormDialog({ open, onOpenChange, project }: Props) {
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="project-organization">Organization</Label>
-            {isSuperadmin && !isEdit ? (
-              <Select
-                value={organizationId ?? undefined}
-                onValueChange={(value) => {
-                  setOrganizationId(value);
-                  setSelectedCollectionIds([]);
-                }}
-              >
-                <SelectTrigger id="project-organization">
-                  <SelectValue placeholder="Select organization" />
-                </SelectTrigger>
-                <SelectContent>
-                  {organizations.map((org) => (
-                    <SelectItem key={org.id} value={org.id}>
-                      {org.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <Input
-                id="project-organization"
-                value={
-                  organizations.find((o) => o.id === organizationId)?.name ??
-                  organizationId ??
-                  ""
-                }
-                disabled
-                readOnly
-              />
-            )}
-            {orgDisabled && (
-              <p className="text-xs text-muted-foreground">
-                {isEdit
-                  ? "Organization cannot be changed after creation."
-                  : "Switch active organization in the sidebar to create a project elsewhere."}
-              </p>
-            )}
-          </div>
+          <OrgTargetField
+            value={organizationId}
+            onChange={(id) => {
+              setOrganizationId(id);
+              setSelectedCollectionIds([]);
+            }}
+            disabled={isEdit}
+            organizations={organizations.map((o) => ({ id: o.id, name: o.name }))}
+            showReadOnlyFallback={isEdit}
+            readOnlyOrganizationName={
+              organizations.find((o) => o.id === organizationId)?.name ??
+              organizationId ??
+              undefined
+            }
+            helpText={
+              isEdit
+                ? "Organization cannot be changed after creation."
+                : undefined
+            }
+            testId="project-organization"
+          />
 
           <div className="space-y-2">
             <Label>Collections</Label>

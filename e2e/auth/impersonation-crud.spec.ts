@@ -77,8 +77,11 @@ test.describe.serial('Impersonation Flow', () => {
   });
 
   test('impersonation banner should not be visible when not impersonating', async ({ page }) => {
-    // The impersonation banner should not be visible for normal sessions
-    const banner = page.locator('.bg-amber-500');
+    // The impersonation banner should not be visible for normal sessions.
+    // Use the stable testid instead of `.bg-amber-500` — that class is also used
+    // by SystemViewBanner (superadmin cross-org view), which visually mirrors
+    // ImpersonationBanner and would otherwise match this selector.
+    const banner = page.getByTestId('impersonation-banner');
     await expect(banner).not.toBeVisible();
   });
 });

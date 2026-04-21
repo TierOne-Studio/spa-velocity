@@ -41,6 +41,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select"
+import { SystemViewBanner } from "@/shared/components/SystemViewBanner"
+import { ViewingScopePicker } from "@/shared/components/ViewingScopePicker"
+import { OrgTargetField } from "@/shared/components/forms/OrgTargetField"
+import { useOrgCapabilities } from "@/shared/hooks/useOrgCapabilities"
+import { useOrgScope } from "@/shared/hooks/useOrgScope"
 
 import {
   useUsers,
@@ -78,7 +83,6 @@ const EMPTY_USER_ACTIONS: UserCapabilities["actions"] = {
   reject: false,
 }
 
-const ALL_ORGANIZATIONS_VALUE = "__all__"
 const MEMBERSHIP_PILL_LIMIT = 1
 type ManagedUserRole = 'admin' | 'manager' | 'member'
 
@@ -101,7 +105,6 @@ export function UsersPage() {
   const [pageIndex, setPageIndex] = useState(0)
   const [pageSize, setPageSize] = useState(10)
   const [searchValue, setSearchValue] = useState("")
-  const [selectedOrganizationId, setSelectedOrganizationId] = useState(ALL_ORGANIZATIONS_VALUE)
   // Sorting state - prepared for future use
   const [sortBy] = useState<string | undefined>()
   const [sortDirection] = useState<"asc" | "desc" | undefined>()
@@ -139,22 +142,19 @@ export function UsersPage() {
   // Auth context
   const { user: currentUser } = useAuth()
   const { can } = usePermissionsContext()
-  const rawUserRole = currentUser?.role
-  const isSuperadmin = Array.isArray(rawUserRole)
-    ? rawUserRole.includes("superadmin")
-    : String(rawUserRole ?? "")
-        .split(",")
-        .map((role) => role.trim())
-        .filter(Boolean)
-        .includes("superadmin")
+  const { isSuperadmin, activeOrganizationId } = useOrgCapabilities()
+  const scope = useOrgScope()
   const { data: organizationsResponse } = useOrganizations(
     { page: 1, limit: 100 },
     { enabled: isSuperadmin },
   )
   const organizations = organizationsResponse?.data ?? []
-  const filteredOrganizationId =
-    isSuperadmin && selectedOrganizationId !== ALL_ORGANIZATIONS_VALUE ? selectedOrganizationId : undefined
-  const isAllOrganizationsMode = isSuperadmin && selectedOrganizationId === ALL_ORGANIZATIONS_VALUE
+  const filteredOrganizationId = isSuperadmin
+    ? scope.mode === "all"
+      ? undefined
+      : scope.organizationId ?? undefined
+    : activeOrganizationId ?? undefined
+  const isAllOrganizationsMode = isSuperadmin && scope.mode === "all"
 
   // Build query params
   const queryParams: UserFilterParams = useMemo(() => ({
@@ -723,6 +723,7 @@ export function UsersPage() {
 
   return (
     <div className="flex flex-1 flex-col gap-4 p-4 lg:p-6">
+      <SystemViewBanner visible={isSuperadmin && scope.mode === "all"} />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Users</h1>
@@ -774,28 +775,16 @@ export function UsersPage() {
         onRowSelectionChange={setSelectedUsers}
         toolbar={
           <div className="flex items-center gap-2">
-            {isSuperadmin && (
-              <Select
-                aria-label="Organization"
-                value={selectedOrganizationId}
-                onValueChange={(value) => {
-                  setSelectedOrganizationId(value)
-                  setPageIndex(0)
-                }}
-              >
-                <SelectTrigger className="w-[220px]">
-                  <SelectValue placeholder="All organizations" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL_ORGANIZATIONS_VALUE}>All organizations</SelectItem>
-                  {organizations.map((organization) => (
-                    <SelectItem key={organization.id} value={organization.id}>
-                      {organization.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
+            <ViewingScopePicker
+              value={scope.selectedValue}
+              onChange={(value) => {
+                scope.setSelectedValue(value)
+                setPageIndex(0)
+              }}
+              organizations={organizations.map((o) => ({ id: o.id, name: o.name }))}
+              className="w-[220px]"
+              placeholder="All organizations"
+            />
             {selectedUsers.length > 0 && canDeleteUser && (
               <Button
                 variant="destructive"
@@ -876,24 +865,12 @@ export function UsersPage() {
               </Select>
             </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="organization">Organization</Label>
-              <Select
-                value={newUserData.organizationId}
-                onValueChange={(value) => setNewUserData({ ...newUserData, organizationId: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select organization" />
-                </SelectTrigger>
-                <SelectContent>
-                  {(createMeta?.organizations ?? []).map((org) => (
-                    <SelectItem key={org.id} value={org.id}>
-                      {org.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <OrgTargetField
+              value={newUserData.organizationId ?? null}
+              onChange={(id) => setNewUserData({ ...newUserData, organizationId: id })}
+              organizations={createMeta?.organizations ?? []}
+              testId="user-organization"
+            />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>

@@ -55,6 +55,28 @@ vi.mock("@/shared/hooks/useEffectiveSession", () => ({
   useEffectiveSession: () => mockUseEffectiveSession(),
 }));
 
+// Derive `useOrgCapabilities` from the same `useEffectiveSession` mock so
+// existing test fixtures continue to drive scope behavior without each test
+// having to set a second mock. This mirrors the real hook's extraction logic
+// (role → isSuperadmin, session.activeOrganizationId → activeOrganizationId)
+// without pulling in React Query or Better Auth session plumbing.
+vi.mock("@/shared/hooks/useOrgCapabilities", () => ({
+  useOrgCapabilities: () => {
+    const session = mockUseEffectiveSession();
+    const role: string | null = session?.data?.user?.role ?? null;
+    const activeOrganizationId: string | null =
+      session?.data?.session?.activeOrganizationId ?? null;
+    return {
+      isSuperadmin: role === "superadmin",
+      isMultiOrgMember: false,
+      isSingleOrgMember: false,
+      memberOrganizations: [],
+      activeOrganizationId,
+      isLoading: false,
+    };
+  },
+}));
+
 vi.mock("sonner", () => ({
   toast: {
     success: mockToastSuccess,
@@ -67,6 +89,7 @@ vi.mock("@tabler/icons-react", () => ({
   IconEdit: () => <span aria-hidden="true">edit</span>,
   IconTrash: () => <span aria-hidden="true">trash</span>,
   IconShield: () => <span aria-hidden="true">shield</span>,
+  IconWorld: () => <span aria-hidden="true">world</span>,
 }));
 
 vi.mock("@/shared/components/ui/card", () => ({
@@ -111,6 +134,46 @@ vi.mock("@/shared/components/ui/dialog", () => ({
   DialogFooter: ({ children, ...props }: HTMLAttributes<HTMLDivElement>) => <div {...props}>{children}</div>,
   DialogHeader: ({ children, ...props }: HTMLAttributes<HTMLDivElement>) => <div {...props}>{children}</div>,
   DialogTitle: ({ children, ...props }: HTMLAttributes<HTMLHeadingElement>) => <h3 {...props}>{children}</h3>,
+}));
+
+// Mock the shared scope primitives so tests can drive them directly without
+// going through the full Select/Radix stack. Each test can keep using
+// `mockUseEffectiveSession` to control role + active org; these components
+// honor the derived `useOrgCapabilities` mock above.
+vi.mock("@/shared/components/SystemViewBanner", () => ({
+  SystemViewBanner: ({ visible }: { visible: boolean }) =>
+    visible ? <div data-testid="system-view-banner" /> : null,
+}));
+
+vi.mock("@/shared/components/ViewingScopePicker", () => ({
+  ViewingScopePicker: ({
+    value,
+    onChange,
+    organizations,
+  }: {
+    value: string | null;
+    onChange: (v: string) => void;
+    organizations: { id: string; name: string }[];
+  }) => {
+    const session = mockUseEffectiveSession();
+    const role: string | null = session?.data?.user?.role ?? null;
+    if (role !== "superadmin") return null;
+    return (
+      <select
+        aria-label="Organization"
+        data-testid="viewing-scope-picker"
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        <option value="__all__">All organizations</option>
+        {organizations.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.name}
+          </option>
+        ))}
+      </select>
+    );
+  },
 }));
 
 vi.mock("@/shared/components/ui/select", () => ({

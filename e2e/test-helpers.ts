@@ -343,6 +343,40 @@ export async function setActiveOrganizationForUserSessions(params: {
   });
 }
 
+/**
+ * Switch active organization via Better Auth on the client side, then reload.
+ *
+ * Use this instead of `setActiveOrganizationForUserSessions` (DB-only) when the
+ * test needs the client's cached session + React Query permissions to refresh
+ * with the new active org — e.g. non-superadmin users whose `can()` checks
+ * depend on per-org permissions fetched at bootstrap.
+ */
+export async function setActiveOrganizationViaSession(
+  page: Page,
+  organizationId: string,
+): Promise<void> {
+  await page.evaluate(
+    async ({ apiBaseUrl, nextOrganizationId }) => {
+      const token = window.localStorage.getItem('bearer_token');
+      const response = await fetch(`${apiBaseUrl}/api/auth/organization/set-active`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ organizationId: nextOrganizationId }),
+      });
+
+      if (!response.ok) {
+        const error = await response.text().catch(() => '');
+        throw new Error(`Failed to set active organization: ${response.status} ${error}`);
+      }
+    },
+    { apiBaseUrl: API_BASE_URL, nextOrganizationId: organizationId },
+  );
+  await page.reload({ waitUntil: 'networkidle' });
+}
+
 export async function findOrganizationListItemBySlug(page: Page, slug: string): Promise<Locator> {
   const searchInput = page.getByPlaceholder(/search organizations/i);
   await expect(searchInput).toBeVisible({ timeout: 10000 });

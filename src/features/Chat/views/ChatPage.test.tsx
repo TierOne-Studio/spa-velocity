@@ -62,11 +62,6 @@ vi.mock("@/shared/hooks/useEffectiveSession", () => ({
   useEffectiveSession: () => mockUseEffectiveSession(),
 }));
 
-const mockSetSidebarOpen = vi.fn();
-vi.mock("@/shared/components/ui/sidebar", () => ({
-  useSidebar: () => ({ setOpen: mockSetSidebarOpen }),
-}));
-
 vi.mock("../services/chatService", () => ({
   chatService: {
     sendMessage: (...args: unknown[]) => mockChatServiceSendMessage(...args),

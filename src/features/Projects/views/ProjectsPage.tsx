@@ -28,15 +28,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/shared/components/ui/alert-dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/shared/components/ui/select";
-import { useEffectiveSession } from "@/shared/hooks/useEffectiveSession";
-import { getActiveOrganizationId } from "@/shared/utils/roles";
+import { SystemViewBanner } from "@/shared/components/SystemViewBanner";
+import { ViewingScopePicker } from "@/shared/components/ViewingScopePicker";
+import { useOrgCapabilities } from "@/shared/hooks/useOrgCapabilities";
+import { useOrgScope } from "@/shared/hooks/useOrgScope";
 import { useOrganizations } from "@/features/Admin/hooks/useOrganizations";
 
 import {
@@ -47,31 +42,22 @@ import {
 import { ProjectFormDialog } from "../components/ProjectFormDialog";
 import type { ProjectSummary } from "../types";
 
-const ALL_ORGANIZATIONS_VALUE = "__all__";
-
 export function ProjectsPage() {
-  const { data: session } = useEffectiveSession();
-  const activeOrgId = getActiveOrganizationId(session);
-
-  const rawSessionRole = (session?.user as { role?: string | string[] } | undefined)?.role;
-  const isSuperadmin = Array.isArray(rawSessionRole)
-    ? rawSessionRole.includes("superadmin")
-    : String(rawSessionRole ?? "")
-        .split(",")
-        .map((r) => r.trim())
-        .filter(Boolean)
-        .includes("superadmin");
+  const { isSuperadmin, activeOrganizationId } = useOrgCapabilities();
+  const scope = useOrgScope();
 
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize, setPageSize] = useState(10);
   const [searchValue, setSearchValue] = useState("");
-  const [selectedOrganizationId, setSelectedOrganizationId] =
-    useState(ALL_ORGANIZATIONS_VALUE);
 
-  const filteredOrganizationId =
-    isSuperadmin && selectedOrganizationId !== ALL_ORGANIZATIONS_VALUE
-      ? selectedOrganizationId
-      : undefined;
+  // For superadmin: `scope.mode === "all"` → cross-org view (backend gets `?scope=all`).
+  // For non-superadmin: `useOrgScope` pins to the active org.
+  const isScopeAll = isSuperadmin && scope.mode === "all";
+  const filteredOrganizationId = isSuperadmin
+    ? scope.mode === "all"
+      ? undefined
+      : scope.organizationId ?? undefined
+    : activeOrganizationId ?? undefined;
 
   const { data: orgsResponse } = useOrganizations(
     { page: 1, limit: 100 },
@@ -88,7 +74,10 @@ export function ProjectsPage() {
     data: projects,
     isLoading,
     error,
-  } = useProjects({ organizationId: filteredOrganizationId ?? activeOrgId });
+  } = useProjects({
+    organizationId: filteredOrganizationId,
+    scope: isScopeAll ? "all" : undefined,
+  });
 
   const deleteProject = useDeleteProject();
 
@@ -229,6 +218,7 @@ export function ProjectsPage() {
 
   return (
     <div className="flex flex-1 flex-col gap-4 p-4 lg:p-6" data-testid="projects-page">
+      <SystemViewBanner visible={isSuperadmin && scope.mode === "all"} />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Projects</h1>
@@ -265,30 +255,16 @@ export function ProjectsPage() {
         getRowId={(row) => row.id}
         toolbar={
           <div className="flex items-center gap-2">
-            {isSuperadmin && (
-              <Select
-                aria-label="Organization"
-                value={selectedOrganizationId}
-                onValueChange={(value) => {
-                  setSelectedOrganizationId(value);
-                  setPageIndex(0);
-                }}
-              >
-                <SelectTrigger className="w-[220px]">
-                  <SelectValue placeholder="All organizations" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL_ORGANIZATIONS_VALUE}>
-                    All organizations
-                  </SelectItem>
-                  {organizations.map((organization) => (
-                    <SelectItem key={organization.id} value={organization.id}>
-                      {organization.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
+            <ViewingScopePicker
+              value={scope.selectedValue}
+              onChange={(value) => {
+                scope.setSelectedValue(value);
+                setPageIndex(0);
+              }}
+              organizations={organizations.map((o) => ({ id: o.id, name: o.name }))}
+              className="w-[220px]"
+              placeholder="All organizations"
+            />
             <Button onClick={openCreate} data-testid="projects-new-button">
               <IconPlus className="mr-2 h-4 w-4" />
               New project

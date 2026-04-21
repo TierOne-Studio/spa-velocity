@@ -2,20 +2,24 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
+import { ALL_ORGANIZATIONS_VALUE } from "@/shared/constants/org-scope";
+
 const {
   mockUseOverviewStats,
   mockUseUserStats,
   mockUseChatStats,
   mockUseOrgStats,
   mockUseAvailableOrgs,
-  mockUseEffectiveSession,
+  mockUseOrgCapabilities,
+  mockUseOrgScope,
 } = vi.hoisted(() => ({
   mockUseOverviewStats: vi.fn(),
   mockUseUserStats: vi.fn(),
   mockUseChatStats: vi.fn(),
   mockUseOrgStats: vi.fn(),
   mockUseAvailableOrgs: vi.fn(),
-  mockUseEffectiveSession: vi.fn(),
+  mockUseOrgCapabilities: vi.fn(),
+  mockUseOrgScope: vi.fn(),
 }));
 
 vi.mock("../../hooks/useAdminDashboard", () => ({
@@ -26,13 +30,12 @@ vi.mock("../../hooks/useAdminDashboard", () => ({
   useAvailableOrgs: () => mockUseAvailableOrgs(),
 }));
 
-vi.mock("@/shared/hooks/useEffectiveSession", () => ({
-  useEffectiveSession: () => mockUseEffectiveSession(),
+vi.mock("@/shared/hooks/useOrgCapabilities", () => ({
+  useOrgCapabilities: () => mockUseOrgCapabilities(),
 }));
 
-vi.mock("@/shared/utils/roles", () => ({
-  isSuperadminRole: (role: string) => role === "superadmin",
-  getSessionUserRole: (session: { user?: { role?: string } } | null) => session?.user?.role ?? null,
+vi.mock("@/shared/hooks/useOrgScope", () => ({
+  useOrgScope: () => mockUseOrgScope(),
 }));
 
 vi.mock("../../components/OverviewCards", () => ({
@@ -77,7 +80,7 @@ vi.mock("@/shared/components/ui/toggle-group", () => ({
 
 vi.mock("@/shared/components/ui/select", () => ({
   Select: ({ children, value, onValueChange }: { children: ReactNode; value?: string; onValueChange?: (v: string) => void }) => (
-    <select value={value ?? ""} onChange={(e) => onValueChange?.(e.target.value)} data-testid="select">
+    <select value={value ?? ""} onChange={(e) => onValueChange?.(e.target.value)} data-testid="range-select">
       {children}
     </select>
   ),
@@ -87,22 +90,131 @@ vi.mock("@/shared/components/ui/select", () => ({
   SelectValue: () => null,
 }));
 
+// Use the real SystemViewBanner and ViewingScopePicker; they respect the
+// mocked `useOrgCapabilities` and render deterministic markup.
+vi.mock("@/shared/components/SystemViewBanner", () => ({
+  SystemViewBanner: ({ visible, message }: { visible: boolean; message?: string }) =>
+    visible ? (
+      <div data-testid="system-view-banner">
+        {message ?? "System view: showing data across all organizations."}
+      </div>
+    ) : null,
+}));
+
+vi.mock("@/shared/components/ViewingScopePicker", () => ({
+  ViewingScopePicker: ({
+    value,
+    onChange,
+    organizations,
+  }: {
+    value: string | null;
+    onChange: (v: string) => void;
+    organizations: { id: string; name: string }[];
+  }) => {
+    // Render only when superadmin — pages control the render, but our mock
+    // doesn't check capabilities; this matches the page's unconditional drop-in
+    // (the real picker returns null for non-superadmin, verified in its own test).
+    const caps = mockUseOrgCapabilities();
+    if (!caps.isSuperadmin) return null;
+    return (
+      <select
+        data-testid="viewing-scope-picker"
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        <option value={ALL_ORGANIZATIONS_VALUE}>All organizations</option>
+        {organizations.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.name}
+          </option>
+        ))}
+      </select>
+    );
+  },
+}));
+
 import { AdminDashboardPage } from "../AdminDashboardPage";
 
-const overviewData = { totalUsers: 10, bannedUsers: 0, activeSessions: 5, totalOrganizations: 2, totalConversations: 20, totalMessages: 100, assistantMessages: 50, totalTokensAllTime: 5000 };
+const overviewData = {
+  totalUsers: 10,
+  bannedUsers: 0,
+  activeSessions: 5,
+  totalOrganizations: 2,
+  totalConversations: 20,
+  totalMessages: 100,
+  assistantMessages: 50,
+  totalTokensAllTime: 5000,
+};
 
-function setupMocks({ isSuperadmin = false, availableOrgs = [] as { id: string; name: string; slug: string }[], activeOrgId = null as string | null } = {}) {
-  mockUseEffectiveSession.mockReturnValue({
-    data: {
-      user: { id: "u-1", role: isSuperadmin ? "superadmin" : "admin" },
-      session: { activeOrganizationId: activeOrgId },
-    },
+type ScopeShape = {
+  mode: "all" | "single";
+  selectedValue: string | null;
+  organizationId: string | null;
+  setSelectedValue: ReturnType<typeof vi.fn>;
+  toQuery: ReturnType<typeof vi.fn>;
+};
+
+function makeScope(overrides: Partial<ScopeShape> = {}): ScopeShape {
+  const mode = overrides.mode ?? "single";
+  const organizationId =
+    overrides.organizationId !== undefined ? overrides.organizationId : null;
+  const selectedValue =
+    overrides.selectedValue !== undefined
+      ? overrides.selectedValue
+      : mode === "all"
+        ? ALL_ORGANIZATIONS_VALUE
+        : organizationId;
+  return {
+    mode,
+    selectedValue,
+    organizationId,
+    setSelectedValue: vi.fn(),
+    toQuery: vi.fn(() =>
+      mode === "all"
+        ? { scope: "all" as const }
+        : organizationId
+          ? { organizationId }
+          : {},
+    ),
+  };
+}
+
+function setupMocks({
+  isSuperadmin = false,
+  availableOrgs = [] as { id: string; name: string; slug: string }[],
+  activeOrganizationId = null as string | null,
+  scope,
+}: {
+  isSuperadmin?: boolean;
+  availableOrgs?: { id: string; name: string; slug: string }[];
+  activeOrganizationId?: string | null;
+  scope?: ScopeShape;
+} = {}) {
+  mockUseOrgCapabilities.mockReturnValue({
+    isSuperadmin,
+    isMultiOrgMember: false,
+    isSingleOrgMember: false,
+    memberOrganizations: [],
+    activeOrganizationId,
+    isLoading: false,
   });
+
+  const effectiveScope =
+    scope ??
+    makeScope(
+      isSuperadmin
+        ? { mode: "all" }
+        : { mode: "single", organizationId: activeOrganizationId },
+    );
+  mockUseOrgScope.mockReturnValue(effectiveScope);
+
   mockUseAvailableOrgs.mockReturnValue({ data: availableOrgs });
   mockUseOverviewStats.mockReturnValue({ data: overviewData, isLoading: false });
   mockUseUserStats.mockReturnValue({ data: undefined, isLoading: false });
   mockUseChatStats.mockReturnValue({ data: undefined, isLoading: false });
   mockUseOrgStats.mockReturnValue({ data: undefined, isLoading: false });
+
+  return effectiveScope;
 }
 
 describe("AdminDashboardPage", () => {
@@ -116,11 +228,6 @@ describe("AdminDashboardPage", () => {
     expect(screen.getByText("Admin Dashboard")).toBeInTheDocument();
   });
 
-  it("renders platform-wide description when no org selected", () => {
-    render(<AdminDashboardPage />);
-    expect(screen.getByText("Platform-wide usage and growth metrics")).toBeInTheDocument();
-  });
-
   it("renders section headings", () => {
     render(<AdminDashboardPage />);
     expect(screen.getByText("Chat Intelligence")).toBeInTheDocument();
@@ -128,257 +235,186 @@ describe("AdminDashboardPage", () => {
     expect(screen.getByText("Organization Activity")).toBeInTheDocument();
   });
 
-  it("renders OverviewCards component", () => {
+  it("renders OverviewCards, ChatIntelligenceSection, UserActivitySection, and OrgActivitySection", () => {
     render(<AdminDashboardPage />);
     expect(screen.getByTestId("overview-cards")).toBeInTheDocument();
-  });
-
-  it("renders ChatIntelligenceSection with default range", () => {
-    render(<AdminDashboardPage />);
     const chatSection = screen.getByTestId("chat-intelligence");
-    expect(chatSection).toBeInTheDocument();
     expect(chatSection).toHaveAttribute("data-range", "30d");
-  });
-
-  it("renders UserActivitySection component", () => {
-    render(<AdminDashboardPage />);
     expect(screen.getByTestId("user-activity")).toBeInTheDocument();
-  });
-
-  it("renders OrgActivitySection component", () => {
-    render(<AdminDashboardPage />);
     expect(screen.getByTestId("org-activity")).toBeInTheDocument();
   });
 
   it("shows loading skeletons when chat stats are loading", () => {
     mockUseChatStats.mockReturnValue({ data: undefined, isLoading: true });
     render(<AdminDashboardPage />);
-    const skeletons = screen.getAllByTestId("skeleton");
-    expect(skeletons.length).toBeGreaterThan(0);
+    expect(screen.getAllByTestId("skeleton").length).toBeGreaterThan(0);
     expect(screen.queryByTestId("chat-intelligence")).not.toBeInTheDocument();
   });
 
   it("shows loading skeletons when user stats are loading", () => {
     mockUseUserStats.mockReturnValue({ data: undefined, isLoading: true });
     render(<AdminDashboardPage />);
-    const skeletons = screen.getAllByTestId("skeleton");
-    expect(skeletons.length).toBeGreaterThan(0);
+    expect(screen.getAllByTestId("skeleton").length).toBeGreaterThan(0);
     expect(screen.queryByTestId("user-activity")).not.toBeInTheDocument();
   });
 
   it("shows loading skeletons when org stats are loading", () => {
     mockUseOrgStats.mockReturnValue({ data: undefined, isLoading: true });
     render(<AdminDashboardPage />);
-    const skeletons = screen.getAllByTestId("skeleton");
-    expect(skeletons.length).toBeGreaterThan(0);
+    expect(screen.getAllByTestId("skeleton").length).toBeGreaterThan(0);
     expect(screen.queryByTestId("org-activity")).not.toBeInTheDocument();
   });
 
-  it("does not show org selector for non-superadmin with single org", () => {
-    setupMocks({ isSuperadmin: false, availableOrgs: [{ id: "org-1", name: "Org One", slug: "org-one" }] });
-    render(<AdminDashboardPage />);
-    // Single org non-superadmin should not show selector (showOrgSelector = false)
-    const selects = screen.queryAllByTestId("select");
-    // Only the range selects should be present (not the org selector)
-    expect(selects.length).toBeLessThanOrEqual(2); // range selects
-  });
-
-  it("shows org selector for superadmin", () => {
-    setupMocks({
-      isSuperadmin: true,
-      availableOrgs: [
-        { id: "org-1", name: "Org One", slug: "org-one" },
-        { id: "org-2", name: "Org Two", slug: "org-two" },
-      ],
+  describe("non-superadmin", () => {
+    it("does not render the viewing scope picker", () => {
+      setupMocks({
+        isSuperadmin: false,
+        availableOrgs: [{ id: "org-1", name: "Org One", slug: "org-one" }],
+        activeOrganizationId: "org-1",
+      });
+      render(<AdminDashboardPage />);
+      expect(screen.queryByTestId("viewing-scope-picker")).not.toBeInTheDocument();
     });
-    render(<AdminDashboardPage />);
-    const selects = screen.getAllByTestId("select");
-    // Superadmin sees org selector + range selects
-    expect(selects.length).toBeGreaterThanOrEqual(2);
-  });
 
-  it("shows org selector when multiple orgs available", () => {
-    setupMocks({
-      isSuperadmin: false,
-      availableOrgs: [
-        { id: "org-1", name: "Org One", slug: "org-one" },
-        { id: "org-2", name: "Org Two", slug: "org-two" },
-      ],
+    it("does not render the system view banner", () => {
+      setupMocks({ isSuperadmin: false, activeOrganizationId: "org-1" });
+      render(<AdminDashboardPage />);
+      expect(screen.queryByTestId("system-view-banner")).not.toBeInTheDocument();
     });
-    render(<AdminDashboardPage />);
-    const selects = screen.getAllByTestId("select");
-    expect(selects.length).toBeGreaterThanOrEqual(2);
-  });
 
-  it("shows 'Showing data for' description when an org is selected", async () => {
-    setupMocks({
-      isSuperadmin: false,
-      availableOrgs: [{ id: "org-1", name: "Org One", slug: "org-one" }],
-      activeOrgId: "org-1",
-    });
-    render(<AdminDashboardPage />);
-    await waitFor(() => {
-      expect(screen.getByText(/Showing data for/)).toBeInTheDocument();
-    });
-  });
-
-  it("auto-selects the org when not superadmin and only one org", async () => {
-    setupMocks({
-      isSuperadmin: false,
-      availableOrgs: [{ id: "org-1", name: "Org One", slug: "org-one" }],
-    });
-    render(<AdminDashboardPage />);
-    await waitFor(() => {
-      expect(mockUseOverviewStats).toHaveBeenCalledWith("org-1");
-    });
-  });
-
-  it("auto-selects active org when non-superadmin has multiple orgs and an active one", async () => {
-    setupMocks({
-      isSuperadmin: false,
-      availableOrgs: [
-        { id: "org-1", name: "Org One", slug: "org-one" },
-        { id: "org-2", name: "Org Two", slug: "org-two" },
-      ],
-      activeOrgId: "org-2",
-    });
-    render(<AdminDashboardPage />);
-    await waitFor(() => {
-      expect(mockUseOverviewStats).toHaveBeenCalledWith("org-2");
-    });
-  });
-
-  it("changes range via select and triggers new stats calls", async () => {
-    setupMocks();
-    render(<AdminDashboardPage />);
-
-    // Find range select and change to 7d - the last select is the range selector (hidden on mobile)
-    const selects = screen.getAllByTestId("select");
-    // We have potentially org selector + range selector (or just range if no org selector)
-    const rangeSelect = selects[selects.length - 1];
-    fireEvent.change(rangeSelect, { target: { value: "7d" } });
-
-    // After state update via the select, chat section should use 7d range
-    await waitFor(() => {
-      expect(screen.getByTestId("chat-intelligence")).toHaveAttribute("data-range", "7d");
-    });
-  });
-
-  it("shows org-specific data description when org is selected via selector", async () => {
-    setupMocks({
-      isSuperadmin: true,
-      availableOrgs: [
-        { id: "org-1", name: "Org One", slug: "org-one" },
-        { id: "org-2", name: "Org Two", slug: "org-two" },
-      ],
-    });
-    render(<AdminDashboardPage />);
-
-    const selects = screen.getAllByTestId("select");
-    const orgSelect = selects[0]; // First select is org selector for superadmin
-    fireEvent.change(orgSelect, { target: { value: "org-1" } });
-
-    await waitFor(() => {
+    it("shows 'Showing data for' description when scoped to an org", () => {
+      setupMocks({
+        isSuperadmin: false,
+        availableOrgs: [{ id: "org-1", name: "Org One", slug: "org-one" }],
+        activeOrganizationId: "org-1",
+        scope: makeScope({ mode: "single", organizationId: "org-1" }),
+      });
+      render(<AdminDashboardPage />);
       expect(screen.getByText(/Showing data for: Org One/)).toBeInTheDocument();
     });
+
+    it("passes the scoped organization id to data hooks", () => {
+      setupMocks({
+        isSuperadmin: false,
+        availableOrgs: [{ id: "org-1", name: "Org One", slug: "org-one" }],
+        activeOrganizationId: "org-1",
+        scope: makeScope({ mode: "single", organizationId: "org-1" }),
+      });
+      render(<AdminDashboardPage />);
+      expect(mockUseOverviewStats).toHaveBeenCalledWith("org-1");
+      expect(mockUseUserStats).toHaveBeenCalledWith("30d", "org-1");
+      expect(mockUseChatStats).toHaveBeenCalledWith("30d", "org-1");
+      expect(mockUseOrgStats).toHaveBeenCalledWith("org-1");
+    });
   });
 
-  it("shows 'Selected organization' when org id not found in list", async () => {
-    setupMocks({
-      isSuperadmin: false,
-      availableOrgs: [
-        { id: "org-1", name: "Org One", slug: "org-one" },
-        { id: "org-2", name: "Org Two", slug: "org-two" },
-      ],
-      activeOrgId: "org-3", // not in list
+  describe("superadmin", () => {
+    it("renders the viewing scope picker", () => {
+      setupMocks({
+        isSuperadmin: true,
+        availableOrgs: [
+          { id: "org-1", name: "Org One", slug: "org-one" },
+          { id: "org-2", name: "Org Two", slug: "org-two" },
+        ],
+      });
+      render(<AdminDashboardPage />);
+      expect(screen.getByTestId("viewing-scope-picker")).toBeInTheDocument();
     });
-    render(<AdminDashboardPage />);
-    // org-3 is not in list, so the else if branch should not set it
-    // (availableOrgs.some(o => o.id === "org-3") is false)
-    await waitFor(() => {
+
+    it("renders the SystemViewBanner when scope.mode === 'all'", () => {
+      setupMocks({
+        isSuperadmin: true,
+        scope: makeScope({ mode: "all" }),
+      });
+      render(<AdminDashboardPage />);
+      expect(screen.getByTestId("system-view-banner")).toBeInTheDocument();
+      expect(
+        screen.getByText("Platform-wide usage and growth metrics"),
+      ).toBeInTheDocument();
+    });
+
+    it("hides the SystemViewBanner when a single org is scoped", () => {
+      setupMocks({
+        isSuperadmin: true,
+        availableOrgs: [{ id: "org-1", name: "Org One", slug: "org-one" }],
+        scope: makeScope({ mode: "single", organizationId: "org-1" }),
+      });
+      render(<AdminDashboardPage />);
+      expect(screen.queryByTestId("system-view-banner")).not.toBeInTheDocument();
+      expect(screen.getByText(/Showing data for: Org One/)).toBeInTheDocument();
+    });
+
+    it("passes null to data hooks when scope.mode === 'all'", () => {
+      setupMocks({
+        isSuperadmin: true,
+        scope: makeScope({ mode: "all" }),
+      });
+      render(<AdminDashboardPage />);
       expect(mockUseOverviewStats).toHaveBeenCalledWith(null);
+      expect(mockUseOrgStats).toHaveBeenCalledWith(null);
+    });
+
+    it("delegates viewing-scope changes to scope.setSelectedValue", () => {
+      const scope = makeScope({ mode: "all" });
+      setupMocks({
+        isSuperadmin: true,
+        availableOrgs: [
+          { id: "org-1", name: "Org One", slug: "org-one" },
+          { id: "org-2", name: "Org Two", slug: "org-two" },
+        ],
+        scope,
+      });
+      render(<AdminDashboardPage />);
+      fireEvent.change(screen.getByTestId("viewing-scope-picker"), {
+        target: { value: "org-1" },
+      });
+      expect(scope.setSelectedValue).toHaveBeenCalledWith("org-1");
+    });
+
+    it("shows 'Selected organization' fallback when the scoped org is not in availableOrgs", () => {
+      setupMocks({
+        isSuperadmin: true,
+        availableOrgs: [{ id: "org-1", name: "Org One", slug: "org-one" }],
+        scope: makeScope({ mode: "single", organizationId: "org-unknown" }),
+      });
+      render(<AdminDashboardPage />);
+      expect(
+        screen.getByText(/Showing data for: Selected organization/),
+      ).toBeInTheDocument();
+    });
+
+    it("shows 'Selected organization' fallback when the scoped org has no name", () => {
+      setupMocks({
+        isSuperadmin: true,
+        availableOrgs: [
+          { id: "org-noname", name: undefined as unknown as string, slug: "org-noname" },
+        ],
+        scope: makeScope({ mode: "single", organizationId: "org-noname" }),
+      });
+      render(<AdminDashboardPage />);
+      expect(
+        screen.getByText(/Showing data for: Selected organization/),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("changes range via select and propagates to chat section", async () => {
+    render(<AdminDashboardPage />);
+    const rangeSelect = screen.getByTestId("range-select");
+    fireEvent.change(rangeSelect, { target: { value: "7d" } });
+    await waitFor(() => {
+      expect(screen.getByTestId("chat-intelligence")).toHaveAttribute("data-range", "7d");
     });
   });
 
   it("does not change range when toggle group fires empty string (falsy guard)", async () => {
-    // Covers line 77: if (v) setRange(v as TimeRange) - the false branch when v === ""
-    setupMocks();
     render(<AdminDashboardPage />);
-
-    // First verify the range is currently 30d
     expect(screen.getByTestId("chat-intelligence")).toHaveAttribute("data-range", "30d");
-
-    // Set range to 7d via truthy path
     fireEvent.click(screen.getByTestId("toggle-set-7d"));
     await waitFor(() => {
       expect(screen.getByTestId("chat-intelligence")).toHaveAttribute("data-range", "7d");
     });
-
-    // Now trigger the falsy path (empty string = deselect)
     fireEvent.click(screen.getByTestId("toggle-set-empty"));
-
-    // Range should remain 7d since if(v) guard prevented the empty value from being set
     expect(screen.getByTestId("chat-intelligence")).toHaveAttribute("data-range", "7d");
-  });
-
-  it("resets to all organizations when __all__ is selected (covers line 57 ternary)", async () => {
-    // Covers line 57: v === '__all__' ? null : v - the truthy branch (v === '__all__')
-    setupMocks({
-      isSuperadmin: true,
-      availableOrgs: [
-        { id: "org-1", name: "Org One", slug: "org-one" },
-        { id: "org-2", name: "Org Two", slug: "org-two" },
-      ],
-    });
-    render(<AdminDashboardPage />);
-
-    const selects = screen.getAllByTestId("select");
-    const orgSelect = selects[0]; // First select is org selector for superadmin
-
-    // First select an org
-    fireEvent.change(orgSelect, { target: { value: "org-1" } });
-    await waitFor(() => {
-      expect(screen.getByText(/Showing data for: Org One/)).toBeInTheDocument();
-    });
-
-    // Now select __all__ to reset
-    fireEvent.change(orgSelect, { target: { value: "__all__" } });
-    await waitFor(() => {
-      expect(screen.getByText("Platform-wide usage and growth metrics")).toBeInTheDocument();
-    });
-  });
-
-  it("shows 'Selected organization' fallback text when selected org has no name (covers line 48 ?? fallback)", async () => {
-    // Covers line 48: availableOrgs.find(o => o.id === selectedOrgId)?.name ?? 'Selected organization'
-    // The ?? fallback fires when org is found but has no name
-    setupMocks({
-      isSuperadmin: true,
-      availableOrgs: [
-        // An org with no name - find returns the object but .name is undefined
-        { id: "org-noname", name: undefined as unknown as string, slug: "org-noname" },
-      ],
-    });
-    render(<AdminDashboardPage />);
-
-    // Trigger selection of the nameless org
-    const selects = screen.getAllByTestId("select");
-    fireEvent.change(selects[0], { target: { value: "org-noname" } });
-
-    await waitFor(() => {
-      expect(screen.getByText(/Showing data for: Selected organization/)).toBeInTheDocument();
-    });
-  });
-
-  it("handles null session data gracefully (covers line 18 session ?? null branch)", () => {
-    // When useEffectiveSession returns null data, session is null => session ?? null uses fallback
-    mockUseEffectiveSession.mockReturnValue({ data: null });
-    mockUseAvailableOrgs.mockReturnValue({ data: [] });
-    mockUseOverviewStats.mockReturnValue({ data: undefined, isLoading: false });
-    mockUseUserStats.mockReturnValue({ data: undefined, isLoading: false });
-    mockUseChatStats.mockReturnValue({ data: undefined, isLoading: false });
-    mockUseOrgStats.mockReturnValue({ data: undefined, isLoading: false });
-    render(<AdminDashboardPage />);
-    expect(screen.getByText("Admin Dashboard")).toBeInTheDocument();
-    expect(screen.getByText("Platform-wide usage and growth metrics")).toBeInTheDocument();
   });
 });

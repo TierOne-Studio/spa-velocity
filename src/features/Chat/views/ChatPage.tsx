@@ -18,7 +18,6 @@ import {
   SheetTitle,
 } from "@/shared/components/ui/sheet";
 import { Skeleton } from "@/shared/components/ui/skeleton";
-import { useSidebar } from "@/shared/components/ui/sidebar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/components/ui/tooltip";
 import { chatService } from "../services/chatService";
 import {
@@ -250,20 +249,7 @@ export function ChatPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { conversationId } = useParams<{ conversationId?: string }>();
-  const { setOpen: setSidebarOpen } = useSidebar();
   const { can } = usePermissionsContext();
-
-  // Collapse the main navigation sidebar once on mount so the user lands straight in chat.
-  // Using a ref keeps this a true one-shot: setSidebarOpen's identity changes whenever the
-  // sidebar toggles, so depending on it would re-close the sidebar after every user toggle.
-  const hasCollapsedSidebarRef = useRef(false);
-  const setSidebarOpenRef = useRef(setSidebarOpen);
-  setSidebarOpenRef.current = setSidebarOpen;
-  useEffect(() => {
-    if (hasCollapsedSidebarRef.current) return;
-    hasCollapsedSidebarRef.current = true;
-    setSidebarOpenRef.current(false);
-  }, []);
   const { data: session } = useEffectiveSession();
   const activeOrganizationId = getActiveOrganizationId(session);
   const [pendingConversationId, setPendingConversationId] = useState<string | null>(null);

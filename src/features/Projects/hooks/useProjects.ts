@@ -17,12 +17,12 @@ type Scope = {
 
 export const projectsKeys = {
   all: ["projects"] as const,
-  list: (scope?: Scope) =>
+  list: (scope?: Scope & { scopeAll?: boolean }) =>
     [
       ...projectsKeys.all,
       "list",
       scope?.userId ?? "anonymous",
-      scope?.organizationId ?? "no-org",
+      scope?.scopeAll ? "scope-all" : scope?.organizationId ?? "no-org",
     ] as const,
   detail: (id: string, scope?: Scope) =>
     [
@@ -45,12 +45,18 @@ function useScope(organizationId?: string | null): Scope {
 
 export function useProjects(options?: {
   organizationId?: string | null;
+  scope?: "all";
   enabled?: boolean;
 }) {
   const scope = useScope(options?.organizationId);
+  const scopeAll = options?.scope === "all";
   return useQuery({
-    queryKey: projectsKeys.list(scope),
-    queryFn: () => projectsService.list(options?.organizationId),
+    queryKey: projectsKeys.list({ ...scope, scopeAll }),
+    queryFn: () =>
+      projectsService.list(
+        scopeAll ? null : options?.organizationId,
+        scopeAll ? { scope: "all" } : undefined,
+      ),
     enabled: options?.enabled ?? true,
   });
 }

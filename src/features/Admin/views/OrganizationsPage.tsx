@@ -58,6 +58,7 @@ import { organizationService } from "../services/adminService"
 import { getOrganizationRolesMetadata } from "../services/adminService"
 import { usePermissionsContext } from "@/shared/context/PermissionsContext"
 import { useEffectiveSession } from "@/shared/hooks/useEffectiveSession"
+import { useOrgCapabilities } from "@/shared/hooks/useOrgCapabilities"
 
 interface Organization {
   id: string
@@ -147,7 +148,7 @@ const buildOrganizationMetadata = (
 
 export function OrganizationsPage() {
   const { can, refetchPermissions } = usePermissionsContext()
-  const { data: session, refetch: refetchSession } = useEffectiveSession()
+  const { refetch: refetchSession } = useEffectiveSession()
 
   // State
   const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null)
@@ -186,17 +187,8 @@ export function OrganizationsPage() {
     assignableRoles: string[];
   } | null>(null)
 
-  const activeOrganizationId =
-    (session?.session as { activeOrganizationId?: string } | undefined)?.activeOrganizationId ?? null
+  const { isSuperadmin, activeOrganizationId } = useOrgCapabilities()
   const currentActiveOrganizationId = optimisticActiveOrganizationId ?? activeOrganizationId
-  const rawSessionRole = (session?.user as { role?: string | string[] } | undefined)?.role
-  const isSuperadmin = Array.isArray(rawSessionRole)
-    ? rawSessionRole.includes("superadmin")
-    : String(rawSessionRole ?? "")
-        .split(",")
-        .map((role) => role.trim())
-        .filter(Boolean)
-        .includes("superadmin")
   const canManageOrganizationFromPage = (organizationId: string) =>
     isSuperadmin || organizationId === currentActiveOrganizationId
   const canManageSelectedOrganization =

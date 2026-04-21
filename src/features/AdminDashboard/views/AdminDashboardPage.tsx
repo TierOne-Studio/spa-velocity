@@ -1,36 +1,33 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select';
 import { Skeleton } from '@/shared/components/ui/skeleton';
 import { ToggleGroup, ToggleGroupItem } from '@/shared/components/ui/toggle-group';
+import { SystemViewBanner } from '@/shared/components/SystemViewBanner';
+import { ViewingScopePicker } from '@/shared/components/ViewingScopePicker';
+import { useOrgCapabilities } from '@/shared/hooks/useOrgCapabilities';
+import { useOrgScope } from '@/shared/hooks/useOrgScope';
 import { OverviewCards } from '../components/OverviewCards';
 import { ChatIntelligenceSection } from '../components/ChatIntelligenceSection';
 import { UserActivitySection } from '../components/UserActivitySection';
 import { OrgActivitySection } from '../components/OrgActivitySection';
 import { useOverviewStats, useUserStats, useChatStats, useOrgStats, useAvailableOrgs } from '../hooks/useAdminDashboard';
-import { useEffectiveSession } from '@/shared/hooks/useEffectiveSession';
-import { isSuperadminRole, getSessionUserRole } from '@/shared/utils/roles';
 import type { TimeRange } from '../types/adminDashboard.types';
 
 export function AdminDashboardPage() {
   const [range, setRange] = useState<TimeRange>('30d');
 
-  const { data: session } = useEffectiveSession();
-  const isSuperadmin = isSuperadminRole(getSessionUserRole(session ?? null));
-  const activeOrgId = session?.session?.activeOrganizationId ?? null;
+  const { isSuperadmin } = useOrgCapabilities();
+  const scope = useOrgScope();
 
   const { data: availableOrgs = [] } = useAvailableOrgs();
 
-  const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
+  // Dashboard hooks accept `string | null` where null means "all orgs".
+  // Map our OrgScope → that shape.
+  const selectedOrgId = scope.mode === 'all' ? null : scope.organizationId;
 
-  useEffect(() => {
-    if (!isSuperadmin && availableOrgs.length === 1) {
-      setSelectedOrgId(availableOrgs[0].id);
-    } else if (!isSuperadmin && activeOrgId && availableOrgs.some(o => o.id === activeOrgId)) {
-      setSelectedOrgId(activeOrgId);
-    }
-  }, [availableOrgs, isSuperadmin, activeOrgId]);
-
-  const showOrgSelector = isSuperadmin || availableOrgs.length > 1;
+  const selectedOrg = selectedOrgId
+    ? availableOrgs.find((o) => o.id === selectedOrgId)
+    : null;
 
   const overview = useOverviewStats(selectedOrgId);
   const users = useUserStats(range, selectedOrgId);
@@ -39,37 +36,27 @@ export function AdminDashboardPage() {
 
   return (
     <div className="@container/main flex flex-1 flex-col gap-6 p-4 lg:p-6">
+      <SystemViewBanner visible={scope.mode === 'all'} />
+
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Admin Dashboard</h1>
           <p className="text-muted-foreground text-sm">
             {selectedOrgId
-              ? `Showing data for: ${availableOrgs.find(o => o.id === selectedOrgId)?.name ?? 'Selected organization'}`
+              ? `Showing data for: ${selectedOrg?.name ?? 'Selected organization'}`
               : 'Platform-wide usage and growth metrics'
             }
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {showOrgSelector && (
-            <Select
-              value={selectedOrgId ?? '__all__'}
-              onValueChange={(v) => setSelectedOrgId(v === '__all__' ? null : v)}
-            >
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="All organizations" />
-              </SelectTrigger>
-              <SelectContent>
-                {isSuperadmin && (
-                  <SelectItem value="__all__">All organizations</SelectItem>
-                )}
-                {availableOrgs.map((org) => (
-                  <SelectItem key={org.id} value={org.id}>
-                    {org.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          {isSuperadmin && (
+            <ViewingScopePicker
+              value={scope.selectedValue}
+              onChange={scope.setSelectedValue}
+              organizations={availableOrgs.map((org) => ({ id: org.id, name: org.name }))}
+              className="w-48"
+            />
           )}
           <ToggleGroup
             type="single"

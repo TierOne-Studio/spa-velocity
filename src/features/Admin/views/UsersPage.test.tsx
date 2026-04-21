@@ -83,6 +83,118 @@ vi.mock("@/shared/hooks/useEffectiveSession", () => ({
   useEffectiveSession: () => mockUseEffectiveSession(),
 }))
 
+// Mirror real `useOrgCapabilities` extraction (role + active org) off the
+// existing `useEffectiveSession` fixture so this component-only test doesn't
+// need a QueryClientProvider for `useMyMemberships`. For non-superadmin actors
+// with an active organization, synthesize a single membership so OrgTargetField
+// can exercise its single-org branch.
+vi.mock("@/shared/hooks/useOrgCapabilities", () => ({
+  useOrgCapabilities: () => {
+    const session = mockUseEffectiveSession()
+    const role: string | null = session?.data?.user?.role ?? null
+    const activeOrganizationId: string | null =
+      session?.data?.session?.activeOrganizationId ?? null
+    const isSuperadmin = role === "superadmin"
+    const memberOrganizations =
+      !isSuperadmin && activeOrganizationId
+        ? [
+            {
+              id: activeOrganizationId,
+              name: `Org ${activeOrganizationId}`,
+              slug: activeOrganizationId,
+            },
+          ]
+        : []
+    return {
+      isSuperadmin,
+      isMultiOrgMember: !isSuperadmin && memberOrganizations.length > 1,
+      isSingleOrgMember: !isSuperadmin && memberOrganizations.length === 1,
+      memberOrganizations,
+      activeOrganizationId,
+      isLoading: false,
+    }
+  },
+}))
+
+// Mock the shared primitives so tests don't depend on Radix Select / icon
+// internals. ViewingScopePicker renders a native labeled <select> to preserve
+// the existing `getByLabelText(/organization/i)` assertions; OrgTargetField
+// renders a testid-tagged labeled select when the component would render
+// anything at all (superadmin or multi-org member); SystemViewBanner is a
+// simple testid div when visible.
+vi.mock("@/shared/components/ViewingScopePicker", () => ({
+  ViewingScopePicker: ({
+    value,
+    onChange,
+    organizations,
+  }: {
+    value: string | null
+    onChange: (value: string) => void
+    organizations: Array<{ id: string; name: string }>
+  }) => {
+    const session = mockUseEffectiveSession()
+    const role: string | null = session?.data?.user?.role ?? null
+    if (role !== "superadmin") return null
+    return (
+      <select
+        aria-label="Organization"
+        data-testid="viewing-scope-picker"
+        value={value ?? "__all__"}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        <option value="__all__">All organizations</option>
+        {organizations.map((org) => (
+          <option key={org.id} value={org.id}>
+            {org.name}
+          </option>
+        ))}
+      </select>
+    )
+  },
+}))
+
+vi.mock("@/shared/components/SystemViewBanner", () => ({
+  SystemViewBanner: ({ visible }: { visible: boolean }) =>
+    visible ? <div data-testid="system-view-banner">System view</div> : null,
+}))
+
+vi.mock("@/shared/components/forms/OrgTargetField", () => ({
+  OrgTargetField: ({
+    value,
+    onChange,
+    organizations,
+    testId = "org-target-field",
+  }: {
+    value: string | null
+    onChange: (value: string) => void
+    organizations: Array<{ id: string; name: string }>
+    testId?: string
+  }) => {
+    const session = mockUseEffectiveSession()
+    const role: string | null = session?.data?.user?.role ?? null
+    const isSuperadmin = role === "superadmin"
+    // Mirror OrgTargetField: single-org non-superadmin renders nothing.
+    const isSingleOrgMember = !isSuperadmin && organizations.length <= 1
+    if (isSingleOrgMember) return null
+    return (
+      <div data-testid={testId}>
+        <label htmlFor={`${testId}-select`}>Target organization</label>
+        <select
+          id={`${testId}-select`}
+          value={value ?? ""}
+          onChange={(event) => onChange(event.target.value)}
+        >
+          {organizations.map((org) => (
+            <option key={org.id} value={org.id}>
+              {org.name}
+            </option>
+          ))}
+        </select>
+      </div>
+    )
+  },
+}))
+
 vi.mock("@/shared/context/PermissionsContext", () => ({
   usePermissionsContext: () => ({ can: mockCan }),
 }))
@@ -365,7 +477,9 @@ describe("UsersPage", () => {
     })
 
     expect(await screen.findByRole("dialog")).toBeInTheDocument()
-    expect(screen.getByText(/organization/i)).toBeInTheDocument()
+    // Single-org admin actor: OrgTargetField does not render a picker, but the
+    // default `organizationId` still flows through from `createMeta`.
+    expect(screen.queryByTestId("user-organization")).not.toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: "Alice Admin" } })
     fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: "alice@example.com" } })

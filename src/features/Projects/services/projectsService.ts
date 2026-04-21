@@ -30,8 +30,16 @@ function withOrg(url: URL, organizationId?: string | null) {
 }
 
 export const projectsService = {
-  async list(organizationId?: string | null): Promise<ProjectSummary[]> {
-    const url = withOrg(new URL(`${API_BASE_URL}/api/projects`), organizationId);
+  async list(
+    organizationId?: string | null,
+    options?: { scope?: "all" },
+  ): Promise<ProjectSummary[]> {
+    const url = new URL(`${API_BASE_URL}/api/projects`);
+    if (options?.scope === "all") {
+      url.searchParams.set("scope", "all");
+    } else {
+      withOrg(url, organizationId);
+    }
     const response = await fetchWithAuth(url.toString());
     return parseApiResponse<ProjectSummary[]>(response, "Failed to fetch projects");
   },

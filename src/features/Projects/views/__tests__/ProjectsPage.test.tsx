@@ -33,6 +33,26 @@ vi.mock("@/shared/hooks/useEffectiveSession", () => ({
   useEffectiveSession: () => mockUseEffectiveSession(),
 }));
 
+// Mirror real `useOrgCapabilities` extraction (role + active org) off the
+// existing `useEffectiveSession` fixture so we don't need to stand up a React
+// Query client for `useMyMemberships` in this component-only test.
+vi.mock("@/shared/hooks/useOrgCapabilities", () => ({
+  useOrgCapabilities: () => {
+    const session = mockUseEffectiveSession();
+    const role: string | null = session?.data?.user?.role ?? null;
+    const activeOrganizationId: string | null =
+      session?.data?.session?.activeOrganizationId ?? null;
+    return {
+      isSuperadmin: role === "superadmin",
+      isMultiOrgMember: false,
+      isSingleOrgMember: false,
+      memberOrganizations: [],
+      activeOrganizationId,
+      isLoading: false,
+    };
+  },
+}));
+
 vi.mock("@/features/Admin/hooks/useOrganizations", () => ({
   useOrganizations: (...args: unknown[]) => mockUseOrganizations(...args),
 }));

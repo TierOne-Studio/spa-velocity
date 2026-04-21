@@ -24,6 +24,39 @@ vi.mock("@/shared/hooks/useEffectiveSession", () => ({
   useEffectiveSession: () => mockUseEffectiveSession(),
 }));
 
+// Derive `useOrgCapabilities` off the existing `useEffectiveSession` fixture
+// so this component test doesn't need a QueryClientProvider for the real
+// memberships fetch. For non-superadmin callers with an active organization,
+// synthesize a single membership — that matches the common real-world shape
+// and lets OrgTargetField exercise its single-org-member branch.
+vi.mock("@/shared/hooks/useOrgCapabilities", () => ({
+  useOrgCapabilities: () => {
+    const session = mockUseEffectiveSession();
+    const role: string | null = session?.data?.user?.role ?? null;
+    const activeOrganizationId: string | null =
+      session?.data?.session?.activeOrganizationId ?? null;
+    const isSuperadmin = role === "superadmin";
+    const memberOrganizations =
+      !isSuperadmin && activeOrganizationId
+        ? [
+            {
+              id: activeOrganizationId,
+              name: `Org ${activeOrganizationId}`,
+              slug: activeOrganizationId,
+            },
+          ]
+        : [];
+    return {
+      isSuperadmin,
+      isMultiOrgMember: !isSuperadmin && memberOrganizations.length > 1,
+      isSingleOrgMember: !isSuperadmin && memberOrganizations.length === 1,
+      memberOrganizations,
+      activeOrganizationId,
+      isLoading: false,
+    };
+  },
+}));
+
 vi.mock("@/features/Admin/hooks/useOrganizations", () => ({
   useOrganizations: () => mockUseOrganizations(),
 }));
@@ -116,10 +149,12 @@ describe("ProjectFormDialog", () => {
     });
   });
 
-  it("create mode: disables Organization field for non-superadmin", () => {
+  it("create mode: single-org non-superadmin sees no Organization picker", () => {
+    // With the shared OrgTargetField, single-org members get no dropdown in
+    // create mode — the target is unambiguous (their one org) and the form
+    // still submits with `activeOrganizationId` via the existing useEffect.
     render(<ProjectFormDialog open={true} onOpenChange={vi.fn()} />);
-    const orgField = screen.getByLabelText(/organization/i) as HTMLInputElement;
-    expect(orgField).toBeDisabled();
+    expect(screen.queryByTestId("project-organization")).not.toBeInTheDocument();
   });
 
   it("non-superadmin: collections are filtered to the org's allowlist", async () => {
@@ -184,8 +219,15 @@ describe("ProjectFormDialog", () => {
       <ProjectFormDialog open={true} onOpenChange={vi.fn()} project={project} />,
     );
 
-    // Org field disabled
-    expect(screen.getByLabelText(/organization/i)).toBeDisabled();
+    // Edit mode renders OrgTargetField's read-only fallback: the field is
+    // present (so the user sees which org owns the project) but no editable
+    // select/input is rendered.
+    const orgField = screen.getByTestId("project-organization");
+    expect(orgField).toBeInTheDocument();
+    expect(orgField).toHaveTextContent(/Org One/i);
+    expect(
+      screen.queryByTestId("project-organization-trigger"),
+    ).not.toBeInTheDocument();
 
     // Deselect alpha and select beta via combobox (trigger shows Alpha badge)
     await user.click(

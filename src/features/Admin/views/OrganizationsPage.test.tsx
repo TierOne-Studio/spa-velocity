@@ -89,6 +89,33 @@ vi.mock("@/shared/hooks/useEffectiveSession", () => ({
   useEffectiveSession: () => mockUseEffectiveSession(),
 }));
 
+// Derive `useOrgCapabilities` off the existing `useEffectiveSession` fixture so
+// this component test doesn't need a QueryClientProvider for the real
+// memberships fetch. Role + active org come straight from the session mock.
+vi.mock("@/shared/hooks/useOrgCapabilities", () => ({
+  useOrgCapabilities: () => {
+    const session = mockUseEffectiveSession();
+    const rawRole = session?.data?.user?.role;
+    const isSuperadmin = Array.isArray(rawRole)
+      ? rawRole.includes("superadmin")
+      : String(rawRole ?? "")
+          .split(",")
+          .map((r: string) => r.trim())
+          .filter(Boolean)
+          .includes("superadmin");
+    const activeOrganizationId =
+      session?.data?.session?.activeOrganizationId ?? null;
+    return {
+      isSuperadmin,
+      isMultiOrgMember: false,
+      isSingleOrgMember: false,
+      memberOrganizations: [],
+      activeOrganizationId,
+      isLoading: false,
+    };
+  },
+}));
+
 vi.mock("@/shared/context/PermissionsContext", () => ({
   usePermissionsContext: () => ({ can: mockCan, refetchPermissions: mockRefetchPermissions }),
 }));
