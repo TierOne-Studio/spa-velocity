@@ -2,7 +2,6 @@ import { describe, expect, it, beforeEach, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, act } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
 
 const mockUseChatConversations = vi.fn();
 const mockUseChatMessages = vi.fn();
@@ -10,10 +9,10 @@ const mockUseCreateConversation = vi.fn();
 const mockUseDeleteConversation = vi.fn();
 const mockUsePermissionsContext = vi.fn();
 const mockUseEffectiveSession = vi.fn();
-const mockUseOrganizations = vi.fn();
 const mockChatServiceSendMessage = vi.fn();
 const mockToastError = vi.fn();
 const mockToastSuccess = vi.fn();
+const mockUseProjects = vi.fn();
 
 vi.mock("../hooks/useChat", () => ({
   chatKeys: {
@@ -27,6 +26,34 @@ vi.mock("../hooks/useChat", () => ({
   useDeleteConversation: () => mockUseDeleteConversation(),
 }));
 
+vi.mock("@/features/Projects/hooks/useProjects", () => ({
+  useProjects: () => mockUseProjects(),
+  useProject: () => ({
+    data: {
+      id: "project-1",
+      name: "General",
+      description: null,
+      sourceCount: 1,
+      conversationCount: 1,
+      sources: [
+        {
+          id: "src-1",
+          projectId: "project-1",
+          kind: "airweave_collection",
+          name: "Guides",
+          config: { collectionReadableId: "guides", collectionName: "Guides" },
+          status: "ready",
+          statusDetail: null,
+          createdAt: "2026-04-03T00:00:00.000Z",
+          updatedAt: "2026-04-03T00:00:00.000Z",
+        },
+      ],
+    },
+    isLoading: false,
+    error: null,
+  }),
+}));
+
 vi.mock("@/shared/context/PermissionsContext", () => ({
   usePermissionsContext: () => mockUsePermissionsContext(),
 }));
@@ -35,38 +62,10 @@ vi.mock("@/shared/hooks/useEffectiveSession", () => ({
   useEffectiveSession: () => mockUseEffectiveSession(),
 }));
 
-vi.mock("@/features/Admin/hooks/useOrganizations", () => ({
-  useOrganizations: (...args: unknown[]) => mockUseOrganizations(...args),
-}));
-
-const mockSetSidebarOpen = vi.fn();
-vi.mock("@/shared/components/ui/sidebar", () => ({
-  useSidebar: () => ({ setOpen: mockSetSidebarOpen }),
-}));
-
-vi.mock("@/shared/components/ui/select", () => ({
-  Select: ({ children, value, disabled, onValueChange }: { children: ReactNode; value?: string; disabled?: boolean; onValueChange?: (value: string) => void }) => (
-    <select value={value ?? ""} disabled={disabled} onChange={(event) => onValueChange?.(event.target.value)}>
-      {children}
-    </select>
-  ),
-  SelectContent: ({ children }: { children: ReactNode }) => <>{children}</>,
-  SelectItem: ({ children, value, disabled }: { children: ReactNode; value: string; disabled?: boolean }) => <option value={value} disabled={disabled}>{children}</option>,
-  SelectTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
-  SelectValue: () => null,
-}));
-
 vi.mock("../services/chatService", () => ({
   chatService: {
     sendMessage: (...args: unknown[]) => mockChatServiceSendMessage(...args),
   },
-}));
-
-vi.mock("@/shared/lib/fetch-with-auth", () => ({
-  fetchWithAuth: vi.fn(async () => ({
-    ok: true,
-    json: async () => [],
-  })),
 }));
 
 const mockToastInfo = vi.fn();
@@ -87,7 +86,6 @@ vi.mock("react-markdown", () => ({
 Element.prototype.scrollIntoView = vi.fn();
 
 import { ChatPage } from "./ChatPage";
-import { fetchWithAuth } from "@/shared/lib/fetch-with-auth";
 
 const conversations = [
   {
@@ -95,6 +93,9 @@ const conversations = [
     title: "Deployments",
     organizationId: "org-1",
     userId: "user-1",
+    projectId: "project-1",
+    projectName: "General",
+    projectSourceCount: 1,
     createdAt: "2026-04-03T00:00:00.000Z",
     updatedAt: "2026-04-03T00:10:00.000Z",
     lastMessagePreview: "How do deployments work?",
@@ -123,6 +124,11 @@ const messages = [
   },
 ];
 
+async function pickFirstProject() {
+  const option = await screen.findByTestId("pick-project-option-project-1");
+  fireEvent.click(option);
+}
+
 function renderPage(initialEntry = "/chat/conversation-1") {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -130,8 +136,6 @@ function renderPage(initialEntry = "/chat/conversation-1") {
       mutations: { retry: false },
     },
   });
-  // Seed the user-orgs query so isLoading is false on first render.
-  queryClient.setQueryData(["chat", "user-orgs"], []);
 
   return render(
     <QueryClientProvider client={queryClient}>
@@ -149,6 +153,14 @@ describe("ChatPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+
+    mockUseProjects.mockReturnValue({
+      data: [
+        { id: "project-1", name: "General", description: null, sourceCount: 1, conversationCount: 1 },
+      ],
+      isLoading: false,
+      error: null,
+    });
 
     mockUseChatConversations.mockReturnValue({
       data: conversations,
@@ -189,15 +201,6 @@ describe("ChatPage", () => {
         session: { activeOrganizationId: "org-1" },
       },
     });
-    mockUseOrganizations.mockReturnValue({
-      data: {
-        data: [
-          { id: "org-1", name: "TierOne", slug: "tier-one" },
-          { id: "org-2", name: "Second Org", slug: "second-org" },
-        ],
-      },
-      isLoading: false,
-    });
   });
 
   it("shows an organization selection message when there is no active organization", () => {
@@ -211,89 +214,7 @@ describe("ChatPage", () => {
     renderPage("/chat");
 
     expect(screen.getByText(/select an organization first/i)).toBeInTheDocument();
-    expect(screen.getByText(/chat is scoped to your active organization/i)).toBeInTheDocument();
-  });
-
-  it("shows a superadmin organization selector when no organizations are available", () => {
-    mockUseEffectiveSession.mockReturnValue({
-      data: {
-        user: { id: "superadmin-1", role: "superadmin" },
-        session: {},
-      },
-    });
-    mockUseOrganizations.mockReturnValue({
-      data: { data: [] },
-      isLoading: false,
-    });
-
-    renderPage("/chat");
-
-    expect(screen.getByText(/select an organization first/i)).toBeInTheDocument();
-    expect(screen.getByText(/superadmin chat can target any organization/i)).toBeInTheDocument();
-    expect(screen.getByRole("combobox")).toBeInTheDocument();
-  });
-
-  it("auto-selects the first organization for a superadmin with no active org", async () => {
-    mockUseEffectiveSession.mockReturnValue({
-      data: {
-        user: { id: "superadmin-1", role: "superadmin" },
-        session: {},
-      },
-    });
-    mockUseChatConversations.mockReturnValue({ data: [], isLoading: false });
-    mockUseChatMessages.mockReturnValue({ data: [], isLoading: false });
-
-    renderPage("/chat");
-
-    // Should NOT show the blocking card — should auto-select org-1 from the list.
-    await waitFor(() => {
-      expect(screen.queryByText(/select an organization first/i)).not.toBeInTheDocument();
-    });
-    expect(screen.getByPlaceholderText(/ask a question about this organization/i)).toBeInTheDocument();
-  });
-
-  it("restores the last used organization from localStorage", async () => {
-    localStorage.setItem("chat_last_org_id", "org-2");
-    mockUseEffectiveSession.mockReturnValue({
-      data: {
-        user: { id: "superadmin-1", role: "superadmin" },
-        session: {},
-      },
-    });
-    mockUseChatConversations.mockReturnValue({ data: [], isLoading: false });
-    mockUseChatMessages.mockReturnValue({ data: [], isLoading: false });
-    const createMutateAsync = vi.fn().mockResolvedValue({ ...conversations[0], id: "conversation-3", organizationId: "org-2" });
-    mockUseCreateConversation.mockReturnValue({ mutateAsync: createMutateAsync, isPending: false });
-
-    renderPage("/chat");
-
-    fireEvent.change(screen.getByPlaceholderText(/ask a question about this organization/i), {
-      target: { value: "Test" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
-
-    await waitFor(() => {
-      expect(createMutateAsync).toHaveBeenCalledWith({ organizationId: "org-2" });
-    });
-  });
-
-  it("persists the selected organization to localStorage", async () => {
-    mockUseEffectiveSession.mockReturnValue({
-      data: {
-        user: { id: "superadmin-1", role: "superadmin" },
-        session: {},
-      },
-    });
-    mockUseChatConversations.mockReturnValue({ data: [], isLoading: false });
-    mockUseChatMessages.mockReturnValue({ data: [], isLoading: false });
-
-    renderPage("/chat");
-
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "org-2" } });
-
-    await waitFor(() => {
-      expect(localStorage.getItem("chat_last_org_id")).toBe("org-2");
-    });
+    expect(screen.getByText(/organization switcher in the sidebar/i)).toBeInTheDocument();
   });
 
   it("renders conversations and messages for the active organization", () => {
@@ -334,10 +255,12 @@ describe("ChatPage", () => {
     renderPage("/chat/conversation-1");
 
     fireEvent.click(screen.getByRole("button", { name: /^new$/i }));
+    await pickFirstProject();
 
     await waitFor(() => {
       expect(createMutateAsync).toHaveBeenCalledWith({
         organizationId: "org-1",
+        projectId: "project-1",
       });
       expect(mockUseChatMessages).toHaveBeenLastCalledWith(
         "conversation-2",
@@ -349,7 +272,7 @@ describe("ChatPage", () => {
     });
 
     expect(screen.getByRole("heading", { name: /^new conversation$/i })).toBeInTheDocument();
-    expect(screen.getByText(/ask a question about this organization to start the conversation/i)).toBeInTheDocument();
+    expect(screen.getByText(/ask a question about this project to start the conversation/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /new conversation/i })).not.toBeInTheDocument();
   });
 
@@ -361,54 +284,26 @@ describe("ChatPage", () => {
 
     renderPage("/chat");
 
-    fireEvent.change(screen.getByPlaceholderText(/ask a question about this organization/i), {
+    fireEvent.change(screen.getByPlaceholderText(/ask a question about this project/i), {
       target: { value: "How do deployments work?" },
     });
     fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+    await pickFirstProject();
 
     await waitFor(() => {
       expect(createMutateAsync).toHaveBeenCalledWith({
         organizationId: "org-1",
+        projectId: "project-1",
       });
+    });
+
+    // Picking a project auto-dispatches the buffered first message — the page
+    // no longer drops it waiting for a second Send click.
+    await waitFor(() => {
       expect(mockChatServiceSendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
-          conversationId: "conversation-2",
           content: "How do deployments work?",
           organizationId: "org-1",
-        }),
-      );
-    });
-  });
-
-  it("uses the selected superadmin organization when sending the first message", async () => {
-    const createMutateAsync = vi.fn().mockResolvedValue({ ...conversations[0], id: "conversation-2", organizationId: "org-2" });
-    mockUseEffectiveSession.mockReturnValue({
-      data: {
-        user: { id: "superadmin-1", role: "superadmin" },
-        session: {},
-      },
-    });
-    mockUseChatConversations.mockReturnValue({ data: [], isLoading: false });
-    mockUseChatMessages.mockReturnValue({ data: [], isLoading: false });
-    mockUseCreateConversation.mockReturnValue({ mutateAsync: createMutateAsync, isPending: false });
-
-    renderPage("/chat");
-
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "org-2" } });
-    fireEvent.change(screen.getByPlaceholderText(/ask a question about this organization/i), {
-      target: { value: "How do deployments work?" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
-
-    await waitFor(() => {
-      expect(createMutateAsync).toHaveBeenCalledWith({
-        organizationId: "org-2",
-      });
-      expect(mockChatServiceSendMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          conversationId: "conversation-2",
-          content: "How do deployments work?",
-          organizationId: "org-2",
         }),
       );
     });
@@ -480,67 +375,6 @@ describe("ChatPage", () => {
     expect(screen.getByText(/you do not have permission to access chat/i)).toBeInTheDocument();
   });
 
-  it("shows a loading skeleton when org dropdown is loading and no org is resolved", () => {
-    mockUseEffectiveSession.mockReturnValue({
-      data: {
-        user: { id: "superadmin-1", role: "superadmin" },
-        session: {},
-      },
-    });
-    mockUseOrganizations.mockReturnValue({
-      data: undefined,
-      isLoading: true,
-    });
-
-    renderPage("/chat");
-
-    // Should show loading state (skeleton) rather than the "select organization" card
-    // The areDropdownOrgsLoading branch renders a skeleton
-    const container = screen.queryByText(/chat unavailable/i);
-    expect(container).not.toBeInTheDocument();
-  });
-
-  it("shows 'no organizations available' option when org list is empty for superadmin", () => {
-    mockUseEffectiveSession.mockReturnValue({
-      data: {
-        user: { id: "superadmin-1", role: "superadmin" },
-        session: {},
-      },
-    });
-    mockUseOrganizations.mockReturnValue({
-      data: { data: [] },
-      isLoading: false,
-    });
-
-    renderPage("/chat");
-
-    expect(screen.getByRole("option", { name: /no organizations available/i })).toBeInTheDocument();
-  });
-
-  it("shows org dropdown for multi-org non-superadmin user", async () => {
-    // Simulate a non-superadmin user with multiple orgs (userOrgs.length > 1)
-    // The user-orgs query is seeded via queryClient in renderPage with []
-    // We need to override the fetchWithAuth mock to return 2 orgs
-    mockUseEffectiveSession.mockReturnValue({
-      data: {
-        user: { id: "user-1", role: "manager" },
-        session: { activeOrganizationId: "org-1" },
-      },
-    });
-    mockUseChatConversations.mockReturnValue({ data: [], isLoading: false });
-    mockUseChatMessages.mockReturnValue({ data: [], isLoading: false });
-
-    // The test checks that with a normal user who has multiple orgs via API,
-    // the dropdown shows. Since we can't easily test the fetch here,
-    // just verify the normal org rendering path
-    renderPage("/chat");
-
-    // Should render the main chat page (not the blocking card) since activeOrganizationId = "org-1"
-    await waitFor(() => {
-      expect(screen.getByPlaceholderText(/ask a question about this organization/i)).toBeInTheDocument();
-    });
-  });
-
   it("stops generation when stop button is clicked", async () => {
     // Set up streaming state by triggering a send
     mockChatServiceSendMessage.mockImplementation(({ onEvent }: { onEvent: (event: { type: string; content?: string; data?: { assistantMessage: { content: string } } }) => void }) => {
@@ -555,11 +389,18 @@ describe("ChatPage", () => {
 
     renderPage("/chat");
 
-    // Send a message
-    fireEvent.change(screen.getByPlaceholderText(/ask a question about this organization/i), {
+    // Type + Send with no conversation: the page buffers the message and opens
+    // the picker. Picking a project creates the conversation and auto-dispatches
+    // the buffered message — which triggers streaming (stop button appears).
+    fireEvent.change(screen.getByPlaceholderText(/ask a question about this project/i), {
       target: { value: "How do deployments work?" },
     });
     fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+    await pickFirstProject();
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("pick-project-dialog")).not.toBeInTheDocument();
+    });
 
     // Wait for streaming state to be set (stop button appears)
     await waitFor(() => {
@@ -575,18 +416,30 @@ describe("ChatPage", () => {
   });
 
   it("shows error toast when send message fails", async () => {
-    const createMutateAsync = vi.fn().mockResolvedValue({ ...conversations[0], id: "conversation-new" });
+    const createdConversation = { ...conversations[0], id: "conversation-new" };
+    const createMutateAsync = vi.fn().mockResolvedValue(createdConversation);
     mockUseCreateConversation.mockReturnValue({ mutateAsync: createMutateAsync, isPending: false });
     mockChatServiceSendMessage.mockRejectedValue(new Error("Network error"));
-    mockUseChatConversations.mockReturnValue({ data: [], isLoading: false });
+    mockUseChatConversations.mockImplementation(() => ({
+      data: createMutateAsync.mock.calls.length > 0 ? [createdConversation] : [],
+      isLoading: false,
+    }));
     mockUseChatMessages.mockReturnValue({ data: [], isLoading: false });
 
     renderPage("/chat");
 
-    fireEvent.change(screen.getByPlaceholderText(/ask a question about this organization/i), {
+    // Type + Send with no conversation: page buffers and opens picker. After
+    // pickFirstProject, the buffered message is auto-dispatched — which is
+    // what we want to see fail with the mocked "Network error".
+    fireEvent.change(screen.getByPlaceholderText(/ask a question about this project/i), {
       target: { value: "How do deployments work?" },
     });
     fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+    await pickFirstProject();
+
+    await waitFor(() => {
+      expect(createMutateAsync).toHaveBeenCalled();
+    });
 
     await waitFor(() => {
       expect(mockToastError).toHaveBeenCalledWith("Network error");
@@ -601,10 +454,11 @@ describe("ChatPage", () => {
 
     renderPage("/chat");
 
-    fireEvent.change(screen.getByPlaceholderText(/ask a question about this organization/i), {
+    fireEvent.change(screen.getByPlaceholderText(/ask a question about this project/i), {
       target: { value: "How do deployments work?" },
     });
     fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+    await pickFirstProject();
 
     await waitFor(() => {
       expect(mockToastError).toHaveBeenCalledWith("Create failed");
@@ -631,6 +485,7 @@ describe("ChatPage", () => {
     renderPage("/chat/conversation-1");
 
     fireEvent.click(screen.getByRole("button", { name: /^new$/i }));
+    await pickFirstProject();
 
     await waitFor(() => {
       expect(mockToastError).toHaveBeenCalledWith("Server error");
@@ -682,15 +537,31 @@ describe("ChatPage", () => {
       return Promise.resolve({ conversation: conversations[0], userMessage: messages[0], assistantMessage: messages[0] });
     });
 
-    mockUseChatConversations.mockReturnValue({ data: [], isLoading: false });
+    const createdConversation = { ...conversations[0], id: "conversation-2" };
+    const createMock = vi.fn().mockResolvedValue(createdConversation);
+    mockUseCreateConversation.mockReturnValue({ mutateAsync: createMock, isPending: false });
+    mockUseChatConversations.mockImplementation(() => ({
+      data: createMock.mock.calls.length > 0 ? [createdConversation] : [],
+      isLoading: false,
+    }));
     mockUseChatMessages.mockReturnValue({ data: [], isLoading: false });
 
     renderPage("/chat");
 
-    fireEvent.change(screen.getByPlaceholderText(/ask a question about this organization/i), {
+    // Type, click Send — there's no active conversation, so the page buffers
+    // the message and opens the project picker. Picking a project creates the
+    // conversation and auto-dispatches the buffered message. The old behavior
+    // silently dropped the first message and required a second click; the new
+    // flow exercises the auto-dispatch.
+    fireEvent.change(screen.getByPlaceholderText(/ask a question about this project/i), {
       target: { value: "How do deployments work?" },
     });
     fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+    await pickFirstProject();
+
+    await waitFor(() => {
+      expect(createMock).toHaveBeenCalled();
+    });
 
     await waitFor(() => {
       expect(mockChatServiceSendMessage).toHaveBeenCalled();
@@ -706,17 +577,29 @@ describe("ChatPage", () => {
       return Promise.resolve({ conversation: conversations[0], userMessage: messages[0], assistantMessage: messages[0] });
     });
 
-    const createMock = vi.fn().mockResolvedValue(conversations[0]);
+    const createdConversation = { ...conversations[0], id: "conversation-2" };
+    const createMock = vi.fn().mockResolvedValue(createdConversation);
     mockUseCreateConversation.mockReturnValue({ mutateAsync: createMock, isPending: false });
-    mockUseChatConversations.mockReturnValue({ data: [], isLoading: false });
+    mockUseChatConversations.mockImplementation(() => ({
+      data: createMock.mock.calls.length > 0 ? [createdConversation] : [],
+      isLoading: false,
+    }));
     mockUseChatMessages.mockReturnValue({ data: [], isLoading: false });
 
     renderPage("/chat");
 
-    fireEvent.change(screen.getByPlaceholderText(/ask a question about this organization/i), {
+    // Type + Send with no conversation: buffers, opens picker. Picking a
+    // project creates the conversation and auto-dispatches the buffered
+    // message, which captures `onEvent` so we can drive chunk events below.
+    fireEvent.change(screen.getByPlaceholderText(/ask a question about this project/i), {
       target: { value: "Two chunks test" },
     });
     fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+    await pickFirstProject();
+
+    await waitFor(() => {
+      expect(createMock).toHaveBeenCalled();
+    });
 
     await waitFor(() => {
       expect(mockChatServiceSendMessage).toHaveBeenCalled();
@@ -815,6 +698,7 @@ describe("ChatPage", () => {
     // Click the last "New" button (in the sheet - mobile rail)
     const newButtons = screen.getAllByRole("button", { name: /^new$/i });
     fireEvent.click(newButtons[newButtons.length - 1]);
+    await pickFirstProject();
 
     await waitFor(() => {
       expect(createMock).toHaveBeenCalled();
@@ -864,8 +748,11 @@ describe("ChatPage", () => {
     const newButtons = screen.getAllByRole("button", { name: /^new$/i });
     expect(newButtons.length).toBeGreaterThan(0);
 
-    // Click the first "New" button (desktop rail)
+    // Click the first "New" button (desktop rail) — now opens the pick-project dialog
     fireEvent.click(newButtons[0]);
+
+    // Pick a project to trigger the create
+    await pickFirstProject();
 
     await waitFor(() => {
       expect(createMutateAsync).toHaveBeenCalled();
@@ -890,19 +777,6 @@ describe("ChatPage", () => {
     });
   });
 
-  it("renders without crash when organizationsResponse is undefined (covers ?? [] branch)", () => {
-    // Covers organizationsResponse?.data ?? [] when data is undefined
-    mockUseOrganizations.mockReturnValue({
-      data: undefined,
-      isLoading: false,
-    });
-
-    renderPage("/chat");
-
-    // Should render without crash
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  });
-
   it("renders without crash when useChatConversations returns undefined data (covers ?? branches)", () => {
     // Covers data?.data ?? [], data?.total ?? 0 when data is undefined
     mockUseChatConversations.mockReturnValue({
@@ -920,71 +794,73 @@ describe("ChatPage", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("handles user-orgs fetch returning payload.data array (covers line 303 Array.isArray(payload?.data) branch)", async () => {
-    // Default fetchWithAuth returns []. Override to return { data: [...] } to cover the payload?.data branch
-    vi.mocked(fetchWithAuth).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ data: [{ id: "org-2", name: "Second Org" }] }),
-    } as Response);
-
-    mockUseEffectiveSession.mockReturnValue({
-      data: {
-        user: { id: "user-1", role: "manager" },
-        session: { activeOrganizationId: "org-1" },
-      },
+  describe("Switch project", () => {
+    it("renders the Switch project button when a conversation is selected and user has chat:create", () => {
+      renderPage("/chat/conversation-1");
+      expect(screen.getByTestId("chat-switch-project-button")).toBeInTheDocument();
     });
 
-    // Use a fresh QueryClient WITHOUT pre-seeding user-orgs so queryFn actually runs
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    it("hides the Switch project button when no conversation is selected", () => {
+      mockUseChatConversations.mockReturnValue({ data: [], isLoading: false });
+      renderPage("/chat");
+      expect(screen.queryByTestId("chat-switch-project-button")).not.toBeInTheDocument();
     });
-    render(
-      <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={["/chat"]}>
-          <Routes>
-            <Route path="/chat" element={<ChatPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    );
 
-    // Component renders without crash
-    await waitFor(() => {
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    it("hides the Switch project button when the user lacks chat:create", () => {
+      mockUsePermissionsContext.mockReturnValue({
+        can: (resource: string, action: string) =>
+          (resource === "organization" && action === "read") ||
+          (resource === "chat" && ["read", "stream", "delete"].includes(action)),
+      });
+      renderPage("/chat/conversation-1");
+      expect(screen.queryByTestId("chat-switch-project-button")).not.toBeInTheDocument();
+    });
+
+    it("opens PickProjectDialog in switch mode with a Current badge on the conversation's project", async () => {
+      mockUseProjects.mockReturnValue({
+        data: [
+          { id: "project-1", name: "General", description: null, sourceCount: 1, conversationCount: 1 },
+          { id: "project-2", name: "Research", description: null, sourceCount: 0, conversationCount: 0 },
+        ],
+        isLoading: false,
+        error: null,
+      });
+
+      renderPage("/chat/conversation-1");
+      fireEvent.click(screen.getByTestId("chat-switch-project-button"));
+
+      const dialog = await screen.findByTestId("pick-project-dialog");
+      expect(dialog).toBeInTheDocument();
+      expect(dialog).toHaveTextContent(/switch project/i);
+      expect(screen.getByTestId("pick-project-current-project-1")).toBeInTheDocument();
+      expect(screen.getByTestId("pick-project-option-project-1")).toBeDisabled();
+    });
+
+    it("creates a new conversation under the picked project and navigates", async () => {
+      const createMutateAsync = vi
+        .fn()
+        .mockResolvedValue({ ...conversations[0], id: "conversation-3", projectId: "project-2", projectName: "Research" });
+      mockUseCreateConversation.mockReturnValue({ mutateAsync: createMutateAsync, isPending: false });
+      mockUseProjects.mockReturnValue({
+        data: [
+          { id: "project-1", name: "General", description: null, sourceCount: 1, conversationCount: 1 },
+          { id: "project-2", name: "Research", description: null, sourceCount: 0, conversationCount: 0 },
+        ],
+        isLoading: false,
+        error: null,
+      });
+
+      renderPage("/chat/conversation-1");
+      fireEvent.click(screen.getByTestId("chat-switch-project-button"));
+      fireEvent.click(await screen.findByTestId("pick-project-option-project-2"));
+
+      await waitFor(() => {
+        expect(createMutateAsync).toHaveBeenCalledWith({
+          organizationId: "org-1",
+          projectId: "project-2",
+        });
+      });
     });
   });
 
-  it("handles user-orgs fetch returning neither array nor payload.data (covers line 305 [] fallback branch)", async () => {
-    // Default fetchWithAuth returns []. Override to return a non-array, non-data-array object
-    vi.mocked(fetchWithAuth).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ message: "no orgs found" }),
-    } as Response);
-
-    mockUseEffectiveSession.mockReturnValue({
-      data: {
-        user: { id: "user-1", role: "manager" },
-        session: { activeOrganizationId: "org-1" },
-      },
-    });
-
-    // Use a fresh QueryClient WITHOUT pre-seeding user-orgs so queryFn actually runs
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-    });
-    render(
-      <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={["/chat"]}>
-          <Routes>
-            <Route path="/chat" element={<ChatPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    );
-
-    // Component renders without crash
-    await waitFor(() => {
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    });
-  });
 });

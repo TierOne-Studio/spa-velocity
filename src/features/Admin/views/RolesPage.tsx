@@ -38,13 +38,15 @@ import { toast } from "sonner";
 import { roleColorMap, ROLE_COLORS } from "../types/rbac";
 import type { Role, Permission } from "../types/rbac";
 import { usePermissionsContext } from "@/shared/context/PermissionsContext";
-import { useEffectiveSession } from "@/shared/hooks/useEffectiveSession";
-import { isSuperadminRole, getActiveOrganizationId, getSessionUserRole } from "@/shared/utils/roles";
+import { SystemViewBanner } from "@/shared/components/SystemViewBanner";
+import { ViewingScopePicker } from "@/shared/components/ViewingScopePicker";
+import { ALL_ORGANIZATIONS_VALUE } from "@/shared/constants/org-scope";
+import { useOrgCapabilities } from "@/shared/hooks/useOrgCapabilities";
+import { useOrgScope } from "@/shared/hooks/useOrgScope";
 import { useOrganizations } from "../hooks/useOrganizations";
 
 const EMPTY_ROLES: Role[] = [];
 const EMPTY_PERMISSIONS_GROUPED: Record<string, Permission[]> = {};
-const ALL_ORGANIZATIONS_VALUE = "__all__";
 
 /**
  * Component to display permissions for a role
@@ -165,37 +167,33 @@ function RoleCard({
  */
 export function RolesPage() {
   const { can } = usePermissionsContext();
-  const { data: session } = useEffectiveSession();
-  const isSuperadmin = isSuperadminRole(getSessionUserRole(session));
-  const activeOrganizationId = getActiveOrganizationId(session);
+  const { isSuperadmin, activeOrganizationId } = useOrgCapabilities();
+  const scope = useOrgScope();
   const { data: organizationsResponse, isLoading: isOrganizationsLoading } = useOrganizations(
     { page: 1, limit: 100 },
     { enabled: isSuperadmin },
   );
   const organizations = organizationsResponse?.data ?? [];
-  const [selectedOrganizationId, setSelectedOrganizationId] = useState(ALL_ORGANIZATIONS_VALUE);
 
+  // If the superadmin has selected a specific org that's no longer present,
+  // fall back to the cross-org view. Non-superadmin callers are pinned to
+  // their active org by `useOrgScope` and don't need this guard.
   useEffect(() => {
-    if (!isSuperadmin) {
-      setSelectedOrganizationId(ALL_ORGANIZATIONS_VALUE);
-      return;
+    if (!isSuperadmin) return;
+    if (scope.mode === "all") return;
+    if (!scope.organizationId) return;
+    const stillPresent = organizations.some((o) => o.id === scope.organizationId);
+    if (!stillPresent) {
+      scope.setSelectedValue(ALL_ORGANIZATIONS_VALUE);
     }
-
-    setSelectedOrganizationId((current) => {
-      if (current === ALL_ORGANIZATIONS_VALUE) {
-        return current;
-      }
-
-      return organizations.some((organization) => organization.id === current)
-        ? current
-        : ALL_ORGANIZATIONS_VALUE;
-    });
-  }, [isSuperadmin, organizations]);
+    // `scope.setSelectedValue` and `scope.organizationId` changes are what drive this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSuperadmin, organizations, scope.mode, scope.organizationId]);
 
   const resolvedOrganizationId = isSuperadmin
-    ? selectedOrganizationId === ALL_ORGANIZATIONS_VALUE
+    ? scope.mode === "all"
       ? null
-      : selectedOrganizationId
+      : scope.organizationId
     : activeOrganizationId;
   const hasResolvedOrganization = isSuperadmin || Boolean(resolvedOrganizationId);
   const organizationNamesById = new Map(
@@ -435,6 +433,8 @@ export function RolesPage() {
 
   return (
     <div className="flex flex-1 flex-col gap-4 p-4 lg:p-6">
+      <SystemViewBanner visible={isSuperadmin && scope.mode === "all"} />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -444,25 +444,13 @@ export function RolesPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {isSuperadmin && (
-            <Select
-              aria-label="Organization"
-              value={selectedOrganizationId}
-              onValueChange={setSelectedOrganizationId}
-            >
-              <SelectTrigger className="w-[220px]">
-                <SelectValue placeholder="All organizations" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL_ORGANIZATIONS_VALUE}>All organizations</SelectItem>
-                {organizations.map((organization) => (
-                  <SelectItem key={organization.id} value={organization.id}>
-                    {organization.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
+          <ViewingScopePicker
+            value={scope.selectedValue}
+            onChange={scope.setSelectedValue}
+            organizations={organizations.map((o) => ({ id: o.id, name: o.name }))}
+            className="w-[220px]"
+            placeholder="All organizations"
+          />
           {canCreateRole && (
             <Button
               onClick={() => setCreateDialogOpen(true)}

@@ -18,7 +18,7 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       onSend,
       onStopGeneration,
       isLoading = false,
-      placeholder = "Ask a question about this organization",
+      placeholder = "Ask a question about this project",
       disabled = false,
       className,
     },

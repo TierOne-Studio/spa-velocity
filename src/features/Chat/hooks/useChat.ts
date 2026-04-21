@@ -38,12 +38,17 @@ function useChatQueryScope(requestedOrganizationId?: string | null): ChatQuerySc
   };
 }
 
-export function useChatConversations(options?: { organizationId?: string | null; enabled?: boolean }) {
+export function useChatConversations(options?: {
+  organizationId?: string | null;
+  projectId?: string | null;
+  enabled?: boolean;
+}) {
   const scope = useChatQueryScope(options?.organizationId);
+  const projectId = options?.projectId ?? null;
 
   return useQuery({
-    queryKey: chatKeys.conversations(scope),
-    queryFn: () => chatService.getConversations(options?.organizationId),
+    queryKey: [...chatKeys.conversations(scope), projectId ?? "all-projects"] as const,
+    queryFn: () => chatService.getConversations(options?.organizationId, projectId),
     enabled: options?.enabled ?? true,
   });
 }

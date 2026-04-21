@@ -19,6 +19,7 @@ const routeConfig: Record<string, { label: string; parent?: string }> = {
   "/": { label: "Chat", parent: "/main" },
   "/main": { label: "Main", parent: undefined },
   "/chat": { label: "Chat", parent: "/main" },
+  "/projects": { label: "Projects", parent: "/main" },
   "/admin/dashboard": { label: "Admin Dashboard", parent: "/admin" },
   "/admin/users": { label: "Users", parent: "/admin" },
   "/admin/sessions": { label: "Sessions", parent: "/admin" },
@@ -37,6 +38,7 @@ type BreadcrumbItem = { path: string; label: string; isLast: boolean }
  */
 function normalizePath(pathname: string): string {
   if (pathname.startsWith("/chat/")) return "/chat"
+  if (pathname.startsWith("/projects/")) return "/projects"
   return pathname
 }
 

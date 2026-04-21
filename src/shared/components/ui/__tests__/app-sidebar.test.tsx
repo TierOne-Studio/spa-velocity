@@ -44,6 +44,7 @@ vi.mock("@/shared/components/ui/sidebar", () => ({
 }));
 
 vi.mock("@tabler/icons-react", () => ({
+  IconBooks: () => null,
   IconBuilding: () => null,
   IconChartBar: () => null,
   IconFolder: () => null,
@@ -114,7 +115,7 @@ describe("AppSidebar", () => {
     expect(screen.getByTestId("nav-main")).toBeInTheDocument();
   });
 
-  it("hides the organization switcher for superadmin", () => {
+  it("shows the organization switcher for superadmin", () => {
     mockUseAuth.mockReturnValue({
       user: { name: "Super Admin", email: "superadmin@example.com", role: "superadmin" },
     });
@@ -128,6 +129,6 @@ describe("AppSidebar", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.queryByTestId("org-switcher")).not.toBeInTheDocument();
+    expect(screen.getByTestId("org-switcher")).toBeInTheDocument();
   });
 });

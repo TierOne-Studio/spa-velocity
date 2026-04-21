@@ -14,7 +14,7 @@ describe("ChatInput", () => {
 
   it("renders a textarea with placeholder", () => {
     render(<ChatInput onSend={mockOnSend} />);
-    expect(screen.getByPlaceholderText("Ask a question about this organization")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Ask a question about this project")).toBeInTheDocument();
   });
 
   it("renders custom placeholder", () => {

@@ -33,7 +33,10 @@ export function ImpersonationBanner() {
   }
 
   return (
-    <div className="bg-amber-500 text-amber-950 px-4 py-2 flex items-center justify-between">
+    <div
+      className="bg-amber-500 text-amber-950 px-4 py-2 flex items-center justify-between"
+      data-testid="impersonation-banner"
+    >
       <div className="flex items-center gap-2">
         <IconUserScan className="h-4 w-4" />
         <span className="text-sm font-medium">

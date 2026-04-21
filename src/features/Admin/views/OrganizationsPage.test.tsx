@@ -89,6 +89,33 @@ vi.mock("@/shared/hooks/useEffectiveSession", () => ({
   useEffectiveSession: () => mockUseEffectiveSession(),
 }));
 
+// Derive `useOrgCapabilities` off the existing `useEffectiveSession` fixture so
+// this component test doesn't need a QueryClientProvider for the real
+// memberships fetch. Role + active org come straight from the session mock.
+vi.mock("@/shared/hooks/useOrgCapabilities", () => ({
+  useOrgCapabilities: () => {
+    const session = mockUseEffectiveSession();
+    const rawRole = session?.data?.user?.role;
+    const isSuperadmin = Array.isArray(rawRole)
+      ? rawRole.includes("superadmin")
+      : String(rawRole ?? "")
+          .split(",")
+          .map((r: string) => r.trim())
+          .filter(Boolean)
+          .includes("superadmin");
+    const activeOrganizationId =
+      session?.data?.session?.activeOrganizationId ?? null;
+    return {
+      isSuperadmin,
+      isMultiOrgMember: false,
+      isSingleOrgMember: false,
+      memberOrganizations: [],
+      activeOrganizationId,
+      isLoading: false,
+    };
+  },
+}));
+
 vi.mock("@/shared/context/PermissionsContext", () => ({
   usePermissionsContext: () => ({ can: mockCan, refetchPermissions: mockRefetchPermissions }),
 }));
@@ -528,7 +555,7 @@ describe("OrganizationsPage – CRUD and member operations", () => {
     });
   });
 
-  it("includes the linked Airweave collection when creating an organization", async () => {
+  it("persists an empty Airweave allowlist when creating an organization without selections", async () => {
     const createMutate = vi.fn().mockResolvedValue({ id: "org-new" })
     mockUseCreateOrganization.mockReturnValue({ mutateAsync: createMutate, isPending: false })
 
@@ -538,14 +565,13 @@ describe("OrganizationsPage – CRUD and member operations", () => {
     const dialog = await screen.findByRole("dialog")
 
     fireEvent.change(within(dialog).getByLabelText(/name/i), { target: { value: "TierOne" } })
-    fireEvent.change(within(dialog).getByRole("combobox"), { target: { value: "collection-2" } })
     fireEvent.click(within(dialog).getByRole("button", { name: /^create$/i }))
 
     await waitFor(() => {
       expect(createMutate).toHaveBeenCalledWith(
         expect.objectContaining({
           name: "TierOne",
-          metadata: { airweaveCollectionId: "collection-2" },
+          metadata: { allowedAirweaveCollectionIds: [] },
         }),
       )
     })
@@ -655,7 +681,7 @@ describe("OrganizationsPage – CRUD and member operations", () => {
     });
   });
 
-  it("preserves existing metadata while updating the linked Airweave collection", async () => {
+  it("preserves existing metadata and migrates the legacy collection to the allowlist on save", async () => {
     const updateMutate = vi.fn().mockResolvedValue({})
     mockUseUpdateOrganization.mockReturnValue({ mutateAsync: updateMutate, isPending: false })
 
@@ -667,7 +693,6 @@ describe("OrganizationsPage – CRUD and member operations", () => {
     fireEvent.click(editMenuItem)
 
     const dialog = await screen.findByRole("dialog")
-    fireEvent.change(within(dialog).getByRole("combobox"), { target: { value: "collection-2" } })
     fireEvent.click(within(dialog).getByRole("button", { name: /save changes/i }))
 
     await waitFor(() => {
@@ -675,10 +700,10 @@ describe("OrganizationsPage – CRUD and member operations", () => {
         expect.objectContaining({
           organizationId: "org-1",
           data: expect.objectContaining({
-            metadata: {
-              airweaveCollectionId: "collection-2",
+            metadata: expect.objectContaining({
               retained: "value",
-            },
+              allowedAirweaveCollectionIds: ["collection-1"],
+            }),
           }),
         }),
       )
@@ -1040,7 +1065,7 @@ describe("OrganizationsPage – CRUD and member operations", () => {
     });
   });
 
-  it("shows selected org details panel with collection info (single source)", async () => {
+  it("shows selected org details panel with allowlist chips", async () => {
     mockUseOrganizations.mockReturnValue({
       data: {
         data: [{
@@ -1048,7 +1073,7 @@ describe("OrganizationsPage – CRUD and member operations", () => {
           name: "Org One",
           slug: "org-one",
           createdAt: new Date(),
-          metadata: { airweaveCollectionId: "collection-1" },
+          metadata: { allowedAirweaveCollectionIds: ["collection-1"] },
         }],
         total: 1,
         totalPages: 1,
@@ -1074,8 +1099,9 @@ describe("OrganizationsPage – CRUD and member operations", () => {
     fireEvent.click(screen.getByRole("button", { name: /org one/i }));
 
     await waitFor(() => {
-      // sourceConnectionCount === 1 uses "source" (singular)
-      expect(screen.getByText(/collection-1 · 1 source$/)).toBeInTheDocument();
+      expect(screen.getByText("Airweave collections allowlist")).toBeInTheDocument();
+      expect(screen.getByText("My Collection")).toBeInTheDocument();
+      expect(screen.getByText("collection-1")).toBeInTheDocument();
     });
   });
 
@@ -1110,7 +1136,7 @@ describe("OrganizationsPage – CRUD and member operations", () => {
     });
   });
 
-  it("shows 'Not configured' when org has no collection ID", async () => {
+  it("shows empty allowlist message when org has no allowed collections", async () => {
     mockUseOrganizations.mockReturnValue({
       data: {
         data: [{
@@ -1130,7 +1156,9 @@ describe("OrganizationsPage – CRUD and member operations", () => {
     fireEvent.click(screen.getByRole("button", { name: /org one/i }));
 
     await waitFor(() => {
-      expect(screen.getByText("Not configured")).toBeInTheDocument();
+      expect(
+        screen.getByText(/no collections allowed/i),
+      ).toBeInTheDocument();
     });
   });
 
