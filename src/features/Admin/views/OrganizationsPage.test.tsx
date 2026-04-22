@@ -71,6 +71,14 @@ vi.mock("../hooks/useAirweaveCollections", () => ({
   useAirweaveCollections: (...args: unknown[]) => mockUseAvailableCollections(...args),
 }));
 
+vi.mock("../hooks/useSqlConnections", () => ({
+  useSqlConnections: () => ({ data: [], isLoading: false, error: null }),
+  useCreateSqlConnection: () => ({ mutateAsync: async () => undefined, isPending: false }),
+  useUpdateSqlConnection: () => ({ mutateAsync: async () => undefined, isPending: false }),
+  useDeleteSqlConnection: () => ({ mutateAsync: async () => undefined, isPending: false }),
+  useTestSqlConnection: () => ({ mutateAsync: async () => undefined, isPending: false }),
+}));
+
 vi.mock("../services/adminService", () => ({
   adminService: {
     listUsers: mockListUsers,

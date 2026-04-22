@@ -54,6 +54,7 @@ import {
   useSetActiveOrganization,
 } from "../hooks/useOrganizations"
 import { useAirweaveCollections } from "../hooks/useAirweaveCollections"
+import { OrganizationSqlConnectionsSection } from "../components/OrganizationSqlConnectionsSection"
 import { organizationService } from "../services/adminService"
 import { getOrganizationRolesMetadata } from "../services/adminService"
 import { usePermissionsContext } from "@/shared/context/PermissionsContext"
@@ -899,6 +900,10 @@ export function OrganizationsPage() {
                       : "Leave empty to block Airweave sources for this organization."}
               </p>
             </div>
+            <OrganizationSqlConnectionsSection
+              organizationId={selectedOrg?.id}
+              canManage={canManageSelectedOrganization}
+            />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
