@@ -129,6 +129,7 @@ export function OrganizationSqlConnectionsSection({
                                         variant="ghost"
                                         onClick={() => handleTest(conn)}
                                         title="Test connection"
+                                        aria-label={`Test connection ${conn.name}`}
                                         data-testid={`org-sql-test-${conn.id}`}
                                     >
                                         <IconPlayerPlay className="size-4" />
@@ -141,6 +142,7 @@ export function OrganizationSqlConnectionsSection({
                                             setFormOpen(true)
                                         }}
                                         title="Edit"
+                                        aria-label={`Edit connection ${conn.name}`}
                                         data-testid={`org-sql-edit-${conn.id}`}
                                     >
                                         <IconEdit className="size-4" />
@@ -150,6 +152,7 @@ export function OrganizationSqlConnectionsSection({
                                         variant="ghost"
                                         onClick={() => handleDelete(conn)}
                                         title="Delete"
+                                        aria-label={`Delete connection ${conn.name}`}
                                         data-testid={`org-sql-delete-${conn.id}`}
                                     >
                                         <IconTrash className="size-4" />

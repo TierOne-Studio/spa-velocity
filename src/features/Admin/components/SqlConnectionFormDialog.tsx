@@ -34,6 +34,15 @@ type FormState = {
     password: string
     schemaName: string
     ssl: boolean
+    /**
+     * Preserved object SSL config from edit load. The UI only exposes a
+     * boolean toggle, so if the stored value is an object (e.g.
+     * `{ rejectUnauthorized, ca }`), we keep it here untouched and round-trip
+     * it on save when the toggle stays enabled — otherwise a simple edit
+     * of an unrelated field would silently clobber the object config with
+     * `true`.
+     */
+    originalSslObject: object | null
 }
 
 const EMPTY_FORM: FormState = {
@@ -45,6 +54,7 @@ const EMPTY_FORM: FormState = {
     password: "",
     schemaName: "public",
     ssl: false,
+    originalSslObject: null,
 }
 
 interface SqlConnectionFormDialogProps {
@@ -71,6 +81,10 @@ export function SqlConnectionFormDialog({
     useEffect(() => {
         if (!open) return
         if (mode === "edit" && connection) {
+            const rawSsl = connection.ssl
+            const sslObject =
+                rawSsl !== null && typeof rawSsl === "object" ? rawSsl : null
+            const sslEnabled = sslObject !== null || rawSsl === true
             setForm({
                 name: connection.name,
                 host: connection.host,
@@ -79,7 +93,8 @@ export function SqlConnectionFormDialog({
                 username: connection.username,
                 password: "",
                 schemaName: connection.schemaName,
-                ssl: connection.ssl === true,
+                ssl: sslEnabled,
+                originalSslObject: sslObject,
             })
         } else {
             setForm(EMPTY_FORM)
@@ -114,6 +129,12 @@ export function SqlConnectionFormDialog({
                 await createMutation.mutateAsync(input)
                 toast.success("SQL connection created")
             } else if (connection) {
+                // When the original value was an object (e.g.
+                // `{ rejectUnauthorized, ca }`) and the toggle is still on,
+                // round-trip the object instead of overwriting it with `true`.
+                const sslForUpdate: CreateSqlConnectionInput["ssl"] = form.ssl
+                    ? (form.originalSslObject ?? true)
+                    : false
                 const input: UpdateSqlConnectionInput & { organizationId?: string } = {
                     organizationId,
                     name: form.name.trim(),
@@ -121,7 +142,7 @@ export function SqlConnectionFormDialog({
                     port: portNumber,
                     database: form.database.trim(),
                     username: form.username.trim(),
-                    ssl: form.ssl,
+                    ssl: sslForUpdate,
                     schemaName: form.schemaName.trim() || "public",
                 }
                 if (form.password) input.password = form.password

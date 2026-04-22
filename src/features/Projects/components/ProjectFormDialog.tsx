@@ -78,8 +78,8 @@ function getDatabaseConnectionIds(sources: ProjectDataSource[]): string[] {
     .filter((s): s is ProjectDataSource & { kind: "database" } =>
       s.kind === "database",
     )
-    .map((s) => (s.config as { connectionId?: string }).connectionId)
-    .filter((id): id is string => typeof id === "string" && id.length > 0);
+    .map((s) => s.config.connectionId)
+    .filter((id) => id.length > 0);
 }
 
 function getDatabaseSourceIdByConnectionId(
@@ -87,9 +87,8 @@ function getDatabaseSourceIdByConnectionId(
   connectionId: string,
 ): string | null {
   const match = sources.find(
-    (s) =>
-      s.kind === "database" &&
-      (s.config as { connectionId?: string }).connectionId === connectionId,
+    (s): s is ProjectDataSource & { kind: "database" } =>
+      s.kind === "database" && s.config.connectionId === connectionId,
   );
   return match ? match.id : null;
 }
@@ -175,14 +174,23 @@ export function ProjectFormDialog({ open, onOpenChange, project }: Props) {
   );
 
   const sqlConnectionOptions = useMemo<MultiSelectOption[]>(() => {
-    return (sqlConnections ?? [])
-      .filter((c) => c.status === "ready")
+    const connections = sqlConnections ?? [];
+    // Include `ready` connections plus any already-attached non-ready ones so
+    // edit mode can still render + remove them. Without this, a connection
+    // that transitions to `connecting`/`error` after being attached would
+    // disappear from the combobox while still living in `selectedConnectionIds`.
+    const selectedSet = new Set(selectedConnectionIds);
+    return connections
+      .filter((c) => c.status === "ready" || selectedSet.has(c.id))
       .map((c) => ({
         value: c.id,
         label: c.name,
-        description: `${c.username}@${c.host}:${c.port}/${c.database}`,
+        description:
+          c.status === "ready"
+            ? `${c.username}@${c.host}:${c.port}/${c.database}`
+            : `${c.username}@${c.host}:${c.port}/${c.database} — ${c.status}`,
       }));
-  }, [sqlConnections]);
+  }, [sqlConnections, selectedConnectionIds]);
 
   const isSubmitting =
     createProject.isPending ||
@@ -367,6 +375,7 @@ export function ProjectFormDialog({ open, onOpenChange, project }: Props) {
             onChange={(id) => {
               setOrganizationId(id);
               setSelectedCollectionIds([]);
+              setSelectedConnectionIds([]);
             }}
             disabled={isEdit}
             organizations={organizations.map((o) => ({ id: o.id, name: o.name }))}
