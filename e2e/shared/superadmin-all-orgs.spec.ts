@@ -94,6 +94,41 @@ async function mockAllOrgApis(
       body: JSON.stringify({ data }),
     });
   });
+
+  await page.route('**/api/platform-admin/organizations**', async (route, request) => {
+    const url = new URL(request.url());
+    if (request.method() !== 'GET' || url.pathname !== '/api/platform-admin/organizations') {
+      await route.continue();
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: [
+          {
+            id: orgAId,
+            name: ORG_A_NAME,
+            slug: ORG_A_SLUG,
+            createdAt: '2026-01-01',
+            memberCount: 1,
+          },
+          {
+            id: orgBId,
+            name: ORG_B_NAME,
+            slug: ORG_B_SLUG,
+            createdAt: '2026-01-01',
+            memberCount: 1,
+          },
+        ],
+        total: 2,
+        page: 1,
+        limit: 100,
+        totalPages: 1,
+      }),
+    });
+  });
 }
 
 test.describe('Superadmin viewing scope: All organizations default + banner', () => {
@@ -166,8 +201,11 @@ test.describe('Superadmin viewing scope: All organizations default + banner', ()
 
     // Open the scope picker and pick Org A
     const trigger = page.getByTestId('viewing-scope-picker');
+    await expect(trigger).toContainText(/all organizations/i, { timeout: 10000 });
     await trigger.click();
-    await page.getByRole('option', { name: new RegExp(ORG_A_NAME, 'i') }).click();
+    const orgOption = page.getByRole('option', { name: new RegExp(ORG_A_NAME, 'i') }).last();
+    await expect(orgOption).toBeVisible({ timeout: 10000 });
+    await orgOption.click();
 
     // Banner gone, Org B project gone, Org A project still present
     await expect(page.getByTestId('system-view-banner')).not.toBeVisible({ timeout: 10000 });

@@ -214,10 +214,7 @@ test.describe.serial('Impersonation', () => {
   });
 
   test('impersonation banner should not be visible when not impersonating', async ({ page }) => {
-    // The impersonation banner should not be visible for normal sessions
-    // Look for the amber background which indicates the banner
-    const banner = page.locator('.bg-amber-500');
-    await expect(banner).not.toBeVisible();
+    await expect(page.getByTestId('impersonation-banner')).toHaveCount(0);
   });
 
   test('full impersonation flow - impersonate and stop', async ({ page }) => {
@@ -243,7 +240,7 @@ test.describe.serial('Impersonation', () => {
     await expect(page).toHaveURL(/\/(chat(\/.*)?|account|dashboard)?$/);
 
     // Check impersonation banner appears and contains expected user
-    const banner = page.locator('.bg-amber-500');
+    const banner = page.getByTestId('impersonation-banner');
     await expect(banner).toBeVisible({ timeout: 15000 });
     await expect(banner.getByText(/you are impersonating/i)).toBeVisible();
     await expect(banner.getByText(new RegExp(escapeRegExp(IMPERSONATION_TARGET_EMAIL), 'i'))).toBeVisible();
@@ -255,7 +252,7 @@ test.describe.serial('Impersonation', () => {
     await page.waitForLoadState('networkidle');
 
     // Banner should no longer be visible
-    await expect(banner).not.toBeVisible();
+    await expect(page.getByTestId('impersonation-banner')).toHaveCount(0);
   });
 });
 

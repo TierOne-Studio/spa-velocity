@@ -7,9 +7,16 @@ import { Button } from "@/shared/components/ui/button"
 import {
     useDeleteSqlConnection,
     useSqlConnections,
+    useTestSqlConnectionCredentials,
     useTestSqlConnection,
+    useCreateSqlConnection,
+    useUpdateSqlConnection,
 } from "../hooks/useSqlConnections"
 import type { SqlConnection } from "../types"
+import {
+    formatSqlConnectionDisplay,
+    formatSqlConnectionDisplayFull,
+} from "../utils/sqlConnectionDisplay"
 
 import { SqlConnectionFormDialog } from "./SqlConnectionFormDialog"
 
@@ -36,8 +43,11 @@ export function OrganizationSqlConnectionsSection({
     const connectionsQuery = useSqlConnections(organizationId, {
         enabled: Boolean(organizationId),
     })
+    const createMutation = useCreateSqlConnection()
+    const updateMutation = useUpdateSqlConnection()
     const deleteMutation = useDeleteSqlConnection()
     const testMutation = useTestSqlConnection()
+    const credentialTestMutation = useTestSqlConnectionCredentials()
 
     const [formOpen, setFormOpen] = useState(false)
     const [editing, setEditing] = useState<SqlConnection | null>(null)
@@ -96,11 +106,11 @@ export function OrganizationSqlConnectionsSection({
                     No SQL connections. Add one to let projects query databases from chat.
                 </div>
             ) : (
-                <ul className="divide-y divide-border rounded-md border" data-testid="org-sql-list">
+                <ul className="divide-y divide-border overflow-hidden rounded-md border" data-testid="org-sql-list">
                     {connections.map((conn) => (
                         <li
                             key={conn.id}
-                            className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
+                            className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 overflow-hidden px-3 py-2 text-sm"
                             data-testid={`org-sql-row-${conn.id}`}
                         >
                             <div className="min-w-0 flex-1">
@@ -113,17 +123,20 @@ export function OrganizationSqlConnectionsSection({
                                         {conn.status}
                                     </span>
                                 </div>
-                                <div className="truncate text-xs text-muted-foreground">
-                                    {conn.username}@{conn.host}:{conn.port}/{conn.database}
+                                <div
+                                    className="block truncate text-xs text-muted-foreground"
+                                    title={formatSqlConnectionDisplayFull(conn)}
+                                >
+                                    {formatSqlConnectionDisplay(conn)}
                                 </div>
                                 {conn.status === "error" && conn.statusError && (
-                                    <div className="truncate text-xs text-red-500">
+                                    <div className="block truncate text-xs text-red-500" title={conn.statusError}>
                                         {conn.statusError}
                                     </div>
                                 )}
                             </div>
                             {canManage && (
-                                <div className="flex gap-1">
+                                <div className="flex shrink-0 gap-1">
                                     <Button
                                         size="icon"
                                         variant="ghost"
@@ -166,9 +179,33 @@ export function OrganizationSqlConnectionsSection({
             <SqlConnectionFormDialog
                 open={formOpen}
                 onOpenChange={setFormOpen}
-                organizationId={organizationId}
                 mode={editing ? "edit" : "create"}
                 connection={editing}
+                submitPending={createMutation.isPending || updateMutation.isPending}
+                testPending={credentialTestMutation.isPending}
+                onTest={async (input) => {
+                    await credentialTestMutation.mutateAsync({ input, organizationId })
+                    toast.success("Connection test succeeded")
+                }}
+                onSubmit={async (payload) => {
+                    if (payload.mode === "create") {
+                        await createMutation.mutateAsync({
+                            ...payload.input,
+                            organizationId,
+                        })
+                        toast.success("SQL connection created")
+                        return
+                    }
+
+                    await updateMutation.mutateAsync({
+                        id: payload.connectionId,
+                        input: {
+                            ...payload.input,
+                            organizationId,
+                        },
+                    })
+                    toast.success("SQL connection updated")
+                }}
             />
         </div>
     )

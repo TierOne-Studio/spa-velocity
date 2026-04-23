@@ -55,11 +55,21 @@ import {
 } from "../hooks/useOrganizations"
 import { useAirweaveCollections } from "../hooks/useAirweaveCollections"
 import { OrganizationSqlConnectionsSection } from "../components/OrganizationSqlConnectionsSection"
+import {
+  formatSqlConnectionDisplay,
+  formatSqlConnectionDisplayFull,
+} from "../utils/sqlConnectionDisplay"
+import {
+  useCreateSqlConnection,
+  useTestCreateOrganizationSqlConnectionCredentials,
+} from "../hooks/useSqlConnections"
+import { SqlConnectionFormDialog } from "../components/SqlConnectionFormDialog"
 import { organizationService } from "../services/adminService"
 import { getOrganizationRolesMetadata } from "../services/adminService"
 import { usePermissionsContext } from "@/shared/context/PermissionsContext"
 import { useEffectiveSession } from "@/shared/hooks/useEffectiveSession"
 import { useOrgCapabilities } from "@/shared/hooks/useOrgCapabilities"
+import type { CreateSqlConnectionInput } from "../types"
 
 interface Organization {
   id: string
@@ -95,7 +105,37 @@ type OrganizationFormState = {
   allowedAirweaveCollectionIds: string[]
 }
 
+type SqlConnectionDraft = {
+  id: string
+  input: CreateSqlConnectionInput
+}
+
+type PendingCreateOrgDraftPersistence = {
+  organizationId: string
+}
+
+const EMPTY_ORG_FORM_STATE: OrganizationFormState = {
+  name: "",
+  slug: "",
+  allowedAirweaveCollectionIds: [],
+}
+
 const dedupeRoleNames = (roleNames: string[]) => Array.from(new Set(roleNames))
+
+const buildSqlConnectionDraftId = () =>
+  `draft-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+const normalizeSqlConnectionDraftInput = (
+  input: CreateSqlConnectionInput,
+): CreateSqlConnectionInput => ({
+  ...input,
+  name: input.name.trim(),
+  host: input.host.trim(),
+  database: input.database.trim(),
+  username: input.username.trim(),
+  schemaName: input.schemaName?.trim() || "public",
+  ssl: input.ssl ?? false,
+})
 
 // Helper to extract members array from response
 const getMembersArray = (data: unknown): Member[] => {
@@ -168,15 +208,17 @@ export function OrganizationsPage() {
 
   // Form state
   const [newOrgData, setNewOrgData] = useState<OrganizationFormState>({
-    name: "",
-    slug: "",
-    allowedAirweaveCollectionIds: [],
+    ...EMPTY_ORG_FORM_STATE,
   })
   const [editOrgData, setEditOrgData] = useState<OrganizationFormState>({
     name: "",
     slug: "",
     allowedAirweaveCollectionIds: [],
   })
+  const [createOrgSqlConnectionDrafts, setCreateOrgSqlConnectionDrafts] = useState<SqlConnectionDraft[]>([])
+  const [createOrgSqlConnectionDialogOpen, setCreateOrgSqlConnectionDialogOpen] = useState(false)
+  const [editingCreateOrgSqlConnectionDraftId, setEditingCreateOrgSqlConnectionDraftId] = useState<string | null>(null)
+  const [pendingCreateOrgDraftPersistence, setPendingCreateOrgDraftPersistence] = useState<PendingCreateOrgDraftPersistence | null>(null)
   const [addMemberData, setAddMemberData] = useState({ userId: "", role: "member" })
   const [availableUsers, setAvailableUsers] = useState<User[]>([])
   const [usersLoading, setUsersLoading] = useState(false)
@@ -231,11 +273,16 @@ export function OrganizationsPage() {
   const createOrg = useCreateOrganization()
   const updateOrg = useUpdateOrganization()
   const deleteOrg = useDeleteOrganization()
+  const createSqlConnection = useCreateSqlConnection()
   const addMember = useAddMember()
   const removeMember = useRemoveMember()
   const updateMemberRole = useUpdateMemberRole()
   const checkSlug = useCheckSlug()
   const setActiveOrganization = useSetActiveOrganization()
+  const testCreateOrgSqlConnectionCredentials = useTestCreateOrganizationSqlConnectionCredentials()
+
+  const editingCreateOrgSqlConnectionDraft =
+    createOrgSqlConnectionDrafts.find((draft) => draft.id === editingCreateOrgSqlConnectionDraftId) ?? null
 
   useEffect(() => {
     if (activeOrganizationId !== null) {
@@ -311,10 +358,79 @@ export function OrganizationsPage() {
     }
   }
 
+  const resetCreateDialogState = () => {
+    setCreateDialogOpen(false)
+    setNewOrgData(EMPTY_ORG_FORM_STATE)
+    setSlugStatus("idle")
+    setCreateOrgSqlConnectionDrafts([])
+    setCreateOrgSqlConnectionDialogOpen(false)
+    setEditingCreateOrgSqlConnectionDraftId(null)
+    setPendingCreateOrgDraftPersistence(null)
+  }
+
+  const handleCreateDialogOpenChange = (open: boolean) => {
+    setCreateDialogOpen(open)
+    if (!open) {
+      setNewOrgData(EMPTY_ORG_FORM_STATE)
+      setSlugStatus("idle")
+      setCreateOrgSqlConnectionDrafts([])
+      setCreateOrgSqlConnectionDialogOpen(false)
+      setEditingCreateOrgSqlConnectionDraftId(null)
+      setPendingCreateOrgDraftPersistence(null)
+    }
+  }
+
+  const persistCreateOrgSqlConnectionDrafts = async (organizationId: string) => {
+    if (createOrgSqlConnectionDrafts.length === 0) {
+      setPendingCreateOrgDraftPersistence(null)
+      return
+    }
+
+    const draftsToPersist = createOrgSqlConnectionDrafts
+
+    for (let index = 0; index < draftsToPersist.length; index += 1) {
+      const draft = draftsToPersist[index]
+
+      try {
+        await createSqlConnection.mutateAsync({
+          organizationId,
+          ...draft.input,
+        })
+      } catch (error) {
+        const remainingDrafts = draftsToPersist.slice(index)
+        setCreateOrgSqlConnectionDrafts(remainingDrafts)
+        setPendingCreateOrgDraftPersistence({ organizationId })
+        throw new Error(
+          error instanceof Error
+            ? `Organization created, but failed to save SQL connection "${draft.input.name}": ${error.message}`
+            : `Organization created, but failed to save SQL connection "${draft.input.name}"`,
+        )
+      }
+    }
+
+    setCreateOrgSqlConnectionDrafts([])
+    setPendingCreateOrgDraftPersistence(null)
+  }
+
   // Handlers
   const handleCreateOrg = async () => {
     if (!canCreateOrg) {
       toast.error("You do not have permission to create organizations")
+      return
+    }
+
+    if (pendingCreateOrgDraftPersistence) {
+      try {
+        await persistCreateOrgSqlConnectionDrafts(pendingCreateOrgDraftPersistence.organizationId)
+        toast.success("SQL connections saved successfully")
+        resetCreateDialogState()
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Failed to save remaining SQL connections",
+        )
+      }
       return
     }
 
@@ -341,11 +457,21 @@ export function OrganizationsPage() {
               : "Organization created but failed to switch active organization",
           )
         }
+
+        try {
+          await persistCreateOrgSqlConnectionDrafts(createdOrganization.id)
+        } catch (error) {
+          toast.error(
+            error instanceof Error
+              ? error.message
+              : "Organization created, but failed to save SQL connections",
+          )
+          return
+        }
       }
 
       toast.success("Organization created successfully")
-      setCreateDialogOpen(false)
-      setNewOrgData({ name: "", slug: "", allowedAirweaveCollectionIds: [] })
+      resetCreateDialogState()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to create organization")
     }
@@ -479,6 +605,21 @@ export function OrganizationsPage() {
     })
     setEditDialogOpen(true)
   }
+
+  const createOrgActionPending =
+    createOrg.isPending || setActiveOrganization.isPending || createSqlConnection.isPending
+  const createOrgActionDisabled = pendingCreateOrgDraftPersistence
+    ? createOrgActionPending
+    : createOrgActionPending || slugStatus === "taken" || slugStatus === "checking"
+  const createOrgActionLabel = pendingCreateOrgDraftPersistence
+    ? createSqlConnection.isPending
+      ? "Retrying..."
+      : "Retry SQL connections"
+    : createOrg.isPending
+      ? "Creating..."
+      : createSqlConnection.isPending
+        ? "Saving SQL connections..."
+        : "Create"
 
   return (
     <div className="flex flex-1 flex-col gap-4 p-4 lg:p-6">
@@ -766,7 +907,7 @@ export function OrganizationsPage() {
       </div>
 
       {/* Create Organization Dialog */}
-      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+      <Dialog open={createDialogOpen} onOpenChange={handleCreateDialogOpenChange}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Create Organization</DialogTitle>
@@ -780,6 +921,7 @@ export function OrganizationsPage() {
                 value={newOrgData.name}
                 onChange={(e) => setNewOrgData({ ...newOrgData, name: e.target.value })}
                 placeholder="My Organization"
+                disabled={pendingCreateOrgDraftPersistence !== null}
               />
             </div>
             <div className="grid gap-2">
@@ -791,6 +933,7 @@ export function OrganizationsPage() {
                   onChange={(e) => handleSlugChange(e.target.value)}
                   placeholder="my-organization"
                   className={slugStatus === "taken" ? "border-destructive" : slugStatus === "available" ? "border-green-500" : ""}
+                  disabled={pendingCreateOrgDraftPersistence !== null}
                 />
                 {slugStatus === "checking" && (
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
@@ -821,7 +964,7 @@ export function OrganizationsPage() {
                 onChange={(next) => setNewOrgData({ ...newOrgData, allowedAirweaveCollectionIds: next })}
                 placeholder={collectionsLoading ? "Loading collections…" : "Select collections"}
                 emptyMessage="No collections available"
-                disabled={!canReadCollections || collectionsLoading}
+                disabled={pendingCreateOrgDraftPersistence !== null || !canReadCollections || collectionsLoading}
                 data-testid="org-airweave-allowlist-create"
               />
               <p className="text-sm text-muted-foreground">
@@ -834,20 +977,157 @@ export function OrganizationsPage() {
                       : "Leave empty to block Airweave sources for this organization."}
               </p>
             </div>
+            <div className="grid gap-3 rounded-md border p-3" data-testid="org-sql-draft-section">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-medium">SQL connections</div>
+                  <p className="text-sm text-muted-foreground">
+                    Add and test database connections before creating the organization.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setEditingCreateOrgSqlConnectionDraftId(null)
+                    setCreateOrgSqlConnectionDialogOpen(true)
+                  }}
+                  data-testid="org-sql-draft-add"
+                >
+                  <IconPlus className="h-4 w-4 mr-1" />
+                  Add connection
+                </Button>
+              </div>
+              {pendingCreateOrgDraftPersistence && (
+                <div className="text-xs text-amber-600" data-testid="org-sql-draft-retry-hint">
+                  The organization was created. Review any remaining SQL connections and retry saving them.
+                </div>
+              )}
+              {createOrgSqlConnectionDrafts.length === 0 ? (
+                <div className="text-xs text-muted-foreground" data-testid="org-sql-draft-empty">
+                  No SQL connections added yet.
+                </div>
+              ) : (
+                <ul className="divide-y divide-border overflow-hidden rounded-md border" data-testid="org-sql-draft-list">
+                  {createOrgSqlConnectionDrafts.map((draft) => (
+                    <li
+                      key={draft.id}
+                      className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 overflow-hidden px-3 py-2 text-sm"
+                      data-testid={`org-sql-draft-row-${draft.id}`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-medium">{draft.input.name}</div>
+                        <div
+                          className="block truncate text-xs text-muted-foreground"
+                          title={formatSqlConnectionDisplayFull({
+                            username: draft.input.username,
+                            host: draft.input.host,
+                            port: draft.input.port,
+                            database: draft.input.database,
+                          })}
+                        >
+                          {formatSqlConnectionDisplay({
+                            username: draft.input.username,
+                            host: draft.input.host,
+                            port: draft.input.port,
+                            database: draft.input.database,
+                          })}
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 gap-1">
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => {
+                            setEditingCreateOrgSqlConnectionDraftId(draft.id)
+                            setCreateOrgSqlConnectionDialogOpen(true)
+                          }}
+                          aria-label={`Edit connection ${draft.input.name}`}
+                          data-testid={`org-sql-draft-edit-${draft.id}`}
+                        >
+                          <IconEdit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => {
+                            setCreateOrgSqlConnectionDrafts((currentDrafts) =>
+                              currentDrafts.filter((currentDraft) => currentDraft.id !== draft.id),
+                            )
+                            if (editingCreateOrgSqlConnectionDraftId === draft.id) {
+                              setEditingCreateOrgSqlConnectionDraftId(null)
+                              setCreateOrgSqlConnectionDialogOpen(false)
+                            }
+                          }}
+                          aria-label={`Delete connection ${draft.input.name}`}
+                          data-testid={`org-sql-draft-delete-${draft.id}`}
+                        >
+                          <IconTrash className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>
+            <Button variant="outline" onClick={() => handleCreateDialogOpenChange(false)}>
               Cancel
             </Button>
             <Button 
               onClick={handleCreateOrg} 
-              disabled={createOrg.isPending || slugStatus === "taken" || slugStatus === "checking"}
+              disabled={createOrgActionDisabled}
             >
-              {createOrg.isPending ? "Creating..." : "Create"}
+              {createOrgActionLabel}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <SqlConnectionFormDialog
+        open={createOrgSqlConnectionDialogOpen}
+        onOpenChange={(open) => {
+          setCreateOrgSqlConnectionDialogOpen(open)
+          if (!open) {
+            setEditingCreateOrgSqlConnectionDraftId(null)
+          }
+        }}
+        mode="create"
+        initialInput={editingCreateOrgSqlConnectionDraft?.input ?? null}
+        title={editingCreateOrgSqlConnectionDraft ? "Edit SQL connection" : undefined}
+        submitLabel={editingCreateOrgSqlConnectionDraft ? "Save changes" : undefined}
+        submitPending={false}
+        testPending={testCreateOrgSqlConnectionCredentials.isPending}
+        onTest={async (input) => {
+          await testCreateOrgSqlConnectionCredentials.mutateAsync(input)
+          toast.success("Connection test succeeded")
+        }}
+        onSubmit={async (payload) => {
+          if (payload.mode !== "create") {
+            return
+          }
+
+          const nextInput = normalizeSqlConnectionDraftInput(payload.input)
+          if (editingCreateOrgSqlConnectionDraft) {
+            setCreateOrgSqlConnectionDrafts((currentDrafts) =>
+              currentDrafts.map((draft) =>
+                draft.id === editingCreateOrgSqlConnectionDraft.id
+                  ? { ...draft, input: nextInput }
+                  : draft,
+              ),
+            )
+            return
+          }
+
+          setCreateOrgSqlConnectionDrafts((currentDrafts) => [
+            ...currentDrafts,
+            { id: buildSqlConnectionDraftId(), input: nextInput },
+          ])
+        }}
+      />
 
       {/* Edit Organization Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>

@@ -4,6 +4,8 @@ import { useEffectiveSession } from "@/shared/hooks/useEffectiveSession";
 import type {
     CreateSqlConnectionInput,
     SqlConnection,
+    TestSqlConnectionInput,
+    TestSqlConnectionResult,
     UpdateSqlConnectionInput,
 } from "../types";
 
@@ -127,6 +129,49 @@ async function testSqlConnection(
     );
 }
 
+async function testSqlConnectionCredentials(
+    input: TestSqlConnectionInput,
+    organizationId?: string,
+): Promise<TestSqlConnectionResult> {
+    const response = await fetchWithAuth(
+        buildUrl("/api/sql-connections/test", organizationId),
+        {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(input),
+        },
+    );
+    const result = await parseApiResponse<TestSqlConnectionResult>(
+        response,
+        "Failed to test SQL connection credentials",
+    );
+    if (!result.ok) {
+        throw new Error(result.error);
+    }
+    return result;
+}
+
+async function testCreateOrganizationSqlConnectionCredentials(
+    input: TestSqlConnectionInput,
+): Promise<TestSqlConnectionResult> {
+    const response = await fetchWithAuth(
+        `${API_BASE_URL}/api/platform-admin/organizations/sql-connections/test`,
+        {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(input),
+        },
+    );
+    const result = await parseApiResponse<TestSqlConnectionResult>(
+        response,
+        "Failed to test SQL connection credentials",
+    );
+    if (!result.ok) {
+        throw new Error(result.error);
+    }
+    return result;
+}
+
 export function useSqlConnections(
     organizationId?: string,
     options?: { enabled?: boolean },
@@ -183,5 +228,21 @@ export function useTestSqlConnection() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: sqlConnectionKeys.all });
         },
+    });
+}
+
+export function useTestSqlConnectionCredentials() {
+    return useMutation({
+        mutationFn: (params: {
+            input: TestSqlConnectionInput;
+            organizationId?: string;
+        }) => testSqlConnectionCredentials(params.input, params.organizationId),
+    });
+}
+
+export function useTestCreateOrganizationSqlConnectionCredentials() {
+    return useMutation({
+        mutationFn: (input: TestSqlConnectionInput) =>
+            testCreateOrganizationSqlConnectionCredentials(input),
     });
 }

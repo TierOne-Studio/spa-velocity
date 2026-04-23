@@ -121,6 +121,20 @@ export interface UpdateSqlConnectionInput {
     schemaName?: string;
 }
 
+export interface TestSqlConnectionInput {
+    connectionId?: string;
+    host: string;
+    port: number;
+    database: string;
+    username: string;
+    password?: string;
+    ssl?: SqlSslConfig;
+}
+
+export type TestSqlConnectionResult =
+    | { ok: true }
+    | { ok: false; error: string };
+
 // Pagination types
 export interface PaginationParams {
     limit?: number;

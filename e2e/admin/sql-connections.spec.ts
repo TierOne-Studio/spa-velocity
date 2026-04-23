@@ -3,6 +3,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { TEST_USER } from '../env';
 import {
   ensureOrganizationMembership,
+  findOrganizationListItemBySlug,
   loginWithCredentials,
   setActiveOrganizationForUserSessions,
 } from '../test-helpers';
@@ -11,6 +12,7 @@ const ORG_SLUG = 'e2e-sql-connections';
 const ORG_NAME = 'E2E SQL Connections';
 
 let organizationId: string;
+let sqlConnectionsApi: { getTestCalls: () => number };
 
 type StoredConnection = {
   id: string;
@@ -30,8 +32,9 @@ type StoredConnection = {
 
 async function mockSqlConnectionsApi(page: Page) {
   const store: StoredConnection[] = [];
+  let testCalls = 0;
 
-  await page.route('**/api/sql-connections*', async (route, request) => {
+  await page.route('**/api/sql-connections**', async (route, request) => {
     const url = new URL(request.url());
     const method = request.method();
 
@@ -71,6 +74,16 @@ async function mockSqlConnectionsApi(page: Page) {
       return;
     }
 
+    if (method === 'POST' && url.pathname === '/api/sql-connections/test') {
+      testCalls += 1;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ data: { ok: true } }),
+      });
+      return;
+    }
+
     const deleteMatch =
       method === 'DELETE' && url.pathname.match(/^\/api\/sql-connections\/([^/]+)$/);
     if (deleteMatch) {
@@ -86,6 +99,10 @@ async function mockSqlConnectionsApi(page: Page) {
 
     await route.fallback();
   });
+
+  return {
+    getTestCalls: () => testCalls,
+  };
 }
 
 test.describe.serial('SQL Connections admin UI', () => {
@@ -104,17 +121,18 @@ test.describe.serial('SQL Connections admin UI', () => {
       userEmail: TEST_USER.email,
       organizationId,
     });
-    await mockSqlConnectionsApi(page);
+    sqlConnectionsApi = await mockSqlConnectionsApi(page);
   });
 
   test('shows empty state and creates a new SQL connection', async ({ page }) => {
     await page.goto('/admin/organizations');
 
-    await page.getByText(ORG_NAME, { exact: true }).first().click();
+    const orgRow = await findOrganizationListItemBySlug(page, ORG_SLUG);
+    await orgRow.click();
 
     // Open edit dialog from row actions.
-    const editButton = page.getByRole('button', { name: /edit/i }).first();
-    await editButton.click();
+    await orgRow.locator('button').click();
+    await page.getByText(/^edit$/i).click();
 
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
@@ -133,6 +151,15 @@ test.describe.serial('SQL Connections admin UI', () => {
     await formDialog.getByTestId('sql-conn-database').fill('reporting');
     await formDialog.getByTestId('sql-conn-username').fill('reader');
     await formDialog.getByTestId('sql-conn-password').fill('super-secret');
+
+    await expect(formDialog.getByTestId('sql-conn-submit')).toBeDisabled();
+    await expect(formDialog.getByTestId('sql-conn-test')).toBeEnabled();
+    await Promise.all([
+      page.waitForResponse((response) => response.url().includes('/api/sql-connections/test') && response.request().method() === 'POST'),
+      formDialog.getByTestId('sql-conn-test').click(),
+    ]);
+    await expect.poll(() => sqlConnectionsApi.getTestCalls()).toBe(1);
+    await expect(formDialog.getByTestId('sql-conn-submit')).toBeEnabled({ timeout: 10000 });
     await formDialog.getByTestId('sql-conn-submit').click();
 
     await expect(formDialog).toBeHidden();

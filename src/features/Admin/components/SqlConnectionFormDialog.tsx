@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 
 import { Button } from "@/shared/components/ui/button"
@@ -13,13 +13,11 @@ import {
 import { Input } from "@/shared/components/ui/input"
 import { Label } from "@/shared/components/ui/label"
 
-import {
-    useCreateSqlConnection,
-    useUpdateSqlConnection,
-} from "../hooks/useSqlConnections"
 import type {
     CreateSqlConnectionInput,
     SqlConnection,
+    SqlSslConfig,
+    TestSqlConnectionInput,
     UpdateSqlConnectionInput,
 } from "../types"
 
@@ -60,26 +58,78 @@ const EMPTY_FORM: FormState = {
 interface SqlConnectionFormDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
-    organizationId?: string
     mode: Mode
     connection?: SqlConnection | null
+    initialInput?: CreateSqlConnectionInput | null
+    onSubmit: (payload:
+        | { mode: "create"; input: CreateSqlConnectionInput }
+        | { mode: "edit"; connectionId: string; input: UpdateSqlConnectionInput }) => Promise<void>
+    onTest: (input: TestSqlConnectionInput) => Promise<void>
+    submitPending?: boolean
+    testPending?: boolean
+    title?: string
+    description?: string
+    submitLabel?: string
+}
+
+function buildEffectiveSsl(form: FormState): SqlSslConfig {
+    return form.ssl ? (form.originalSslObject ?? true) : false
+}
+
+function buildTestPayload(
+    form: FormState,
+    portNumber: number,
+    connection?: SqlConnection | null,
+): TestSqlConnectionInput {
+    const payload: TestSqlConnectionInput = {
+        host: form.host.trim(),
+        port: portNumber,
+        database: form.database.trim(),
+        username: form.username.trim(),
+        ssl: buildEffectiveSsl(form),
+    }
+    if (form.password) {
+        payload.password = form.password
+    } else if (connection) {
+        payload.connectionId = connection.id
+    }
+    return payload
+}
+
+function buildFingerprint(input: TestSqlConnectionInput): string {
+    return JSON.stringify({
+        connectionId: input.connectionId ?? null,
+        host: input.host,
+        port: input.port,
+        database: input.database,
+        username: input.username,
+        password: input.password ?? "__stored__",
+        ssl: input.ssl ?? false,
+    })
 }
 
 export function SqlConnectionFormDialog({
     open,
     onOpenChange,
-    organizationId,
     mode,
     connection,
+    initialInput,
+    onSubmit,
+    onTest,
+    submitPending = false,
+    testPending = false,
+    title,
+    description,
+    submitLabel,
 }: SqlConnectionFormDialogProps) {
     const [form, setForm] = useState<FormState>(EMPTY_FORM)
-    const createMutation = useCreateSqlConnection()
-    const updateMutation = useUpdateSqlConnection()
-
-    const isPending = createMutation.isPending || updateMutation.isPending
+    const [testedFingerprint, setTestedFingerprint] = useState<string | null>(null)
+    const [requestError, setRequestError] = useState<string | null>(null)
 
     useEffect(() => {
         if (!open) return
+        setTestedFingerprint(null)
+        setRequestError(null)
         if (mode === "edit" && connection) {
             const rawSsl = connection.ssl
             const sslObject =
@@ -97,9 +147,23 @@ export function SqlConnectionFormDialog({
                 originalSslObject: sslObject,
             })
         } else {
-            setForm(EMPTY_FORM)
+            const rawSsl = initialInput?.ssl ?? false
+            const sslObject =
+                rawSsl !== null && typeof rawSsl === "object" ? rawSsl : null
+            const sslEnabled = sslObject !== null || rawSsl === true
+            setForm({
+                name: initialInput?.name ?? EMPTY_FORM.name,
+                host: initialInput?.host ?? EMPTY_FORM.host,
+                port: String(initialInput?.port ?? EMPTY_FORM.port),
+                database: initialInput?.database ?? EMPTY_FORM.database,
+                username: initialInput?.username ?? EMPTY_FORM.username,
+                password: initialInput?.password ?? EMPTY_FORM.password,
+                schemaName: initialInput?.schemaName ?? EMPTY_FORM.schemaName,
+                ssl: sslEnabled,
+                originalSslObject: sslObject,
+            })
         }
-    }, [open, mode, connection])
+    }, [open, mode, connection, initialInput])
 
     const portNumber = Number.parseInt(form.port, 10)
     const portValid = Number.isFinite(portNumber) && portNumber > 0 && portNumber < 65536
@@ -109,49 +173,86 @@ export function SqlConnectionFormDialog({
         !form.database.trim() ||
         !form.username.trim() ||
         (mode === "create" && !form.password)
-    const disabled = isPending || !portValid || requiredMissing
+    const testPayload = useMemo(
+        () =>
+            portValid
+                ? buildTestPayload(form, portNumber, connection)
+                : null,
+        [connection, form, portNumber, portValid],
+    )
+    const currentFingerprint = testPayload ? buildFingerprint(testPayload) : null
+    const testable =
+        Boolean(testPayload) &&
+        !requiredMissing &&
+        (Boolean(form.password) || (mode === "edit" && Boolean(connection)))
+    const disabled =
+        submitPending ||
+        !portValid ||
+        requiredMissing ||
+        !currentFingerprint ||
+        testedFingerprint !== currentFingerprint
+
+    async function handleTest() {
+        if (!testPayload || !testable || testPending) return
+        try {
+            setRequestError(null)
+            await onTest(testPayload)
+            setTestedFingerprint(buildFingerprint(testPayload))
+        } catch (error) {
+            setTestedFingerprint(null)
+            const message =
+                error instanceof Error
+                    ? error.message
+                    : "Connection test failed"
+            setRequestError(message)
+            toast.error(message)
+        }
+    }
 
     async function handleSubmit() {
         if (disabled) return
         try {
+            setRequestError(null)
             if (mode === "create") {
-                const input: CreateSqlConnectionInput & { organizationId?: string } = {
-                    organizationId,
-                    name: form.name.trim(),
-                    host: form.host.trim(),
-                    port: portNumber,
-                    database: form.database.trim(),
-                    username: form.username.trim(),
-                    password: form.password,
-                    ssl: form.ssl,
-                    schemaName: form.schemaName.trim() || "public",
-                }
-                await createMutation.mutateAsync(input)
-                toast.success("SQL connection created")
+                await onSubmit({
+                    mode,
+                    input: {
+                        name: form.name.trim(),
+                        host: form.host.trim(),
+                        port: portNumber,
+                        database: form.database.trim(),
+                        username: form.username.trim(),
+                        password: form.password,
+                        ssl: buildEffectiveSsl(form),
+                        schemaName: form.schemaName.trim() || "public",
+                    },
+                })
             } else if (connection) {
-                // When the original value was an object (e.g.
-                // `{ rejectUnauthorized, ca }`) and the toggle is still on,
-                // round-trip the object instead of overwriting it with `true`.
-                const sslForUpdate: CreateSqlConnectionInput["ssl"] = form.ssl
-                    ? (form.originalSslObject ?? true)
-                    : false
-                const input: UpdateSqlConnectionInput & { organizationId?: string } = {
-                    organizationId,
+                const input: UpdateSqlConnectionInput = {
                     name: form.name.trim(),
                     host: form.host.trim(),
                     port: portNumber,
                     database: form.database.trim(),
                     username: form.username.trim(),
-                    ssl: sslForUpdate,
+                    ssl: buildEffectiveSsl(form),
                     schemaName: form.schemaName.trim() || "public",
                 }
                 if (form.password) input.password = form.password
-                await updateMutation.mutateAsync({ id: connection.id, input })
-                toast.success("SQL connection updated")
+                await onSubmit({
+                    mode,
+                    connectionId: connection.id,
+                    input,
+                })
             }
             onOpenChange(false)
         } catch (error) {
-            const message = error instanceof Error ? error.message : "Operation failed"
+            const message =
+                error instanceof Error
+                    ? error.message
+                    : mode === "create"
+                        ? "Failed to create SQL connection"
+                        : "Failed to update SQL connection"
+            setRequestError(message)
             toast.error(message)
         }
     }
@@ -161,10 +262,10 @@ export function SqlConnectionFormDialog({
             <DialogContent className="sm:max-w-[560px]" data-testid="sql-connection-form-dialog">
                 <DialogHeader>
                     <DialogTitle>
-                        {mode === "create" ? "Add SQL connection" : "Edit SQL connection"}
+                        {title ?? (mode === "create" ? "Add SQL connection" : "Edit SQL connection")}
                     </DialogTitle>
                     <DialogDescription>
-                        Connection credentials are stored encrypted. Use a read-only database role.
+                        {description ?? "Connection credentials are stored encrypted. Use a read-only database role."}
                     </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-2">
@@ -259,21 +360,39 @@ export function SqlConnectionFormDialog({
                         />
                         Require TLS / SSL
                     </label>
+                    {requestError && (
+                        <div
+                            role="alert"
+                            className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                            data-testid="sql-conn-error"
+                        >
+                            {requestError}
+                        </div>
+                    )}
                 </div>
                 <DialogFooter>
                     <Button variant="outline" onClick={() => onOpenChange(false)}>
                         Cancel
                     </Button>
                     <Button
+                        variant="outline"
+                        onClick={handleTest}
+                        disabled={!testable || testPending}
+                        data-testid="sql-conn-test"
+                    >
+                        {testPending ? "Testing…" : "Test connection"}
+                    </Button>
+                    <Button
                         onClick={handleSubmit}
                         disabled={disabled}
                         data-testid="sql-conn-submit"
                     >
-                        {isPending
+                        {submitPending
                             ? "Saving…"
-                            : mode === "create"
-                              ? "Create connection"
-                              : "Save changes"}
+                            : submitLabel ??
+                              (mode === "create"
+                                ? "Create connection"
+                                : "Save changes")}
                     </Button>
                 </DialogFooter>
             </DialogContent>
