@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { ChatMessage } from "../ChatMessage";
-import type { ChatSource } from "../../types";
+import type { ChatSource, ChatSqlCall } from "../../types";
 
 // Mock ReactMarkdown to avoid full markdown rendering in tests
 vi.mock("react-markdown", () => ({
@@ -198,5 +198,42 @@ describe("ChatMessage", () => {
     render(<ChatMessage content="Test" role="assistant" generator="openai" />);
     // No degraded badge
     expect(screen.queryByText("degraded mode")).not.toBeInTheDocument();
+  });
+
+  it("renders a collapsible SQL panel for each sqlCalls entry", () => {
+    const sqlCalls: ChatSqlCall[] = [
+      {
+        connectionId: "conn-1",
+        connectionName: "Primary DB",
+        sql: 'SELECT COUNT(*) FROM "user"',
+        rowCount: 1,
+        truncated: false,
+        durationMs: 42,
+      },
+    ];
+    render(
+      <ChatMessage content="There are 4 users." role="assistant" sqlCalls={sqlCalls} />,
+    );
+    // Summary is always visible; SQL body is collapsed by default.
+    expect(screen.getByText("Primary DB")).toBeInTheDocument();
+    expect(screen.queryByText('SELECT COUNT(*) FROM "user"')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("chat-sql-call-toggle"));
+    expect(screen.getByText('SELECT COUNT(*) FROM "user"')).toBeInTheDocument();
+  });
+
+  it("does not render a SQL panel on user messages even if sqlCalls provided", () => {
+    const sqlCalls: ChatSqlCall[] = [
+      {
+        connectionId: "conn-1",
+        connectionName: "Primary DB",
+        sql: "SELECT 1",
+        rowCount: 1,
+        truncated: false,
+        durationMs: 5,
+      },
+    ];
+    render(<ChatMessage content="hi" role="user" sqlCalls={sqlCalls} />);
+    expect(screen.queryByTestId("chat-sql-calls")).not.toBeInTheDocument();
   });
 });

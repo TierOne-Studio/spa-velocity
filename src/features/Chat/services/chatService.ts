@@ -102,6 +102,29 @@ async function parseStreamResponse(
         continue;
       }
 
+      if (event.event === "sql_executed") {
+        const typedPayload = payload as {
+          connectionId?: string;
+          connectionName?: string;
+          sql?: string;
+          rowCount?: number;
+          truncated?: boolean;
+          durationMs?: number;
+        };
+        onEvent?.({
+          type: "sql_executed",
+          call: {
+            connectionId: typedPayload.connectionId ?? "",
+            connectionName: typedPayload.connectionName ?? "",
+            sql: typedPayload.sql ?? "",
+            rowCount: typedPayload.rowCount ?? 0,
+            truncated: typedPayload.truncated ?? false,
+            durationMs: typedPayload.durationMs ?? 0,
+          },
+        });
+        continue;
+      }
+
       if (event.event === "complete") {
         finalData = payload as SendChatMessageResponse;
         onEvent?.({ type: "complete", data: finalData });

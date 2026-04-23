@@ -27,7 +27,7 @@ import {
   useCreateConversation,
   useDeleteConversation,
 } from "../hooks/useChat";
-import type { ChatConversation, ChatMessage, ChatSource } from "../types";
+import type { ChatConversation, ChatMessage, ChatSource, ChatSqlCall } from "../types";
 import { ChatMessage as ChatMessageComponent } from "../components/ChatMessage";
 import { GenerationStatus, type GenerationStage } from "../components/GenerationStatus";
 import { ChatInput } from "../components/ChatInput";
@@ -39,6 +39,7 @@ type StreamingState = {
   stage: GenerationStage;
   searchQuery?: string;
   content: string;
+  sqlCalls: ChatSqlCall[];
 };
 
 type ConversationGroup = {
@@ -138,6 +139,11 @@ function groupConversations(conversations: ChatConversation[]): ConversationGrou
 function getSources(message: ChatMessage): ChatSource[] {
   const sources = message.metadata?.sources;
   return Array.isArray(sources) ? sources : [];
+}
+
+function getSqlCalls(message: ChatMessage): ChatSqlCall[] {
+  const calls = message.metadata?.sqlCalls;
+  return Array.isArray(calls) ? calls : [];
 }
 
 type ConversationRailContentProps = {
@@ -345,7 +351,7 @@ export function ChatPage() {
     }
 
     try {
-      setStreaming({ conversationId: targetConversationId, stage: "thinking", content: "" });
+      setStreaming({ conversationId: targetConversationId, stage: "thinking", content: "", sqlCalls: [] });
 
       await chatService.sendMessage({
         conversationId: targetConversationId,
@@ -369,7 +375,12 @@ export function ChatPage() {
           if (event.type === "chunk") {
             setStreaming((current) => {
               if (!current || current.conversationId !== targetConversationId) {
-                return { conversationId: targetConversationId, stage: "responding", content: event.content };
+                return {
+                  conversationId: targetConversationId,
+                  stage: "responding",
+                  content: event.content,
+                  sqlCalls: [],
+                };
               }
 
               return {
@@ -380,12 +391,27 @@ export function ChatPage() {
             });
           }
 
+          if (event.type === "sql_executed") {
+            setStreaming((current) => {
+              if (!current || current.conversationId !== targetConversationId) {
+                return {
+                  conversationId: targetConversationId,
+                  stage: "responding",
+                  content: "",
+                  sqlCalls: [event.call],
+                };
+              }
+              return { ...current, sqlCalls: [...current.sqlCalls, event.call] };
+            });
+          }
+
           if (event.type === "complete") {
-            setStreaming({
+            setStreaming((current) => ({
               conversationId: targetConversationId,
               stage: "idle",
               content: event.data.assistantMessage.content,
-            });
+              sqlCalls: current?.sqlCalls ?? [],
+            }));
           }
         },
       });
@@ -648,6 +674,7 @@ export function ChatPage() {
                       content={message.content}
                       role={message.role}
                       sources={getSources(message)}
+                      sqlCalls={getSqlCalls(message)}
                       generator={message.metadata?.generator}
                       createdAt={message.createdAt}
                     />
@@ -659,7 +686,13 @@ export function ChatPage() {
                         <GenerationStatus stage={streaming.stage} searchQuery={streaming.searchQuery} />
                       )}
 
-                      {streaming.content && <ChatMessageComponent content={streaming.content} role="assistant" />}
+                      {(streaming.content || streaming.sqlCalls.length > 0) && (
+                        <ChatMessageComponent
+                          content={streaming.content}
+                          role="assistant"
+                          sqlCalls={streaming.sqlCalls}
+                        />
+                      )}
                     </>
                   )}
                 </>
