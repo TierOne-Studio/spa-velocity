@@ -186,8 +186,8 @@ Per `react-testing`: query priority is `getByRole` → `getByLabelText` → `get
 
 | Convention | ADR |
 |---|---|
-| Zustand for client state, TanStack Query for server state | `ADR-001` |
-| TanStack Query as server-state library | `ADR-002` |
+| Zustand for app-wide client state | `ADR-001` |
+| TanStack Query for server state | `ADR-002` |
 | React Router 7 as routing library | `ADR-003` |
 | Tailwind 4 + Radix + CVA as styling system | `ADR-004` |
 | RHF + Zod for forms | `ADR-005` |
@@ -196,8 +196,6 @@ Per `react-testing`: query priority is `getByRole` → `getByLabelText` → `get
 | No AI-attribution trailers in commits/PRs | `ADR-008` |
 | Asks-first dependency gate | `ADR-009` |
 | Skill-vs-repo conflict resolution | `ADR-010` |
-
-(ADR numbers are placeholders here; the actual numbers land in Phase 7 when `docs/decisions/` is created. The ADR table will be the citation source for the *why*; this skill carries the *what*.)
 
 ## Cross-references
 

@@ -42,46 +42,53 @@ Replace nested validation with guard clauses that return early. Each early retur
 
 ### Anti-pattern: nested validation pyramid
 
-```ts
+```tsx
 // ❌ 4 levels of nesting; happy path is buried
-async function loadProject(id: string, scope: OrgScope): Promise<Project> {
-  if (scope) {
-    if (scope.mode === 'single') {
-      if (scope.organizationId) {
-        const project = await fetchProject(id, scope.organizationId)
-        if (project) {
-          return project
+function ProjectAccessGate({ projectId, children }: Props) {
+  const auth = useAuth()
+  const org = useOrgScope()
+
+  if (auth.user) {
+    if (org.organizationId) {
+      const project = useProject(projectId, org.organizationId)
+      if (project.data) {
+        if (project.data.archived !== true) {
+          return <>{children}</>
         } else {
-          throw new Error(`Project ${id} not found`)
+          return <Forbidden message={`Project ${projectId} is archived`} />
         }
       } else {
-        throw new Error('organization id required')
+        return <Spinner />
       }
     } else {
-      throw new Error('scope=all not supported here')
+      return <Forbidden message="Pick an organization first" />
     }
   } else {
-    throw new Error('scope required')
+    return <Navigate to="/login" />
   }
 }
 ```
 
 ### Refactor: guard clauses + happy path at the bottom
 
-```ts
+```tsx
 // ✅ Each precondition is a guard; happy path is unindented
-async function loadProject(id: string, scope: OrgScope): Promise<Project> {
-  if (!scope) throw new Error('scope required')
-  if (scope.mode !== 'single') throw new Error('scope=all not supported here')
-  if (!scope.organizationId) throw new Error('organization id required')
+function ProjectAccessGate({ projectId, children }: Props) {
+  const auth = useAuth()
+  const org = useOrgScope()
+  const project = useProject(projectId, org.organizationId)
 
-  const project = await fetchProject(id, scope.organizationId)
-  if (!project) throw new Error(`Project ${id} not found`)
-  return project
+  if (!auth.user) return <Navigate to="/login" />
+  if (!org.organizationId) return <Forbidden message="Pick an organization first" />
+  if (project.isLoading) return <Spinner />
+  if (!project.data) return <Forbidden message={`Project ${projectId} not found`} />
+  if (project.data.archived) return <Forbidden message={`Project ${projectId} is archived`} />
+
+  return <>{children}</>
 }
 ```
 
-Cyclomatic complexity dropped (still 5, but readability dramatically improved). Each guard says "this *must* be true to proceed."
+Cyclomatic complexity unchanged (still 5), but the happy path is unindented and each guard says "this *must* be true to proceed." This is the JSX-shaped equivalent of throwing early in a service function.
 
 ### Rule of thumb
 

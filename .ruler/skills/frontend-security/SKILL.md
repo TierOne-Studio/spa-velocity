@@ -20,7 +20,7 @@ A SPA's attack surface is small but unforgiving. The big risks are XSS (any user
 
 1. **Never put secrets in `VITE_*` vars.** Anything prefixed `VITE_` is bundled into client JS and shipped publicly. Allowed: API base URLs, public anon keys (Supabase, Firebase config), feature flags. Forbidden: API keys, JWT secrets, OAuth client secrets, third-party admin tokens.
 
-2. **Auth token in `localStorage.bearer_token` is the repo's choice (better-auth requires header delivery).** This is documented in an ADR. Token rotation, sign-out across tabs, and expiry handling all flow through better-auth's built-in events. Don't introduce a parallel token store.
+2. **Auth token in `localStorage.bearer_token` is the repo's choice (better-auth requires header delivery).** Documented in `ADR-007`. Token rotation, sign-out across tabs, and expiry handling all flow through better-auth's built-in events. Don't introduce a parallel token store.
 
 3. **No raw HTML injection.** `dangerouslySetInnerHTML` is allowed only with an explicit sanitization step (DOMPurify, or `react-markdown` with the default sanitizer plugin). Document the sanitizer choice inline.
 

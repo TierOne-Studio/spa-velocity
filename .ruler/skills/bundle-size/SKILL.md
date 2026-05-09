@@ -101,4 +101,4 @@ Production deploy should serve `.js` and `.css` with Brotli (or Gzip fallback). 
 - `vite` — Vite-config knobs for chunk strategy.
 - `react-routing` — code splitting per route.
 - `frontend-security` — dep audit, supply-chain.
-- ADR — asks-first dep gate (port from api-velocity ADR-006 → spa-velocity equivalent).
+- `ADR-009` — asks-first dependency gate (every new `dependencies` entry requires explicit user approval, with reason / bundle cost / alternatives / license / maintenance signal).

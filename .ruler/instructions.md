@@ -146,7 +146,7 @@ Final confidence = `min(model_rubric, every_subagent_confidence_that_ran)`. **BL
 
 ### P5.1 Memory consult — read FIRST
 
-Before any code change, MUST read `~/.claude/projects/<encoded-repo-path>/memory/MEMORY.md` (the auto-memory index) and any linked `feedback`-type memory files for the area being changed. Past corrections live there; ignoring them re-creates resolved problems.
+Before any code change, MUST consult the auto-memory system — read the index entry and any linked `feedback`-type memories for the area being changed. Past corrections live there; ignoring them re-creates resolved problems. The `lessons-curator` skill describes the memory layout and survey procedure.
 
 ### P5.2 Scope discipline
 
@@ -193,7 +193,7 @@ When you disagree with the user's framing, find a simpler in-scope alternative, 
 
 Signals: `"no, that's wrong"`, `"you should have"`, `"we discussed this"`, `"stop doing X"`, `"next time"`. When the user issues a correction, the IMMEDIATE next response MUST:
 
-1. Write a `feedback`-type memory file in `~/.claude/projects/<encoded-repo-path>/memory/` with **rule + Why + How to apply**, and add a one-line entry to `MEMORY.md`.
+1. Write a `feedback`-type memory entry per the auto-memory system (rule + Why + How to apply) and add a one-line entry to the memory index. The `lessons-curator` skill carries the file-layout details.
 2. Output the literal line: `Lesson captured to memory. Want lessons-curator to refine it? (reply 'yes' / 'curate that' / 'skip')`
 
 `lessons-curator` (read-only) proposes ONE concrete change (skill / CLAUDE.md / settings.json) for approval. It does not write files. Memory is the durable record; curator is optional refinement. Save unconditionally — even when the correction feels minor.
@@ -273,7 +273,7 @@ Situation → skill lookup. (Skill bodies are the canonical source; this is the 
 | Server data — fetching, caching, invalidation, optimistic updates | `react-data-fetching` |
 | Rerender cost, memoization, virtualization, code splits | `react-performance` (+ `react-render-optimization` for deeper rerender mechanics) |
 | Routes, guards, expired-session flow, code-split per route | `react-routing` |
-| Forms — RHF + Zod + `<Field>` compound | `react-forms` |
+| Forms — RHF + Zod, schema-first + accessible field-error wiring | `react-forms` |
 | Tests — Vitest + Testing Library queries + Playwright layer choice | `react-testing` (+ `playwright-best-practices` for e2e) |
 | Semantic HTML, ARIA, focus, keyboard, axe — UI changes | `accessibility` |
 | XSS sinks, `VITE_*` leakage, token storage, dep audit | `frontend-security` |

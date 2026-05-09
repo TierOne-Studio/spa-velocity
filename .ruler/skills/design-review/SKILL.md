@@ -138,25 +138,27 @@ return await fetch(url)  // throws on failure with timing/url/status context
 ### Manager / Helper / Util naming
 ```ts
 // Bad — what does this *actually* do?
-class ProjectManager { ... }
-class AuthHelper { ... }
+function projectHelper(p: Project) { ... }
 function stringUtil(s: string) { ... }
+function useDataManager() { ... }
 
 // Good — name describes the responsibility
-class OrgScopedProjectFinder { ... }
-class JwtIssuer { ... }
+function useArchivedProjectsForCurrentOrg() { ... }
 function slugify(name: string) { ... }
+function useChatConversationList() { ... }
 ```
 
 ### Premature abstraction
 ```ts
-// Bad — generic interface for ONE concrete caller
-abstract class BaseService<T extends BaseEntity, R extends Repository<T>> { ... }
-class ProjectService extends BaseService<Project, ProjectRepo> { ... }
+// Bad — generic hook for ONE concrete caller
+function useResourceList<T extends BaseResource, K extends ResourceKey>(key: K, fetcher: Fetcher<T>) { ... }
+const projects = useResourceList(projectKeys.all, fetchProjects)
 // (no second consumer exists)
 
 // Good — concrete now, generalize when caller #2 appears
-class ProjectService { ... }
+function useProjects() {
+  return useQuery({ queryKey: projectKeys.all, queryFn: fetchProjects })
+}
 ```
 
 ### Configuration flags "for future flexibility"
