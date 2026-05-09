@@ -1,6 +1,6 @@
 ---
 name: proxy-pattern
-description: Teaches the proxy pattern for intercepting object operations. Use when you need validation, logging, formatting, or access control on property access, assignment, or function invocation.
+description: Use when adding the JavaScript `Proxy` API to intercept property access, assignment, or function calls — typical cases are debugging instrumentation, immutability wrappers, schema validation in tests, or library internals. Most application code does NOT need a Proxy; reach for it only when a thinner option (typed accessor, getter/setter, plain function) won't do. NOT for general design-pattern coverage.
 paths:
   - "**/*.js"
   - "**/*.ts"

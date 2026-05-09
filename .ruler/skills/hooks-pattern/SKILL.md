@@ -1,6 +1,6 @@
 ---
 name: hooks-pattern
-description: Teaches React Hooks for reusing stateful logic across components. Use when extracting shared behavior like form handling, subscriptions, or side effects into reusable custom hooks.
+description: Use when designing or reviewing custom React hooks — extracting stateful logic, subscriptions, or side effects into a reusable `use*` function — and when judging whether a piece of behavior belongs in a hook vs a component vs a server-state query. NOT for plain helper functions, framework-internal hooks (`useState`, `useEffect`) used inline, or component-level state with no reuse signal. Pair with `react-state-management` for state-placement decisions and `react-patterns` for component-shape decisions.
 context: fork
 allowed-tools: Read, Grep, Glob
 paths:
