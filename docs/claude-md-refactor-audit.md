@@ -1,37 +1,34 @@
-# CLAUDE.md Distributed-Refactor — Phase 1 Audit
+# CLAUDE.md Distributed-Refactor — Audit (corrected after Phase 3)
 
 This document records the starting state of `spa-velocity` and the classification of every existing artifact before the distributed refactor begins. It exists so nothing disappears silently and so each later phase has a fixed reference point.
 
 Refactor target: bring `spa-velocity` to the same architectural shape as `api-velocity` — priority-ordered router + skills + subagents + ADRs + settings. Driver: [docs/claude-md-refactor-playbook-react-spa.md](claude-md-refactor-playbook-react-spa.md).
 
-## Critical discovery — `ruler` is the source of truth
+> **Note (Phase 3 correction).** The Phase-1 version of this document misreported the contents of `.ruler/skills/` and `.ruler/agents/` because the audit shell session had drifted into the sibling `api-velocity` repo when it ran `ls .ruler/`. This corrected version reflects what was actually in `spa-velocity`'s ruler tree at the start of the refactor. The Phase-1 commit (snapshots + audit doc) was kept as-is for paper trail; this correction is folded into Phase 3 alongside the duplicate cleanup and stale-skill drops.
 
-`spa-velocity` uses [`@mravinale/ruler`](https://www.npmjs.com/package/@mravinale/ruler) (the user's own package) to propagate a single source of truth in `.ruler/` to multiple AI-tool config locations: `CLAUDE.md`, `.claude/skills/`, `.codex/skills/`, `.cursor/skills/`, `.github/copilot-instructions.md`, `AGENTS.md`. All of those are gitignored as ruler-generated outputs.
+## Critical context — `ruler` is the source of truth
 
-**Implication for this refactor:** every change must land in `.ruler/`, not in the generated outputs. The generated `.claude/skills/` and `CLAUDE.md` are working-tree artifacts only; they are recreated by `npx ruler apply` from the canonical sources.
+`spa-velocity` uses [`@mravinale/ruler`](https://www.npmjs.com/package/@mravinale/ruler) (the user's own package) to propagate a single source of truth in `.ruler/` to multiple AI-tool config locations: `CLAUDE.md`, `.claude/skills/`, `.codex/skills/`, `.cursor/skills/`, `.github/copilot-instructions.md`, `AGENTS.md`. All of those are gitignored as ruler-generated outputs. Every change must land in `.ruler/`.
 
-### Ruler state at the start of this refactor
+## Actual `.ruler/` state at the start of the refactor
 
-`.ruler/` is **already partially aligned with `api-velocity`** — it was seeded from there and most structural pieces exist:
+| Path | State | Notes |
+|---|---|---|
+| `.ruler/instructions.md` | 390 lines, ~17.6 KB, **already React-SPA-flavored** | Header: "SOFTWARE DEVELOPMENT OPERATIONS — RLM ENGINEER (REACT SPA)". This is the source for the current `CLAUDE.md`. Snapshot kept at `.ruler/instructions.md.pre-refactor.bak`. |
+| `.ruler/skills/` | **86 entries: 51 unique skills + 35 ` copy` Finder duplicates** | Catalog described below. **No process/doctrine skills present** (no `tdd-workflow`, `design-review`, `plan-mode`, `repo-conventions`, `failure-mode-analysis`, `bug-investigation`, etc.). |
+| `.ruler/agents/` | does not exist | Subagents must be added from scratch. |
+| `.ruler/tests/` | does not exist | Acceptance scripts will be added later if needed. |
+| `.ruler/ruler.toml` | 51 lines | Configures Copilot / Claude / Codex / Cursor / Windsurf as output targets; `[skills] enabled = true`; no `[agents]` section. |
 
-| Path | Count | Origin | Notes |
-|---|---|---|---|
-| `.ruler/instructions.md` | 1 (324 lines) | api-velocity-flavored prose | NestJS / RBAC / TypeORM / scope contract content. Snapshot: `.ruler/instructions.md.pre-refactor.bak`. |
-| `.ruler/skills/` | 23 | identical to api-velocity catalog | `tdd-workflow`, `design-review`, `plan-mode`, `repo-conventions`, `failure-mode-analysis`, `bug-investigation`, `rlm-explore`, `decision-rules`, `pushback-templates`, `git-workflow`, `documentation-and-adrs`, `code-simplifier`, `cyclomatic-complexity`, `meta-skill-hygiene`, `async-error-handling`, `typescript-advanced-types`, `js-performance-patterns`, `nodejs-best-practices`, `nestjs-best-practices`, `nestjs-clean-architecture`, `nestjs-patterns`, `database-transactions`, `db-write-protocol`. |
-| `.ruler/agents/` | 5 | identical to api-velocity | `architect-reviewer`, `code-reviewer`, `qa-validator`, `security-reviewer`, `lessons-curator`. Bodies still NestJS-flavored. |
-| `.ruler/tests/` | 2 | identical | `run-acceptance.sh`, `simulate-prompts.sh`. |
-| `.ruler/ruler.toml` | 1 | repo-specific | Configures Copilot / Claude / Codex / Cursor / Windsurf as output targets. |
+### Ruler skills inventory (51 unique)
 
-### Outside-of-ruler state at start
+**Patterns.dev catalog (44):** `ai-ui-patterns`, `bundle-splitting`, `client-side-rendering`, `command-pattern`, `compound-pattern`, `compression`, `dynamic-import`, `factory-pattern`, `flyweight-pattern`, `hoc-pattern`, `hooks-pattern`, `import-on-interaction`, `import-on-visibility`, `incremental-static-rendering`, `islands-architecture`, `js-performance-patterns`, `loading-sequence`, `mediator-pattern`, `mixin-pattern`, `module-pattern`, `observer-pattern`, `prefetch`, `preload`, `presentational-container-pattern`, `progressive-hydration`, `prototype-pattern`, `provider-pattern`, `proxy-pattern`, `prpl`, `react-2026`, `react-composition-2026`, `react-data-fetching`, `react-render-optimization`, `react-selective-hydration`, `render-props-pattern`, `route-based`, `singleton-pattern`, `static-import`, `streaming-ssr`, `third-party`, `tree-shaking`, `view-transitions`, `virtual-lists`, `vite-bundle-optimization`.
 
-| Path | Count | Origin | Treatment |
-|---|---|---|---|
-| `CLAUDE.md` | 1 (2,761 words) | ruler-generated | Snapshot: `CLAUDE.md.pre-refactor.bak`. Will be regenerated from new `.ruler/instructions.md`. |
-| `.claude/skills/` | 45 | **NOT from ruler** — patterns.dev catalog cloned in separately | Gitignored. Most don't exist in `.ruler/skills/`, so `ruler apply` would wipe them. The 16 KEEP-classified ones below are being ported into `.ruler/skills/`. |
-| `.claude/agents/` | 0 | empty | Will be regenerated from `.ruler/agents/`. |
-| `.claude/settings.json` | 1 | tracked outside ruler | `allow`-only allowlist. Phase 2 will add `deny`/`ask` gates. |
-| `docs/decisions/` | — | does not exist | Phase 7 creates ADRs here. |
-| Memory | wired | `~/.claude/projects/<encoded>/memory/MEMORY.md` | Phase 8 wires P5 read / P7 write into router. |
+**SPA tooling skills (5):** `vite`, `vitest`, `shadcn`, `tailwind-v4-shadcn`, `playwright-best-practices`.
+
+**Universal skills (2):** `code-simplifier`, `typescript-advanced-types`.
+
+(Note: `js-performance-patterns` straddles "patterns.dev" and "universal" categories — kept either way.)
 
 ## Stack discovered
 
@@ -43,62 +40,79 @@ Refactor target: bring `spa-velocity` to the same architectural shape as `api-ve
 - **Test**: Vitest 4 + Testing Library + `user-event` + jsdom; Playwright 1.57 (Chromium)
 - **HTTP**: axios for non-auth endpoints; `better-auth` client for auth surface
 
-## Skill audit — what stays, what changes, what's added
+## Phase 3 cleanup (this commit)
 
-### `.ruler/skills/` — DROP from existing 23 (irrelevant on a SPA)
+### Removed: 35 ` copy` duplicates
 
-| Skill | Why dropped |
-|---|---|
-| `nestjs-best-practices` | NestJS-only |
-| `nestjs-clean-architecture` | NestJS-only |
-| `nestjs-patterns` | NestJS-only |
-| `nodejs-best-practices` | Server-runtime focus; SPA uses browser runtime |
-| `database-transactions` | No DB writes from a SPA |
-| `db-write-protocol` | No DB writes from a SPA |
+Finder-style duplicates left from manual file ops. Removed: `bundle-splitting copy`, `command-pattern copy`, `compression copy`, `dynamic-import copy`, `factory-pattern copy`, `flyweight-pattern copy`, `import-on-interaction copy`, `import-on-visibility copy`, `islands-architecture copy`, `js-performance-patterns copy`, `loading-sequence copy`, `mediator-pattern copy`, `mixin-pattern copy`, `module-pattern copy`, `observer-pattern copy`, `playwright-best-practices copy`, `prefetch copy`, `preload copy`, `prototype-pattern copy`, `provider-pattern copy`, `proxy-pattern copy`, `prpl copy`, `route-based copy`, `shadcn copy`, `singleton-pattern copy`, `static-import copy`, `tailwind-v4-shadcn copy`, `third-party copy`, `tree-shaking copy`, `typescript-advanced-types copy`, `view-transitions copy`, `virtual-lists copy`, `vite copy`, `vite-bundle-optimization copy`, `vitest copy`.
 
-Net after drops: **17 universal skills** stay in `.ruler/skills/`.
+### Removed: 29 patterns.dev skills (14 MERGE + 13 STALE + 2 DEPRECATED)
 
-### `.ruler/skills/` — KEEP (17 from api-velocity port)
+Recovery is a `git revert` away. Recoverable from git history.
 
-`tdd-workflow`, `design-review`, `plan-mode`, `repo-conventions` (rewrite body for spa-velocity), `failure-mode-analysis`, `bug-investigation`, `rlm-explore`, `decision-rules`, `pushback-templates`, `git-workflow`, `documentation-and-adrs`, `code-simplifier`, `cyclomatic-complexity`, `meta-skill-hygiene`, `async-error-handling`, `typescript-advanced-types`, `js-performance-patterns`.
+| Skill | Bucket | Replacement |
+|---|---|---|
+| `bundle-splitting` | MERGE | `react-performance` / `bundle-size` (Phase 4) |
+| `dynamic-import` | MERGE | `react-performance` |
+| `import-on-interaction` | MERGE | `react-performance` |
+| `import-on-visibility` | MERGE | `react-performance` |
+| `route-based` | MERGE | `react-routing` |
+| `compression` | MERGE | `bundle-size` |
+| `tree-shaking` | MERGE | `bundle-size` |
+| `vite-bundle-optimization` | MERGE | `bundle-size` (the existing `vite` skill stays) |
+| `loading-sequence` | MERGE | `react-performance` |
+| `prefetch` | MERGE | `react-performance` |
+| `preload` | MERGE | `react-performance` |
+| `third-party` | MERGE | `frontend-security` / `react-performance` |
+| `virtual-lists` | MERGE | `react-performance` |
+| `static-import` | MERGE | `bundle-size` |
+| `command-pattern` | STALE | — (generic GoF) |
+| `factory-pattern` | STALE | — |
+| `flyweight-pattern` | STALE | — |
+| `observer-pattern` | STALE | — (superseded by Context / store / event emitters) |
+| `singleton-pattern` | STALE | — (anti-pattern in modern React) |
+| `mediator-pattern` | STALE | — (superseded by store architectures) |
+| `prototype-pattern` | STALE | — (ES classes dominate) |
+| `client-side-rendering` | STALE | — (assumed in SPA context) |
+| `incremental-static-rendering` | OUT-OF-SCOPE | — (meta-framework only) |
+| `islands-architecture` | OUT-OF-SCOPE | — |
+| `progressive-hydration` | OUT-OF-SCOPE | — |
+| `streaming-ssr` | OUT-OF-SCOPE | — |
+| `react-selective-hydration` | OUT-OF-SCOPE | — |
+| `view-transitions` | DEPRECATED | — (web-API reference, not a pattern) |
+| `prpl` | DEPRECATED | — (superseded by Core Web Vitals framing) |
 
-### `.ruler/skills/` — ADD (9 new React-stack)
+### `.ruler/skills/` after Phase 3 cleanup: 22 skills
 
-`react-patterns`, `react-state-management`, `react-performance`, `react-routing`, `react-forms`, `react-testing`, `accessibility`, `frontend-security`, `bundle-size`.
+KEEP (8): `ai-ui-patterns`, `compound-pattern`, `presentational-container-pattern`, `provider-pattern`, `react-2026`, `react-composition-2026`, `react-data-fetching`, `react-render-optimization`.
 
-### `.ruler/skills/` — PORT from `.claude/skills/` patterns.dev catalog (KEEP-bucket)
+REWRITE-DESC (6): `hoc-pattern`, `hooks-pattern`, `mixin-pattern`, `module-pattern`, `proxy-pattern`, `render-props-pattern` — descriptions sharpened in Phase 4.
 
-These have no equivalent in api-velocity but are useful in this React SPA. They get folded into `.ruler/skills/` so they survive `ruler apply`:
+SPA tooling (5): `vite`, `vitest`, `shadcn`, `tailwind-v4-shadcn`, `playwright-best-practices`.
 
-`react-2026`, `react-composition-2026`, `react-data-fetching` (rewrite to cite `repo-conventions`), `react-render-optimization` (cite `react-performance`), `ai-ui-patterns`, `compound-pattern`, `presentational-container-pattern`, `provider-pattern`. Plus 6 with description rewrites: `hooks-pattern`, `hoc-pattern`, `render-props-pattern`, `module-pattern`, `mixin-pattern`, `proxy-pattern`.
+Universal (3): `code-simplifier`, `typescript-advanced-types`, `js-performance-patterns`.
 
-That's **14 patterns.dev skills carried forward into `.ruler/skills/`**.
+## Remaining phase plan
 
-### `.claude/skills/` patterns.dev catalog — DROP (29)
+| Phase | Goal | Net `.ruler/skills/` count after |
+|---|---|---|
+| 4 | Add **14 universal process skills** (port from api-velocity: `tdd-workflow`, `design-review`, `plan-mode`, `failure-mode-analysis`, `bug-investigation`, `rlm-explore`, `decision-rules`, `pushback-templates`, `git-workflow`, `documentation-and-adrs`, `cyclomatic-complexity`, `meta-skill-hygiene`, `async-error-handling`, `nodejs-best-practices`-replacement-or-skip). Add **9 React-stack skills** (`react-patterns`, `react-state-management`, `react-performance`, `react-routing`, `react-forms`, `react-testing`, `accessibility`, `frontend-security`, `bundle-size`). Rewrite descriptions on the 6 REWRITE-DESC skills. | 45 |
+| 5 | Add `repo-conventions` (write fresh, grounded in spa-velocity facts). | 46 |
+| 6 | Create `.ruler/agents/` and add the 5 subagents (`architect-reviewer`, `code-reviewer`, `qa-validator`, `security-reviewer`, `lessons-curator`) — write SPA-flavored bodies. | — |
+| 7 | Create `docs/decisions/` with `_template.md`, `README.md`, and ~10 ADRs. | — |
+| 8 | Rewrite `.ruler/instructions.md` as the priority-ordered router (P0–P9 + Skill Pointers + Workflow Chains, strict 5×0.20 rubric, P3.4 force-load incl. `accessibility`, P5 read-memory + P7 reflexive-capture). Run `npx ruler apply`. Smoke test. | — |
 
-Not ported to `.ruler/`. Cease to exist after `ruler apply`. Recovery via git history if ever needed.
+## Subagents — gap
 
-- 14 MERGE — content folded into the new stack skills (`bundle-splitting`, `dynamic-import`, `import-on-interaction`, `import-on-visibility`, `route-based`, `compression`, `tree-shaking`, `vite-bundle-optimization`, `loading-sequence`, `prefetch`, `preload`, `third-party`, `virtual-lists`, `static-import`)
-- 13 STALE — generic GoF / SSR / hybrid-meta-framework patterns that don't fire on a pure SPA stack (`command-pattern`, `factory-pattern`, `flyweight-pattern`, `observer-pattern`, `singleton-pattern`, `mediator-pattern`, `prototype-pattern`, `client-side-rendering`, `incremental-static-rendering`, `islands-architecture`, `progressive-hydration`, `streaming-ssr`, `react-selective-hydration`)
-- 2 DEPRECATED — `view-transitions` (web-API reference, not a pattern), `prpl` (superseded by Core Web Vitals framing)
+`.ruler/agents/` does not exist. Phase 6 creates it and adds all 5 subagents from scratch.
 
-### Final `.ruler/skills/` count after refactor: **40**
+## Settings hardening — done in Phase 2
 
-(17 universal + 9 react-stack + 14 ported patterns.dev = 40.)
+`deny` (mechanical): main/master writes (every form), `--force` pushes, `git rebase -i main`, `git reset --hard`, `git clean -fd/-fdx`, `npm publish` family, `vercel deploy`, `netlify deploy`, `gh-pages -d`, `gh release` writes.
 
-## Subagents — adapt all 5
-
-`.ruler/agents/` already has the 5 files. Bodies are NestJS-flavored. Phase 6 rewrites bodies for SPA concerns:
-
-- `architect-reviewer` — state-lib boundaries, error-boundary placement, code-splitting decisions, prop-drilling-vs-context-vs-store calls
-- `code-reviewer` — same SOLID/DRY/KISS/SoC mandate, no body change to mandate, just frontend examples
-- `qa-validator` — Testing Library priority order, axe a11y checks, MSW handler completeness, E2E coverage for critical paths
-- `security-reviewer` — XSS sinks (`dangerouslyInnerHTML`, `react-markdown` configuration), `VITE_*` env-var leakage, `localStorage.bearer_token` audit, postMessage/iframe origins, dependency `npm audit`
-- `lessons-curator` — unchanged (read-only proposer)
+`ask`: `gh pr` writes, `gh issue` writes, `gh repo create/delete`, `npm version`, `npm install --save*`, `npm uninstall`, `rm -rf:*`.
 
 ## ADR plan (`docs/decisions/`, Phase 7)
-
-Likely 9–10 ADRs:
 
 1. State management library (Zustand)
 2. Server-state library (TanStack Query)
@@ -110,27 +124,3 @@ Likely 9–10 ADRs:
 8. No AI-attribution trailers (port verbatim from api-velocity ADR-008)
 9. Asks-first dependency gate (port verbatim from api-velocity ADR-006)
 10. Skill-vs-repo conflict resolution (port verbatim from api-velocity ADR-007)
-
-## Settings hardening (`.claude/settings.json`, Phase 2)
-
-`deny` (mechanical hard-fail):
-- `git push` to `main` / `master`
-- `git push --force` (any branch)
-- `npm publish`
-
-`ask` (require approval):
-- `git commit`, `git push`, `gh pr create`, `gh pr merge`, `gh pr close`
-- `npm version`, `vercel deploy`, `netlify deploy`
-
-## Phase plan (revised after ruler discovery)
-
-1. **Phase 1** (this commit) — Audit + ruler discovery + snapshots (`.ruler/instructions.md.pre-refactor.bak`, `CLAUDE.md.pre-refactor.bak`).
-2. **Phase 2** — `.claude/settings.json` `deny`/`ask` gates.
-3. **Phase 3** — `.ruler/skills/`: drop the 6 NestJS/Node skills; keep the 17 universal ones (no edits needed for now).
-4. **Phase 4** — `.ruler/skills/`: add 9 React-stack skills + port the 14 patterns.dev KEEP/REWRITE-DESC ones.
-5. **Phase 5** — Rewrite `.ruler/skills/repo-conventions/SKILL.md` body for spa-velocity (concrete folder/state/routing/test conventions).
-6. **Phase 6** — Rewrite the 5 `.ruler/agents/*.md` bodies for SPA concerns.
-7. **Phase 7** — Create `docs/decisions/` (template + README + ~10 ADRs).
-8. **Phase 8** — Rewrite `.ruler/instructions.md` as the priority-ordered router (P0–P9 + Skill Pointers + Workflow Chains, strict 5×0.20 rubric, P3.4 force-load incl. `accessibility`, P5 read-memory + P7 reflexive-capture). Run `npx ruler apply`. Smoke test.
-
-Single PR, one commit per phase.
