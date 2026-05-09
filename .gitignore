@@ -143,6 +143,7 @@ playwright-report
 
 # START Ruler Generated Files
 /.claude/skills
+/.claude/agents
 /.codex/config.toml
 /.codex/config.toml.bak
 /.codex/skills
@@ -156,5 +157,6 @@ playwright-report
 # END Ruler Generated Files
 .agents
 .continue
-.claude
+.claude/worktrees/
+.claude/settings.local.json
 .github
