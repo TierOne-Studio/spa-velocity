@@ -99,6 +99,7 @@ These skills MUST fire on every executable-code change in this repo, even if the
 | `plan-mode` | 3+ steps OR multi-file OR architectural OR debugging-with-uncertain-root-cause. |
 | `react-patterns` | Any change touching components, hooks, or rendering. |
 | `accessibility` | Any change touching UI markup or interactive elements. |
+| `cross-repo-workspace` | Session has access to both spa-velocity and api-velocity (primary cwd is one, the other is in Additional working directories). |
 
 If a force-fire skill genuinely doesn't apply to the change, state it with reason: `<skill> waived — <reason>`. Silent omission is a P8 contract violation.
 
@@ -285,6 +286,7 @@ Situation → skill lookup. (Skill bodies are the canonical source; this is the 
 | Streaming/chat AI UIs | `ai-ui-patterns` |
 | Modern React composition idioms | `react-composition-2026` (+ `react-2026` for the broader stack tour) |
 | Custom hooks, HOCs, render-props, providers, compound, presentational/container, modules, mixins, proxies | `hooks-pattern` / `hoc-pattern` / `render-props-pattern` / `provider-pattern` / `compound-pattern` / `presentational-container-pattern` / `module-pattern` / `mixin-pattern` / `proxy-pattern` |
+| Workspace with both spa-velocity + api-velocity — lens-switching, ADR qualification, coordination docs, dual-memory capture | `cross-repo-workspace` |
 
 ---
 
