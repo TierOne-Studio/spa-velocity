@@ -1,6 +1,6 @@
 ---
 name: frontend-security
-description: Use when reviewing or implementing anything on the SPA's security surface — XSS sinks (`dangerouslySetInnerHTML`, raw `react-markdown`, third-party HTML), token storage, env-var leakage (`VITE_*`), CSP, dependency audit, postMessage origin checks, URL parameter handling that affects auth state, file upload/download flows, and OAuth/redirect flows. Force-fire on diffs touching auth, tokens, user-supplied HTML, or env vars per CLAUDE.md P4.
+description: Use when reviewing or implementing anything on the SPA's security surface — XSS sinks (`dangerouslySetInnerHTML`, raw `react-markdown`, third-party HTML), token storage, env-var leakage (`VITE_*`), CSP, dependency audit, postMessage origin checks, URL parameter handling that affects auth state, file upload/download flows, and OAuth/redirect flows. Force-fire on diffs touching auth, tokens, user-supplied HTML, or env vars per CLAUDE.md P4. NOT for pure visual styling changes with no DOM-injection or auth surface, pure data-shape refactors that don't cross a trust boundary, or backend-only audits (those belong on the api-velocity side).
 ---
 
 # Frontend Security

@@ -1,6 +1,6 @@
 ---
 name: plan-mode
-description: Use BEFORE executing non-trivial tasks — 3+ steps, multi-file changes, architectural or design decisions, debugging with uncertain root cause, verification work, anything with meaningful behavior or delivery risk. NOT for trivial single-file edits, factual answers, or read-only investigations where the answer is obvious.
+description: Use BEFORE executing non-trivial tasks — 3+ steps, multi-file changes, architectural or design decisions, debugging with uncertain root cause, verification work, anything with meaningful behavior or delivery risk. Produces a per-step plan with verify clauses, dependency-graph analysis, slice strategy, and assumptions block. NOT for trivial single-file edits, factual answers, or read-only investigations where the answer is obvious.
 ---
 
 # Plan Mode
