@@ -411,6 +411,19 @@ assert_true "T15: Rule 7 (settings-gate) present"       "grep -q 'Rule 7 — Set
 assert_true "T15: ADR collision table present"          "grep -q 'TypeORM-first persistence.*Zustand for client state\\|Zustand for client state' $XRS"
 assert_true "T15: lens-switch attestation directive"    "grep -q 'Lens-switch:' $XRS"
 
+# Enforcement directives — these turn doctrine into subagent audit items
+assert_true "T15: ENFORCE-1 per-repo architect-reviewer invocation directive"   "grep -q 'ENFORCE-1' $XRS"
+assert_true "T15: ENFORCE-2 coordination-doc presence audit directive"          "grep -q 'ENFORCE-2' $XRS"
+assert_true "T15: ENFORCE-3 lens-switch attestation audit directive"            "grep -q 'ENFORCE-3' $XRS"
+assert_true "T15: ENFORCE-4 bare ADR-NNN audit directive"                       "grep -q 'ENFORCE-4' $XRS"
+assert_true "T15: ENFORCE-1 names architect-reviewer as the executor"           "awk '/ENFORCE-1/,/ENFORCE-2/' $XRS | grep -q 'architect-reviewer'"
+assert_true "T15: ENFORCE-2 names architect-reviewer as the executor"           "awk '/ENFORCE-2/,/ENFORCE-3/' $XRS | grep -q 'architect-reviewer'"
+assert_true "T15: ENFORCE-3 names code-reviewer as the executor"                "awk '/ENFORCE-3/,/ENFORCE-4/' $XRS | grep -q 'code-reviewer'"
+assert_true "T15: ENFORCE-1 cites severity (MED)"                               "awk '/ENFORCE-1/,/ENFORCE-2/' $XRS | grep -q 'MED'"
+assert_true "T15: ENFORCE-2 cites severity (HIGH)"                              "awk '/ENFORCE-2/,/ENFORCE-3/' $XRS | grep -q 'HIGH'"
+assert_true "T15: ENFORCE-3 cites severity (HIGH)"                              "awk '/ENFORCE-3/,/ENFORCE-4/' $XRS | grep -q 'HIGH'"
+assert_true "T15: ENFORCE-4 cites severity (MED)"                               "awk '/ENFORCE-4/,/^## /' $XRS | grep -q 'MED'"
+
 # ---------------------------------------------------------------------------
 # T16 — repo-conventions skill (spa-velocity-grounded)
 # ---------------------------------------------------------------------------
