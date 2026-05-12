@@ -1,6 +1,6 @@
 ---
 name: hoc-pattern
-description: Teaches the Higher-Order Component (HOC) pattern for logic reuse. Use when you need to share cross-cutting concerns like authentication, logging, or data fetching across multiple components.
+description: Use when reading or modernizing a Higher-Order Component (HOC) in legacy code, OR when comparing HOC vs custom hook vs render props for a NEW cross-cutting concern (auth wrap, analytics, error-boundary). In modern React, hooks are usually the right choice — this skill covers the HOC pattern so you can recognize, refactor, or deliberately keep one. NOT for custom hooks (`hooks-pattern`), provider-based dependency injection (`provider-pattern`), or component composition (`react-composition-2026`).
 paths:
   - "**/*.tsx"
   - "**/*.jsx"

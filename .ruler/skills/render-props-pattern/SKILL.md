@@ -1,6 +1,6 @@
 ---
 name: render-props-pattern
-description: Teaches the render props pattern for flexible component composition. Use when you need to share rendering logic between components by passing a function that returns JSX as a prop.
+description: Use when designing a component that needs to expose state or behavior to a caller-controlled render — typical cases are headless / unstyled libraries (e.g., a `<DataLoader>{(state) => ...}</DataLoader>`) or third-party components that hand back render-time data. NOT for ordinary parent-child composition (use `children` directly) or when a custom hook would do the same job with less ceremony (most cases — see `hooks-pattern`).
 paths:
   - "**/*.tsx"
   - "**/*.jsx"

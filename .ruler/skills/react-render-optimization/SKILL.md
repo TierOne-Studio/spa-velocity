@@ -1,6 +1,6 @@
 ---
 name: react-render-optimization
-description: Teaches React rendering performance optimization patterns. Use when reducing unnecessary re-renders, optimizing memoization, improving state design, or diagnosing React performance issues.
+description: Teaches React rendering performance optimization patterns. Use when reducing unnecessary re-renders (or rerenders), optimizing memoization with useMemo/useCallback/React.memo, improving state design to avoid keystroke-driven cascades, or diagnosing React performance issues.
 context: fork
 allowed-tools: Read, Grep, Glob
 paths:

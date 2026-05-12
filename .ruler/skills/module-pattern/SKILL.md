@@ -1,6 +1,6 @@
 ---
 name: module-pattern
-description: Teaches the module pattern for code organization and encapsulation. Use when structuring JavaScript into reusable, maintainable pieces with clear public and private boundaries.
+description: Use when designing a non-React JavaScript module for the SPA — utility modules, formatting libraries, schema definitions, or service-layer wrappers — and you need to decide what to export, what to keep file-private, and how the module shape affects tree-shaking and testability. NOT for React component files, hooks, or framework-managed entry points.
 paths:
   - "**/*.js"
   - "**/*.ts"
