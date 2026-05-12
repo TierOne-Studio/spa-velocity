@@ -8,7 +8,7 @@ Refactor target: bring `spa-velocity` to the same architectural shape as `api-ve
 
 ## Critical context — `ruler` is the source of truth
 
-`spa-velocity` uses [`@mravinale/ruler`](https://www.npmjs.com/package/@mravinale/ruler) (the user's own package) to propagate a single source of truth in `.ruler/` to multiple AI-tool config locations: `CLAUDE.md`, `.claude/skills/`, `.codex/skills/`, `.cursor/skills/`, `.github/copilot-instructions.md`, `AGENTS.md`. All of those are gitignored as ruler-generated outputs. Every change must land in `.ruler/`.
+`spa-velocity` uses [`@intellectronica/ruler`](https://www.npmjs.com/package/@intellectronica/ruler) (pinned at `0.3.40`) to propagate a single source of truth in `.ruler/` to multiple AI-tool config locations: `CLAUDE.md`, `.claude/skills/`, `.codex/skills/`, `.cursor/skills/`, `.github/copilot-instructions.md`, `AGENTS.md`. All of those are gitignored as ruler-generated outputs. Every change must land in `.ruler/`.
 
 ## Actual `.ruler/` state at the start of the refactor
 

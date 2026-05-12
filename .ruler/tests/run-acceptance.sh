@@ -4,7 +4,7 @@
 # Usage: bash .ruler/tests/run-acceptance.sh
 #
 # Runs against the generated outputs (CLAUDE.md, .claude/skills/, .claude/agents/),
-# which ruler regenerates from .ruler/. Run `npx @mravinale/ruler apply` first if you
+# which ruler regenerates from .ruler/. Run `npx @intellectronica/ruler apply` first if you
 # want the tests to reflect recent .ruler/ edits.
 
 set -uo pipefail
@@ -20,9 +20,9 @@ for tool in bash grep awk sed find wc jq; do
   fi
 done
 
-# Verify ruler-generated outputs are present (run `npx @mravinale/ruler apply` first if missing).
+# Verify ruler-generated outputs are present (run `npx @intellectronica/ruler apply` first if missing).
 if [ ! -f CLAUDE.md ] || [ ! -d .claude/skills ] || [ ! -d .claude/agents ]; then
-  echo "PRE-FAIL: generated outputs missing. Run 'npx @mravinale/ruler apply' first." >&2
+  echo "PRE-FAIL: generated outputs missing. Run 'npx @intellectronica/ruler apply' first." >&2
   exit 2
 fi
 
