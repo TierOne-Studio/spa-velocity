@@ -1992,6 +1992,13 @@ describe("UsersPage – pending users and approve/reject flows", () => {
     render(<UsersPage />)
 
     fireEvent.click(screen.getByRole("button", { name: /add user/i }))
+
+    // Wait for the async metadata fetch to resolve so newUserData.organizationId
+    // is populated before submit. Without this, the form's required-org guard
+    // fires before the mutation, masking the "Create error" assertion.
+    await waitFor(() => {
+      expect(mockGetCreateUserMetadata).toHaveBeenCalled()
+    })
     await screen.findByRole("dialog")
 
     fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: "Test User" } })

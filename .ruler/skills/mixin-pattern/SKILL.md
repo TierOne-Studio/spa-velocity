@@ -1,6 +1,6 @@
 ---
 name: mixin-pattern
-description: Teaches the mixin pattern for sharing functionality without inheritance. Use when you need to add reusable behavior to multiple objects or classes that don't share a common ancestor.
+description: Use when reading legacy class-based code that uses mixins, OR when judging whether mixin-style multi-source composition is the right answer for sharing behavior across class instances. In modern React/TS, prefer composition (hooks, HOCs, plain functions). NOT for hook composition (`hooks-pattern`), component composition (`react-composition-2026`), or anything purely React.
 paths:
   - "**/*.js"
   - "**/*.ts"

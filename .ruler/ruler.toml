@@ -30,6 +30,9 @@ enabled = true
 [skills]
 enabled = true
 
+[agents]
+enabled = true
+
 # --- Agent-Specific Configurations ---
 [agents.copilot]
 enabled = true
