@@ -7,7 +7,10 @@ export interface AirweaveCollectionSourceConfig {
   collectionName: string;
 }
 
-export type DatabaseSourceConfig = Record<string, unknown>;
+export interface DatabaseSourceConfig {
+  connectionId: string;
+  connectionName: string;
+}
 export type ExternalSourceConfig = Record<string, unknown>;
 
 export type ProjectDataSource =

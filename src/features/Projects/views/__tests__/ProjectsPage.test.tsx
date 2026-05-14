@@ -65,6 +65,10 @@ vi.mock("@/features/Admin/hooks/useAirweaveCollections", () => ({
   useAirweaveCollections: () => ({ data: [], isLoading: false }),
 }));
 
+vi.mock("@/features/Admin/hooks/useSqlConnections", () => ({
+  useSqlConnections: () => ({ data: [], isLoading: false, error: null }),
+}));
+
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));

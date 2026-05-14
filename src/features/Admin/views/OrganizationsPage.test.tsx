@@ -28,6 +28,13 @@ const {
   mockCan,
   mockRefetchPermissions,
   mockSessionRefetch,
+  mockUseSqlConnections,
+  mockUseCreateSqlConnection,
+  mockUseUpdateSqlConnection,
+  mockUseDeleteSqlConnection,
+  mockUseTestSqlConnection,
+  mockUseTestSqlConnectionCredentials,
+  mockUseTestCreateOrganizationSqlConnectionCredentials,
   mockToastError,
   mockToastSuccess,
 } = vi.hoisted(() => ({
@@ -50,6 +57,13 @@ const {
   mockCan: vi.fn(),
   mockRefetchPermissions: vi.fn(),
   mockSessionRefetch: vi.fn(),
+  mockUseSqlConnections: vi.fn(),
+  mockUseCreateSqlConnection: vi.fn(),
+  mockUseUpdateSqlConnection: vi.fn(),
+  mockUseDeleteSqlConnection: vi.fn(),
+  mockUseTestSqlConnection: vi.fn(),
+  mockUseTestSqlConnectionCredentials: vi.fn(),
+  mockUseTestCreateOrganizationSqlConnectionCredentials: vi.fn(),
   mockToastError: vi.fn(),
   mockToastSuccess: vi.fn(),
 }));
@@ -69,6 +83,17 @@ vi.mock("../hooks/useOrganizations", () => ({
 
 vi.mock("../hooks/useAirweaveCollections", () => ({
   useAirweaveCollections: (...args: unknown[]) => mockUseAvailableCollections(...args),
+}));
+
+vi.mock("../hooks/useSqlConnections", () => ({
+  useSqlConnections: (...args: unknown[]) => mockUseSqlConnections(...args),
+  useCreateSqlConnection: () => mockUseCreateSqlConnection(),
+  useUpdateSqlConnection: () => mockUseUpdateSqlConnection(),
+  useDeleteSqlConnection: () => mockUseDeleteSqlConnection(),
+  useTestSqlConnection: () => mockUseTestSqlConnection(),
+  useTestSqlConnectionCredentials: () => mockUseTestSqlConnectionCredentials(),
+  useTestCreateOrganizationSqlConnectionCredentials: () =>
+    mockUseTestCreateOrganizationSqlConnectionCredentials(),
 }));
 
 vi.mock("../services/adminService", () => ({
@@ -133,6 +158,7 @@ vi.mock("@tabler/icons-react", () => ({
   IconTrash: () => <span aria-hidden="true">trash</span>,
   IconEdit: () => <span aria-hidden="true">edit</span>,
   IconUsers: () => <span aria-hidden="true">users</span>,
+  IconPlayerPlay: () => <span aria-hidden="true">play</span>,
 }));
 
 vi.mock("@/shared/components/ui/button", () => ({
@@ -237,6 +263,13 @@ describe("OrganizationsPage", () => {
       ],
       isLoading: false,
     });
+    mockUseSqlConnections.mockReturnValue({ data: [], isLoading: false, error: null });
+    mockUseCreateSqlConnection.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
+    mockUseUpdateSqlConnection.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
+    mockUseDeleteSqlConnection.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
+    mockUseTestSqlConnection.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
+    mockUseTestSqlConnectionCredentials.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
+    mockUseTestCreateOrganizationSqlConnectionCredentials.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
     mockUseCreateOrganization.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
     mockUseUpdateOrganization.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
     mockUseDeleteOrganization.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
@@ -1362,4 +1395,288 @@ describe("OrganizationsPage – CRUD and member operations", () => {
     render(<OrganizationsPage />);
     // Should render without crash (shows empty state)
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("creates tested SQL connection drafts after organization creation", async () => {
+    const createOrganizationMutate = vi.fn().mockResolvedValue({
+      id: "org-new",
+      name: "New Org",
+      slug: "new-org",
+      createdAt: "2026-04-22T00:00:00.000Z",
+      metadata: undefined,
+    });
+    const setActiveOrganizationMutate = vi.fn().mockResolvedValue(undefined);
+    const createSqlConnectionMutate = vi.fn().mockResolvedValue({ id: "conn-1" });
+    const testDraftConnectionMutate = vi.fn().mockResolvedValue({ ok: true });
+    const checkSlugMutate = vi.fn().mockResolvedValue({ status: true });
+
+    mockUseOrganizations.mockReturnValue({
+      data: {
+        data: [{ id: "org-1", name: "Org One", slug: "org-one", createdAt: new Date() }],
+        total: 1,
+        totalPages: 1,
+      },
+      isLoading: false,
+    });
+    mockUseOrganizationMembers.mockReturnValue({ data: [], isLoading: false });
+    mockUseSqlConnections.mockReturnValue({ data: [], isLoading: false, error: null });
+    mockUseAvailableCollections.mockReturnValue({ data: [], isLoading: false, error: null });
+    mockGetOrganizationRolesMetadata.mockResolvedValue({
+      roles: [],
+      assignableRoles: [],
+    });
+    mockUseAuth.mockReturnValue({ user: { id: "mgr-1", role: "manager" } });
+    mockCan.mockImplementation((resource: string, action: string) =>
+      resource === "organization" || (resource === "project" && action === "read"),
+    );
+    mockUseCreateOrganization.mockReturnValue({
+      mutateAsync: createOrganizationMutate,
+      isPending: false,
+    });
+    mockUseUpdateOrganization.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
+    mockUseDeleteOrganization.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
+    mockUseRemoveMember.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
+    mockUseUpdateMemberRole.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
+    mockUseAddMember.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
+    mockUseCheckSlug.mockReturnValue({ mutateAsync: checkSlugMutate, isPending: false });
+    mockUseEffectiveSession.mockReturnValue({
+      data: {
+        user: { id: "mgr-1", role: "manager" },
+        session: { activeOrganizationId: "org-1" },
+      },
+      refetch: mockSessionRefetch,
+    });
+    mockUseSetActiveOrganization.mockReturnValue({
+      mutateAsync: setActiveOrganizationMutate,
+      isPending: false,
+    });
+    mockUseCreateSqlConnection.mockReturnValue({
+      mutateAsync: createSqlConnectionMutate,
+      isPending: false,
+    });
+    mockUseTestCreateOrganizationSqlConnectionCredentials.mockReturnValue({
+      mutateAsync: testDraftConnectionMutate,
+      isPending: false,
+    });
+
+    render(<OrganizationsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /create organization/i }));
+    const dialog = await screen.findByRole("dialog");
+
+    fireEvent.change(within(dialog).getByLabelText(/^name$/i), {
+      target: { value: "New Org" },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/slug/i), {
+      target: { value: "new-org" },
+    });
+
+    await waitFor(() => {
+      expect(checkSlugMutate).toHaveBeenCalledWith("new-org")
+    })
+
+    fireEvent.click(within(dialog).getByTestId("org-sql-draft-add"));
+    const sqlDialog = await screen.findByTestId("sql-connection-form-dialog");
+
+    fireEvent.change(within(sqlDialog).getByLabelText(/^name$/i), {
+      target: { value: "Reporting DB" },
+    });
+    fireEvent.change(within(sqlDialog).getByLabelText(/host/i), {
+      target: { value: "db.example.com" },
+    });
+    fireEvent.change(within(sqlDialog).getByLabelText(/port/i), {
+      target: { value: "5432" },
+    });
+    fireEvent.change(within(sqlDialog).getByLabelText(/^database/i), {
+      target: { value: "reporting" },
+    });
+    fireEvent.change(within(sqlDialog).getByLabelText(/^username/i), {
+      target: { value: "reader" },
+    });
+    fireEvent.change(within(sqlDialog).getByLabelText(/password/i), {
+      target: { value: "typed-secret" },
+    });
+
+    fireEvent.click(within(sqlDialog).getByTestId("sql-conn-test"));
+
+    await waitFor(() => {
+      expect(testDraftConnectionMutate).toHaveBeenCalledWith({
+        host: "db.example.com",
+        port: 5432,
+        database: "reporting",
+        username: "reader",
+        password: "typed-secret",
+        ssl: false,
+      });
+    });
+
+    fireEvent.click(within(sqlDialog).getByTestId("sql-conn-submit"));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("sql-connection-form-dialog")).not.toBeInTheDocument();
+    });
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /^create$/i }));
+
+    await waitFor(() => {
+      expect(createOrganizationMutate).toHaveBeenCalledWith({
+        name: "New Org",
+        slug: "new-org",
+        metadata: { allowedAirweaveCollectionIds: [] },
+      });
+    });
+
+    await waitFor(() => {
+      expect(createSqlConnectionMutate).toHaveBeenCalledWith({
+        organizationId: "org-new",
+        name: "Reporting DB",
+        host: "db.example.com",
+        port: 5432,
+        database: "reporting",
+        username: "reader",
+        password: "typed-secret",
+        ssl: false,
+        schemaName: "public",
+      });
+    });
+  });
+
+  it("retries remaining SQL connection drafts without recreating the organization", async () => {
+    const createOrganizationMutate = vi.fn().mockResolvedValue({
+      id: "org-new",
+      name: "New Org",
+      slug: "new-org",
+      createdAt: "2026-04-22T00:00:00.000Z",
+      metadata: undefined,
+    });
+    const setActiveOrganizationMutate = vi.fn().mockResolvedValue(undefined);
+    const createSqlConnectionMutate = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Database unavailable"))
+      .mockResolvedValueOnce({ id: "conn-1" });
+    const testDraftConnectionMutate = vi.fn().mockResolvedValue({ ok: true });
+    const checkSlugMutate = vi.fn().mockResolvedValue({ status: true });
+
+    mockUseOrganizations.mockReturnValue({
+      data: {
+        data: [{ id: "org-1", name: "Org One", slug: "org-one", createdAt: new Date() }],
+        total: 1,
+        totalPages: 1,
+      },
+      isLoading: false,
+    });
+    mockUseOrganizationMembers.mockReturnValue({ data: [], isLoading: false });
+    mockUseSqlConnections.mockReturnValue({ data: [], isLoading: false, error: null });
+    mockUseAvailableCollections.mockReturnValue({ data: [], isLoading: false, error: null });
+    mockGetOrganizationRolesMetadata.mockResolvedValue({ roles: [], assignableRoles: [] });
+    mockUseAuth.mockReturnValue({ user: { id: "mgr-1", role: "manager" } });
+    mockCan.mockImplementation((resource: string, action: string) =>
+      resource === "organization" || (resource === "project" && action === "read"),
+    );
+    mockUseCreateOrganization.mockReturnValue({
+      mutateAsync: createOrganizationMutate,
+      isPending: false,
+    });
+    mockUseUpdateOrganization.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
+    mockUseDeleteOrganization.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
+    mockUseRemoveMember.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
+    mockUseUpdateMemberRole.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
+    mockUseAddMember.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
+    mockUseCheckSlug.mockReturnValue({ mutateAsync: checkSlugMutate, isPending: false });
+    mockUseEffectiveSession.mockReturnValue({
+      data: {
+        user: { id: "mgr-1", role: "manager" },
+        session: { activeOrganizationId: "org-1" },
+      },
+      refetch: mockSessionRefetch,
+    });
+    mockUseSetActiveOrganization.mockReturnValue({
+      mutateAsync: setActiveOrganizationMutate,
+      isPending: false,
+    });
+    mockUseCreateSqlConnection.mockReturnValue({
+      mutateAsync: createSqlConnectionMutate,
+      isPending: false,
+    });
+    mockUseTestCreateOrganizationSqlConnectionCredentials.mockReturnValue({
+      mutateAsync: testDraftConnectionMutate,
+      isPending: false,
+    });
+
+    render(<OrganizationsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /create organization/i }));
+    const dialog = await screen.findByRole("dialog");
+
+    fireEvent.change(within(dialog).getByLabelText(/^name$/i), {
+      target: { value: "New Org" },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/slug/i), {
+      target: { value: "new-org" },
+    });
+
+    await waitFor(() => {
+      expect(checkSlugMutate).toHaveBeenCalledWith("new-org")
+    })
+
+    fireEvent.click(within(dialog).getByTestId("org-sql-draft-add"));
+    const sqlDialog = await screen.findByTestId("sql-connection-form-dialog");
+
+    fireEvent.change(within(sqlDialog).getByLabelText(/^name$/i), {
+      target: { value: "Reporting DB" },
+    });
+    fireEvent.change(within(sqlDialog).getByLabelText(/host/i), {
+      target: { value: "db.example.com" },
+    });
+    fireEvent.change(within(sqlDialog).getByLabelText(/port/i), {
+      target: { value: "5432" },
+    });
+    fireEvent.change(within(sqlDialog).getByLabelText(/^database/i), {
+      target: { value: "reporting" },
+    });
+    fireEvent.change(within(sqlDialog).getByLabelText(/^username/i), {
+      target: { value: "reader" },
+    });
+    fireEvent.change(within(sqlDialog).getByLabelText(/password/i), {
+      target: { value: "typed-secret" },
+    });
+
+    fireEvent.click(within(sqlDialog).getByTestId("sql-conn-test"));
+
+    await waitFor(() => {
+      expect(testDraftConnectionMutate).toHaveBeenCalledTimes(1)
+    })
+
+    fireEvent.click(within(sqlDialog).getByTestId("sql-conn-submit"));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("sql-connection-form-dialog")).not.toBeInTheDocument();
+    });
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /^create$/i }));
+
+    await waitFor(() => {
+      expect(createOrganizationMutate).toHaveBeenCalledTimes(1)
+    })
+
+    await waitFor(() => {
+      expect(createSqlConnectionMutate).toHaveBeenCalledTimes(1)
+    })
+
+    await waitFor(() => {
+      expect(mockToastError).toHaveBeenCalledWith(
+        expect.stringContaining("Organization created, but failed to save SQL connection"),
+      )
+    })
+
+    expect(within(dialog).getByTestId("org-sql-draft-retry-hint")).toBeInTheDocument()
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /retry sql connections/i }))
+
+    await waitFor(() => {
+      expect(createOrganizationMutate).toHaveBeenCalledTimes(1)
+      expect(createSqlConnectionMutate).toHaveBeenCalledTimes(2)
+    })
+
+    expect(mockToastSuccess).toHaveBeenCalledWith("SQL connections saved successfully")
   });

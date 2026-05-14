@@ -74,6 +74,67 @@ export interface AirweaveCollection {
     sourceConnectionCount: number;
 }
 
+export type SqlConnectionStatus = "connecting" | "ready" | "error";
+
+export type SqlSslConfig =
+    | boolean
+    | {
+          rejectUnauthorized?: boolean;
+          ca?: string;
+      };
+
+export interface SqlConnection {
+    id: string;
+    organizationId: string;
+    name: string;
+    host: string;
+    port: number;
+    database: string;
+    username: string;
+    ssl: SqlSslConfig;
+    schemaName: string;
+    status: SqlConnectionStatus;
+    statusError: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface CreateSqlConnectionInput {
+    name: string;
+    host: string;
+    port: number;
+    database: string;
+    username: string;
+    password: string;
+    ssl?: SqlSslConfig;
+    schemaName?: string;
+}
+
+export interface UpdateSqlConnectionInput {
+    name?: string;
+    host?: string;
+    port?: number;
+    database?: string;
+    username?: string;
+    password?: string;
+    ssl?: SqlSslConfig;
+    schemaName?: string;
+}
+
+export interface TestSqlConnectionInput {
+    connectionId?: string;
+    host: string;
+    port: number;
+    database: string;
+    username: string;
+    password?: string;
+    ssl?: SqlSslConfig;
+}
+
+export type TestSqlConnectionResult =
+    | { ok: true }
+    | { ok: false; error: string };
+
 // Pagination types
 export interface PaginationParams {
     limit?: number;

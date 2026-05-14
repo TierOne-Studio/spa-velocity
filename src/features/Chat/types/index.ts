@@ -20,6 +20,15 @@ export interface ChatSource {
   entityType: string;
 }
 
+export interface ChatSqlCall {
+  connectionId: string;
+  connectionName: string;
+  sql: string;
+  rowCount: number;
+  truncated: boolean;
+  durationMs: number;
+}
+
 export interface ChatMessage {
   id: string;
   conversationId: string;
@@ -29,6 +38,7 @@ export interface ChatMessage {
     generator?: string;
     sources?: ChatSource[];
     resultCount?: number;
+    sqlCalls?: ChatSqlCall[];
   } | null;
   createdAt: string;
 }
@@ -68,6 +78,10 @@ export type ChatStreamEvent =
   | {
       type: "chunk";
       content: string;
+    }
+  | {
+      type: "sql_executed";
+      call: ChatSqlCall;
     }
   | {
       type: "complete";

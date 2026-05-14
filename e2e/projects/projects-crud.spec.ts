@@ -237,7 +237,23 @@ test.describe('Projects CRUD', () => {
     await page.getByTestId('project-edit-p-edit').click();
 
     await expect(page.getByTestId('project-form-dialog')).toBeVisible();
-    await expect(page.getByLabel('Organization')).toBeDisabled();
+    const orgTrigger = page.getByTestId('project-organization-trigger');
+    const orgField = page.getByTestId('project-organization');
+
+    await expect
+      .poll(async () => {
+        if (await orgTrigger.count()) return 'trigger';
+        if (await orgField.count()) return 'field';
+        return 'pending';
+      })
+      .not.toBe('pending');
+
+    if (await orgTrigger.count()) {
+      await expect(orgTrigger).toBeDisabled();
+    } else {
+      await expect(orgField).toBeVisible();
+      await expect(page.getByText(/organization cannot be changed after creation/i)).toBeVisible();
+    }
   });
 
   test('deletes a project via the row action + confirmation dialog', async ({ page }) => {

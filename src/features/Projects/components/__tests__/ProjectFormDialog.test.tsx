@@ -74,6 +74,10 @@ vi.mock("@/features/Admin/hooks/useAirweaveCollections", () => ({
   useAirweaveCollections: () => mockUseAirweaveCollections(),
 }));
 
+vi.mock("@/features/Admin/hooks/useSqlConnections", () => ({
+  useSqlConnections: () => ({ data: [], isLoading: false, error: null }),
+}));
+
 vi.mock("../../hooks/useProjects", () => ({
   useCreateProject: () => ({ mutateAsync: mockCreateMutate, isPending: false }),
   useUpdateProject: () => ({ mutateAsync: mockUpdateMutate, isPending: false }),

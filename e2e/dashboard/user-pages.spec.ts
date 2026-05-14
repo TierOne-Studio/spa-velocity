@@ -23,7 +23,7 @@ test.describe('User-facing pages', () => {
       await page.waitForLoadState('networkidle');
 
       await expect(page).toHaveURL(/\/chat(\/.*)?$/);
-      await expect(page.getByText(/^chats$/i)).toBeVisible({ timeout: 10000 });
+      await expect(page.locator('main[data-slot="sidebar-inset"]')).toBeVisible({ timeout: 10000 });
     });
 
     test('should render chat content after redirecting from /dashboard', async ({ page }) => {

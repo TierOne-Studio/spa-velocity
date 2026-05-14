@@ -23,6 +23,7 @@ import {
   useOrganizations,
 } from "@/features/Admin/hooks/useOrganizations";
 import { useAirweaveCollections } from "@/features/Admin/hooks/useAirweaveCollections";
+import { useSqlConnections } from "@/features/Admin/hooks/useSqlConnections";
 
 import {
   useCreateProject,
@@ -72,6 +73,26 @@ function getAirweaveSourceIdByReadableId(
   return match ? match.id : null;
 }
 
+function getDatabaseConnectionIds(sources: ProjectDataSource[]): string[] {
+  return sources
+    .filter((s): s is ProjectDataSource & { kind: "database" } =>
+      s.kind === "database",
+    )
+    .map((s) => s.config.connectionId)
+    .filter((id) => id.length > 0);
+}
+
+function getDatabaseSourceIdByConnectionId(
+  sources: ProjectDataSource[],
+  connectionId: string,
+): string | null {
+  const match = sources.find(
+    (s): s is ProjectDataSource & { kind: "database" } =>
+      s.kind === "database" && s.config.connectionId === connectionId,
+  );
+  return match ? match.id : null;
+}
+
 export function ProjectFormDialog({ open, onOpenChange, project }: Props) {
   const isEdit = !!project;
   const { isSuperadmin, activeOrganizationId: activeOrgId } = useOrgCapabilities();
@@ -90,6 +111,7 @@ export function ProjectFormDialog({ open, onOpenChange, project }: Props) {
   const [description, setDescription] = useState("");
   const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [selectedCollectionIds, setSelectedCollectionIds] = useState<string[]>([]);
+  const [selectedConnectionIds, setSelectedConnectionIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (!open) return;
@@ -98,11 +120,13 @@ export function ProjectFormDialog({ open, onOpenChange, project }: Props) {
       setDescription(project.description ?? "");
       setOrganizationId(project.organizationId);
       setSelectedCollectionIds(getAirweaveCollectionIds(project.sources));
+      setSelectedConnectionIds(getDatabaseConnectionIds(project.sources));
     } else {
       setName("");
       setDescription("");
       setOrganizationId(activeOrgId);
       setSelectedCollectionIds([]);
+      setSelectedConnectionIds([]);
     }
   }, [open, project, activeOrgId]);
 
@@ -144,6 +168,30 @@ export function ProjectFormDialog({ open, onOpenChange, project }: Props) {
     }));
   }, [collections, allowedCollectionIds]);
 
+  const { data: sqlConnections, isLoading: sqlConnectionsLoading } = useSqlConnections(
+    organizationId ?? undefined,
+    { enabled: open && Boolean(organizationId) },
+  );
+
+  const sqlConnectionOptions = useMemo<MultiSelectOption[]>(() => {
+    const connections = sqlConnections ?? [];
+    // Include `ready` connections plus any already-attached non-ready ones so
+    // edit mode can still render + remove them. Without this, a connection
+    // that transitions to `connecting`/`error` after being attached would
+    // disappear from the combobox while still living in `selectedConnectionIds`.
+    const selectedSet = new Set(selectedConnectionIds);
+    return connections
+      .filter((c) => c.status === "ready" || selectedSet.has(c.id))
+      .map((c) => ({
+        value: c.id,
+        label: c.name,
+        description:
+          c.status === "ready"
+            ? `${c.username}@${c.host}:${c.port}/${c.database}`
+            : `${c.username}@${c.host}:${c.port}/${c.database} — ${c.status}`,
+      }));
+  }, [sqlConnections, selectedConnectionIds]);
+
   const isSubmitting =
     createProject.isPending ||
     updateProject.isPending ||
@@ -161,6 +209,9 @@ export function ProjectFormDialog({ open, onOpenChange, project }: Props) {
     }
 
     const collectionsById = new Map((collections ?? []).map((c) => [c.readableId, c]));
+    const sqlConnectionsById = new Map(
+      (sqlConnections ?? []).map((c) => [c.id, c]),
+    );
 
     if (isEdit && project) {
       try {
@@ -206,6 +257,40 @@ export function ProjectFormDialog({ open, onOpenChange, project }: Props) {
           });
         }
 
+        const existingConns = getDatabaseConnectionIds(project.sources);
+        const existingConnsSet = new Set(existingConns);
+        const selectedConnsSet = new Set(selectedConnectionIds);
+        const connsToAdd = selectedConnectionIds.filter(
+          (id) => !existingConnsSet.has(id),
+        );
+        const connsToRemove = existingConns.filter(
+          (id) => !selectedConnsSet.has(id),
+        );
+
+        for (const connectionId of connsToAdd) {
+          const match = sqlConnectionsById.get(connectionId);
+          if (!match) continue;
+          const input: CreateDataSourceInput = {
+            kind: "database",
+            name: match.name,
+            config: { connectionId, connectionName: match.name },
+          };
+          await addSource.mutateAsync({ projectId: project.id, input, organizationId });
+        }
+
+        for (const connectionId of connsToRemove) {
+          const sourceId = getDatabaseSourceIdByConnectionId(
+            project.sources,
+            connectionId,
+          );
+          if (!sourceId) continue;
+          await removeSource.mutateAsync({
+            projectId: project.id,
+            sourceId,
+            organizationId,
+          });
+        }
+
         toast.success("Project updated.");
         onOpenChange(false);
       } catch (err) {
@@ -215,8 +300,8 @@ export function ProjectFormDialog({ open, onOpenChange, project }: Props) {
     }
 
     try {
-      const initialSources: CreateDataSourceInput[] = selectedCollectionIds.map(
-        (readableId) => {
+      const initialSources: CreateDataSourceInput[] = [
+        ...selectedCollectionIds.map((readableId): CreateDataSourceInput => {
           const match = collectionsById.get(readableId);
           return {
             kind: "airweave_collection",
@@ -226,8 +311,19 @@ export function ProjectFormDialog({ open, onOpenChange, project }: Props) {
               collectionName: match?.name ?? readableId,
             },
           };
-        },
-      );
+        }),
+        ...selectedConnectionIds
+          .map((connectionId): CreateDataSourceInput | null => {
+            const match = sqlConnectionsById.get(connectionId);
+            if (!match) return null;
+            return {
+              kind: "database",
+              name: match.name,
+              config: { connectionId, connectionName: match.name },
+            };
+          })
+          .filter((v): v is CreateDataSourceInput => v !== null),
+      ];
       await createProject.mutateAsync({
         organizationId,
         name: name.trim(),
@@ -279,6 +375,7 @@ export function ProjectFormDialog({ open, onOpenChange, project }: Props) {
             onChange={(id) => {
               setOrganizationId(id);
               setSelectedCollectionIds([]);
+              setSelectedConnectionIds([]);
             }}
             disabled={isEdit}
             organizations={organizations.map((o) => ({ id: o.id, name: o.name }))}
@@ -311,6 +408,27 @@ export function ProjectFormDialog({ open, onOpenChange, project }: Props) {
             />
             <p className="text-xs text-muted-foreground">
               Airweave collections grounding the agent&apos;s answers.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Databases</Label>
+            <MultiSelectCombobox
+              options={sqlConnectionOptions}
+              value={selectedConnectionIds}
+              onChange={setSelectedConnectionIds}
+              placeholder={
+                sqlConnectionsLoading
+                  ? "Loading SQL connections…"
+                  : "Select databases"
+              }
+              emptyMessage="No SQL connections available. Add one in the organization dialog."
+              disabled={!organizationId || sqlConnectionsLoading}
+              data-testid="project-databases-select"
+            />
+            <p className="text-xs text-muted-foreground">
+              Databases the chat agent can query read-only. Only connections with status
+              &quot;ready&quot; appear here.
             </p>
           </div>
         </div>

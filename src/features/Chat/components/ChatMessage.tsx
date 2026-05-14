@@ -2,9 +2,9 @@ import { useState, useMemo, useCallback } from "react";
 import { cn } from "@/shared/lib/utils";
 import ReactMarkdown from "react-markdown";
 import { Collapsible, CollapsibleContent } from "@/shared/components/ui/collapsible";
-import { IconChevronDown, IconBrain } from "@tabler/icons-react";
+import { IconChevronDown, IconBrain, IconDatabase } from "@tabler/icons-react";
 import { Separator } from "@/shared/components/ui/separator";
-import type { ChatSource } from "../types";
+import type { ChatSource, ChatSqlCall } from "../types";
 
 export interface PatternHandler {
   pattern: RegExp;
@@ -15,16 +15,56 @@ export interface ChatMessageProps {
   content: string;
   role: "user" | "assistant" | "system";
   sources?: ChatSource[];
+  sqlCalls?: ChatSqlCall[];
   generator?: string;
   createdAt?: string;
   patternHandlers?: PatternHandler[];
   className?: string;
 }
 
+function SqlCallPanel({ call }: { call: ChatSqlCall }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const rowLabel = call.rowCount === 1 ? "row" : "rows";
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <button
+        type="button"
+        onClick={() => setIsOpen((current) => !current)}
+        className="flex w-full items-center justify-between gap-2 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-emerald-500/10"
+        data-testid="chat-sql-call-toggle"
+      >
+        <span className="flex min-w-0 items-center gap-1.5">
+          <IconDatabase className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+          <span className="truncate font-medium text-foreground">
+            {call.connectionName || "Database query"}
+          </span>
+          <span className="shrink-0">
+            · {call.rowCount} {rowLabel}
+            {call.truncated ? " (truncated)" : ""} · {call.durationMs}ms
+          </span>
+        </span>
+        <IconChevronDown
+          className={cn(
+            "h-3.5 w-3.5 shrink-0 transition-transform",
+            isOpen && "rotate-180",
+          )}
+        />
+      </button>
+      <CollapsibleContent>
+        <pre className="mt-2 overflow-x-auto rounded-2xl border bg-muted/60 p-3 text-xs leading-5">
+          <code>{call.sql}</code>
+        </pre>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
 export function ChatMessage({
   content,
   role,
   sources = [],
+  sqlCalls = [],
   generator,
   createdAt,
   patternHandlers = [],
@@ -155,6 +195,17 @@ export function ChatMessage({
             </div>
           ) : (
             <div className={cn("whitespace-pre-wrap text-sm leading-6", isUser && "text-primary-foreground")}>{displayContent}</div>
+          )}
+
+          {isAssistant && sqlCalls.length > 0 && (
+            <div className="flex flex-col gap-2" data-testid="chat-sql-calls">
+              {sqlCalls.map((call, index) => (
+                <SqlCallPanel
+                  key={`sql-${index}-${call.connectionId}-${call.durationMs}`}
+                  call={call}
+                />
+              ))}
+            </div>
           )}
 
           {sources.length > 0 && (
