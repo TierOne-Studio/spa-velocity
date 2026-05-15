@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback } from "react";
 import { cn } from "@/shared/lib/utils";
+import remarkGfm from "remark-gfm";
 import ReactMarkdown from "react-markdown";
 import { Collapsible, CollapsibleContent } from "@/shared/components/ui/collapsible";
 import { IconChevronDown, IconBrain, IconDatabase } from "@tabler/icons-react";
@@ -183,15 +184,19 @@ export function ChatMessage({
               </button>
               <CollapsibleContent>
                 <div className="rounded-2xl border border-purple-500/20 bg-purple-500/5 p-3 text-sm text-muted-foreground">
-                  <ReactMarkdown>{reasoning}</ReactMarkdown>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{reasoning}</ReactMarkdown>
                 </div>
               </CollapsibleContent>
             </Collapsible>
           )}
 
           {isAssistant ? (
-            <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-7 prose-headings:mb-3 prose-headings:mt-8 prose-headings:font-semibold prose-p:my-3 prose-li:my-1 prose-ul:my-4 prose-ol:my-4 prose-pre:rounded-2xl prose-pre:border prose-pre:bg-muted/60 prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:before:content-none prose-code:after:content-none md:prose-base">
-              {patternHandlers.length > 0 ? processContent(displayContent) : <ReactMarkdown>{displayContent}</ReactMarkdown>}
+            <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-7 prose-headings:mb-3 prose-headings:mt-8 prose-headings:font-semibold prose-p:my-3 prose-li:my-1 prose-ul:my-4 prose-ol:my-4 prose-table:text-sm prose-th:border prose-th:border-border prose-td:border prose-td:border-border prose-pre:rounded-2xl prose-pre:border prose-pre:bg-muted/60 prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:before:content-none prose-code:after:content-none md:prose-base">
+              {patternHandlers.length > 0 ? (
+                processContent(displayContent)
+              ) : (
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{displayContent}</ReactMarkdown>
+              )}
             </div>
           ) : (
             <div className={cn("whitespace-pre-wrap text-sm leading-6", isUser && "text-primary-foreground")}>{displayContent}</div>
