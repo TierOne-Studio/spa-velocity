@@ -38,6 +38,7 @@ type StreamingState = {
   conversationId: string;
   stage: GenerationStage;
   searchQuery?: string;
+  userContent: string;
   content: string;
   sqlCalls: ChatSqlCall[];
 };
@@ -351,7 +352,7 @@ export function ChatPage() {
     }
 
     try {
-      setStreaming({ conversationId: targetConversationId, stage: "thinking", content: "", sqlCalls: [] });
+      setStreaming({ conversationId: targetConversationId, stage: "thinking", userContent: content, content: "", sqlCalls: [] });
 
       await chatService.sendMessage({
         conversationId: targetConversationId,
@@ -378,6 +379,7 @@ export function ChatPage() {
                 return {
                   conversationId: targetConversationId,
                   stage: "responding",
+                  userContent: content,
                   content: event.content,
                   sqlCalls: [],
                 };
@@ -397,6 +399,7 @@ export function ChatPage() {
                 return {
                   conversationId: targetConversationId,
                   stage: "responding",
+                  userContent: content,
                   content: "",
                   sqlCalls: [event.call],
                 };
@@ -409,6 +412,7 @@ export function ChatPage() {
             setStreaming((current) => ({
               conversationId: targetConversationId,
               stage: "idle",
+              userContent: current?.userContent ?? content,
               content: event.data.assistantMessage.content,
               sqlCalls: current?.sqlCalls ?? [],
             }));
@@ -682,6 +686,13 @@ export function ChatPage() {
 
                   {streaming && streaming.conversationId === resolvedConversationId && (
                     <>
+                      {streaming.userContent && (
+                        <ChatMessageComponent
+                          content={streaming.userContent}
+                          role="user"
+                        />
+                      )}
+
                       {streaming.stage !== "idle" && streaming.stage !== "responding" && (
                         <GenerationStatus stage={streaming.stage} searchQuery={streaming.searchQuery} />
                       )}

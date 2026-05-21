@@ -568,6 +568,182 @@ describe("ChatPage", () => {
     });
   });
 
+  it("renders the user's message optimistically while streaming is in progress", async () => {
+    // The persisted messages list intentionally does not contain the new prompt
+    // — the only way it can appear during streaming is via optimistic render.
+    mockUseChatMessages.mockReturnValue({ data: [], isLoading: false });
+
+    let capturedOnEvent:
+      | ((event: { type: string; content?: string; query?: string; data?: { assistantMessage: { content: string } } }) => void)
+      | null = null;
+    mockChatServiceSendMessage.mockImplementation(
+      ({ onEvent }: { onEvent: (event: { type: string; content?: string; query?: string; data?: { assistantMessage: { content: string } } }) => void }) => {
+        capturedOnEvent = onEvent;
+        // Resolve never — leave the stream open so we can assert the optimistic state.
+        return new Promise(() => {});
+      },
+    );
+
+    renderPage("/chat/conversation-1");
+
+    fireEvent.change(screen.getByPlaceholderText(/ask a question about this project/i), {
+      target: { value: "What about the new release?" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+
+    await waitFor(() => {
+      expect(mockChatServiceSendMessage).toHaveBeenCalled();
+    });
+
+    await act(async () => {
+      capturedOnEvent?.({ type: "thinking" });
+    });
+
+    expect(screen.getByText("What about the new release?")).toBeInTheDocument();
+  });
+
+  it("renders the optimistic user bubble exactly once after persisted messages arrive", async () => {
+    // HIGH-leverage regression: the whole purpose of the fix is undermined if
+    // the optimistic bubble keeps rendering after `useChatMessages` returns the
+    // persisted user row — the user would see their prompt twice.
+    let capturedOnEvent:
+      | ((event: { type: string; content?: string; data?: { assistantMessage: { content: string; metadata: unknown } } }) => void)
+      | null = null;
+    mockChatServiceSendMessage.mockImplementation(
+      ({ onEvent }: { onEvent: (event: { type: string; content?: string; data?: { assistantMessage: { content: string; metadata: unknown } } }) => void }) => {
+        capturedOnEvent = onEvent;
+        return new Promise(() => {});
+      },
+    );
+
+    mockUseChatMessages.mockReturnValue({ data: [], isLoading: false });
+
+    renderPage("/chat/conversation-1");
+
+    fireEvent.change(screen.getByPlaceholderText(/ask a question about this project/i), {
+      target: { value: "Persisted bubble check" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+
+    await waitFor(() => {
+      expect(mockChatServiceSendMessage).toHaveBeenCalled();
+    });
+
+    await act(async () => {
+      capturedOnEvent?.({ type: "thinking" });
+    });
+
+    expect(screen.getByText("Persisted bubble check")).toBeInTheDocument();
+
+    // Persistence catches up: useChatMessages now returns the canonical user
+    // row plus the assistant row. Then drive `complete` so the streaming-clear
+    // effect (matches assistant.content === streaming.content) fires.
+    mockUseChatMessages.mockReturnValue({
+      data: [
+        {
+          id: "persisted-user-1",
+          conversationId: "conversation-1",
+          role: "user",
+          content: "Persisted bubble check",
+          metadata: null,
+          createdAt: "2026-04-03T00:00:00.000Z",
+        },
+        {
+          id: "persisted-assist-1",
+          conversationId: "conversation-1",
+          role: "assistant",
+          content: "Done",
+          metadata: null,
+          createdAt: "2026-04-03T00:00:01.000Z",
+        },
+      ],
+      isLoading: false,
+    });
+
+    await act(async () => {
+      capturedOnEvent?.({ type: "complete", data: { assistantMessage: { content: "Done", metadata: null } } });
+    });
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Persisted bubble check")).toHaveLength(1);
+    });
+  });
+
+  it("preserves the user bubble across multiple chunk events", async () => {
+    // Locks the invariant that chunk updaters spread `...current` and never
+    // drop `userContent`. If someone "simplifies" the spread, this fails.
+    let capturedOnEvent:
+      | ((event: { type: string; content?: string; data?: { assistantMessage: { content: string } } }) => void)
+      | null = null;
+    mockChatServiceSendMessage.mockImplementation(
+      ({ onEvent }: { onEvent: (event: { type: string; content?: string; data?: { assistantMessage: { content: string } } }) => void }) => {
+        capturedOnEvent = onEvent;
+        return new Promise(() => {});
+      },
+    );
+
+    mockUseChatMessages.mockReturnValue({ data: [], isLoading: false });
+
+    renderPage("/chat/conversation-1");
+
+    fireEvent.change(screen.getByPlaceholderText(/ask a question about this project/i), {
+      target: { value: "Chunk-survival prompt" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+
+    await waitFor(() => {
+      expect(mockChatServiceSendMessage).toHaveBeenCalled();
+    });
+
+    await act(async () => {
+      capturedOnEvent?.({ type: "chunk", content: "First " });
+      capturedOnEvent?.({ type: "chunk", content: "Second" });
+    });
+
+    expect(screen.getByText("Chunk-survival prompt")).toBeInTheDocument();
+  });
+
+  it("hides the optimistic user bubble when navigating to another conversation mid-stream", async () => {
+    // Locks the `streaming.conversationId === resolvedConversationId` guard.
+    // Without it, the prompt typed in conv-1 would leak into conv-2 on switch.
+    const secondConversation = {
+      ...conversations[0],
+      id: "conversation-2",
+      title: "Reports",
+      lastMessagePreview: "Quarterly numbers",
+    };
+    mockUseChatConversations.mockReturnValue({
+      data: [conversations[0], secondConversation],
+      isLoading: false,
+    });
+    mockUseChatMessages.mockReturnValue({ data: [], isLoading: false });
+
+    mockChatServiceSendMessage.mockImplementation(() => new Promise(() => {}));
+
+    renderPage("/chat/conversation-1");
+
+    fireEvent.change(screen.getByPlaceholderText(/ask a question about this project/i), {
+      target: { value: "Leak-check prompt" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+
+    await waitFor(() => {
+      expect(mockChatServiceSendMessage).toHaveBeenCalled();
+    });
+
+    // Bubble visible while we're on conv-1.
+    expect(screen.getByText("Leak-check prompt")).toBeInTheDocument();
+
+    // Navigate to conv-2 by clicking it in the rail.
+    fireEvent.click(screen.getByRole("button", { name: /reports/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: /reports/i })).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText("Leak-check prompt")).not.toBeInTheDocument();
+  });
+
   it("accumulates content from two chunk events (covers lines 470,473-477)", async () => {
     // Line 470: first chunk (current is null → returns new streaming state)
     // Lines 473-477: second chunk (current has same conversationId → appends content)
