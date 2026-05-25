@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAirweaveConnect } from '@airweave/connect-react';
 import { toast } from 'sonner';
@@ -51,9 +51,37 @@ export interface UseAirweaveConnectModalReturn {
   isLoading: boolean;
 }
 
-const CONNECT_URL = import.meta.env.VITE_AIRWEAVE_CONNECT_URL as
-  | string
-  | undefined;
+/**
+ * Validate `VITE_AIRWEAVE_CONNECT_URL` at module-load. Per security-review
+ * MED #1: the SDK's URL parser falls back silently to the raw string if
+ * `new URL()` throws, which would weaken the postMessage origin pin to an
+ * unparseable string AND, in dev, could let `http://attacker.example` be
+ * silently accepted. We enforce: undefined OR https:// OR http://localhost
+ * (dev only). Anything else throws at load-time so misconfig surfaces
+ * immediately, not at first user click.
+ */
+function validateConnectUrl(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  try {
+    const url = new URL(raw);
+    if (url.protocol === "https:") return raw;
+    if (url.protocol === "http:" && url.hostname === "localhost") return raw;
+    throw new Error(
+      `VITE_AIRWEAVE_CONNECT_URL must be https:// (or http://localhost in dev); got: ${url.protocol}//${url.hostname}`,
+    );
+  } catch (err) {
+    if (err instanceof TypeError) {
+      throw new Error(
+        `VITE_AIRWEAVE_CONNECT_URL is not a valid URL: '${raw}'`,
+      );
+    }
+    throw err;
+  }
+}
+
+const CONNECT_URL = validateConnectUrl(
+  import.meta.env.VITE_AIRWEAVE_CONNECT_URL as string | undefined,
+);
 
 export function useAirweaveConnectModal({
   getSessionToken,
@@ -62,6 +90,24 @@ export function useAirweaveConnectModal({
   onCancelled,
 }: UseAirweaveConnectModalProps): UseAirweaveConnectModalReturn {
   const queryClient = useQueryClient();
+
+  // Focus capture/restore (a11y HIGH from review pass — SDK iframe modal
+  // does NOT trap or restore focus on its own per dist/index.js analysis).
+  // We snapshot the activeElement at `open()` time and restore it when the
+  // SDK reports close. Manual mitigation until the SDK ships proper
+  // dialog semantics upstream.
+  const triggerElementRef = useRef<HTMLElement | null>(null);
+
+  const restoreFocus = useCallback(() => {
+    const el = triggerElementRef.current;
+    triggerElementRef.current = null;
+    if (el && typeof el.focus === 'function') {
+      // RAF defer: SDK closes the iframe modal asynchronously; if we
+      // restore focus synchronously, the iframe may still own focus and
+      // the .focus() call gets dropped.
+      requestAnimationFrame(() => el.focus());
+    }
+  }, []);
 
   const handleSuccess = useCallback(
     (connectionId: string) => {
@@ -73,35 +119,58 @@ export function useAirweaveConnectModal({
       });
       toast.success('Source connection authenticated.');
       onConnected?.(connectionId);
+      restoreFocus();
     },
-    [collectionReadableId, onConnected, queryClient],
+    [collectionReadableId, onConnected, queryClient, restoreFocus],
   );
 
-  const handleError = useCallback((error: { message?: string }) => {
-    const raw = error?.message ?? 'Airweave connect failed.';
-    toast.error(scrubSessionToken(raw));
-  }, []);
+  const handleError = useCallback(
+    (error: { message?: string }) => {
+      const raw = error?.message ?? 'Airweave connect failed.';
+      toast.error(scrubSessionToken(raw));
+      restoreFocus();
+    },
+    [restoreFocus],
+  );
 
   const handleClose = useCallback(
     (reason: 'success' | 'cancel' | 'error') => {
       // success → handled by handleSuccess; error → handled by handleError.
-      // Cancel is the only branch that needs explicit UX here.
+      // (Both call restoreFocus themselves.)
       if (reason !== 'cancel') return;
       toast.message(
         'Source created in pending state — complete OAuth later via Reauth on the row, or delete the row.',
       );
       onCancelled?.();
+      restoreFocus();
     },
-    [onCancelled],
+    [onCancelled, restoreFocus],
   );
 
-  const { open, isLoading } = useAirweaveConnect({
+  const { open: sdkOpen, isLoading } = useAirweaveConnect({
     getSessionToken,
     connectUrl: CONNECT_URL,
     onSuccess: handleSuccess,
     onError: handleError,
     onClose: handleClose,
+    // a11y mitigation (accessibility review HIGH): SDK modal lacks
+    // dialog semantics + focus trap. `showCloseButton: true` gives
+    // keyboard users a labeled close affordance (Escape still works
+    // too); focus capture/restore is handled by triggerElementRef.
+    showCloseButton: true,
   });
+
+  // Capture the trigger element BEFORE opening so we can restore focus
+  // to it after the SDK closes. document.activeElement during a click
+  // handler is the button that fired it.
+  const open = useCallback(() => {
+    if (typeof document !== 'undefined') {
+      const active = document.activeElement;
+      triggerElementRef.current =
+        active instanceof HTMLElement ? active : null;
+    }
+    sdkOpen();
+  }, [sdkOpen]);
 
   return useMemo(() => ({ open, isLoading }), [open, isLoading]);
 }

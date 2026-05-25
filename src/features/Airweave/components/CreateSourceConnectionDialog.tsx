@@ -309,13 +309,26 @@ function DirectAuthForm({
             )}
             rows={8}
             placeholder='{ "host": "...", "user": "...", "password": "..." }'
+            // a11y MED (review pass): announce parse errors via aria.
+            aria-invalid={Boolean(credentialsJsonError)}
+            aria-describedby={
+              credentialsJsonError
+                ? "airweave-direct-credentials-error"
+                : undefined
+            }
             {...register("credentialsJson")}
           />
           <FieldDescription>
             A JSON object whose shape matches the Airweave connector.
           </FieldDescription>
           {credentialsJsonError && (
-            <p className="text-sm text-destructive">{credentialsJsonError}</p>
+            <p
+              id="airweave-direct-credentials-error"
+              role="alert"
+              className="text-sm text-destructive"
+            >
+              {credentialsJsonError}
+            </p>
           )}
         </Field>
       </FieldGroup>

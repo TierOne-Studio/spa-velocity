@@ -70,14 +70,19 @@ export function AirweaveCollectionDetailPage() {
   // the OAuth handshake against connect.airweave.ai via postMessage.
   //
   // Ref-mirror pattern: React 18+ batches setState synchronously WITHIN
-  // an event handler, so the wrapper's closure-captured pendingOAuthToken
-  // would still read `null` if the SDK invokes getSessionToken inside
-  // the same call frame as our setState. Writing the ref FIRST guarantees
-  // a fresh read regardless of batching.
+  // an event handler, so a state-based read inside the SDK's synchronous
+  // getSessionToken callback would still see `null`. A ref write is
+  // synchronous; closure-staleness goes away. There is intentionally NO
+  // accompanying useState here — the value is consumed exclusively by
+  // the SDK callback (a non-render path), so render state would be
+  // write-only YAGNI. If a future render-driven indicator needs the
+  // token's presence, derive it from `pendingTokenRef.current` via
+  // forceUpdate or add useState then.
   //
   // Unmount safety: a route change mid-OAuth can fire SDK callbacks
-  // against an unmounted page; mountedRef short-circuits the writes.
-  const [, setPendingOAuthToken] = useState<string | null>(null);
+  // against an unmounted page. mountedRef short-circuits the writes
+  // in onConnected/onCancelled AND guards getSessionToken's await
+  // path (per qa-validator HIGH #3 — close failure-mode #13).
   const pendingTokenRef = useRef<string | null>(null);
   const mountedRef = useRef(true);
   useEffect(
@@ -91,6 +96,13 @@ export function AirweaveCollectionDetailPage() {
   const connectModal = useAirweaveConnectModal({
     collectionReadableId,
     getSessionToken: async () => {
+      // Re-check mount BEFORE returning — the SDK invokes us inside
+      // open() so this is the right place to fail-loud on unmount,
+      // not after the await resolves. (Path B per ADR-011 § Amendment 2:
+      // no silent fallback to reauth.)
+      if (!mountedRef.current) {
+        throw new Error("Page unmounted; OAuth flow aborted.");
+      }
       const t = pendingTokenRef.current;
       if (!t) {
         throw new Error(
@@ -102,12 +114,10 @@ export function AirweaveCollectionDetailPage() {
     onConnected: () => {
       if (!mountedRef.current) return;
       pendingTokenRef.current = null;
-      setPendingOAuthToken(null);
     },
     onCancelled: () => {
       if (!mountedRef.current) return;
       pendingTokenRef.current = null;
-      setPendingOAuthToken(null);
     },
   });
 
@@ -262,12 +272,11 @@ export function AirweaveCollectionDetailPage() {
           open={addSourceOpen}
           onOpenChange={setAddSourceOpen}
           onOAuthSubmit={(token) => {
-            // Ref FIRST (synchronous; survives React batching), then
-            // state (for any future render-driven UI), then open(). The
-            // SDK reads pendingTokenRef inside the getSessionToken closure
-            // on this same turn.
+            // Ref-write THEN open(). Synchronous ref-write survives
+            // React batching; the SDK reads pendingTokenRef inside the
+            // getSessionToken closure on this same turn. See the
+            // module-level lifecycle comment above.
             pendingTokenRef.current = token;
-            setPendingOAuthToken(token);
             connectModal.open();
           }}
         />
