@@ -4,6 +4,15 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      Referrer-Policy: strict-origin trims the path/query from any outbound
+      Referer header (origin only). Load-bearing for the Airweave OAuth
+      portal hop in src/features/Airweave/hooks/useAirweaveOAuthPortal.ts
+      so the portal cannot reconstruct the SPA's full URL via Referer.
+      Required per ADR-011 § frontend-security review + the spa airweave
+      plan's Step 0 / Step 5 hardening checklist.
+    -->
+    <meta name="referrer" content="strict-origin" />
     <title>Velocity</title>
   </head>
   <body>

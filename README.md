@@ -476,6 +476,18 @@ Default API URL: `http://localhost:3000`
 To customize, create `.env`:
 ```env
 VITE_API_URL=http://localhost:3000
+
+# Airweave OAuth portal URL — used by /admin/airweave when adding source
+# connections that authenticate via the Airweave portal (Slack, Notion,
+# etc.). The SPA opens this URL in a new tab with `?session_token=<token>`
+# appended. Leave unset to disable the OAuth tab in the
+# create-source-connection dialog (direct-auth still works).
+#
+# v1 uses query-string encoding; URL fragment (`#session_token=`) is
+# preferred for Referer-leak protection and may be adopted when Airweave
+# portal support is confirmed (see the airweave CRUD UI plan, Step 0
+# fragment-vs-query decision).
+VITE_AIRWEAVE_PORTAL_URL=https://app.airweave.ai/connect
 ```
 
 ---

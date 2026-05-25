@@ -1,29 +1,21 @@
 import { useQuery } from "@tanstack/react-query";
 import { fetchWithAuth } from "@/shared/lib/fetch-with-auth";
 import { useEffectiveSession } from "@/shared/hooks/useEffectiveSession";
-import type { AirweaveCollection } from "../types";
+import {
+  airweaveKeys,
+  type CollectionQueryScope,
+} from "@/features/Airweave/hooks/airweaveKeys";
+import type { AirweaveCollection } from "@/features/Airweave/types";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
-
-type CollectionQueryScope = {
-  activeOrganizationId?: string | null;
-  userId?: string | null;
-};
 
 type ApiResponse<T> = {
   data: T;
 };
 
-export const airweaveCollectionKeys = {
-  all: ["admin", "airweave-collections"] as const,
-  lists: (search: string | null | undefined, scope?: CollectionQueryScope) =>
-    [
-      ...airweaveCollectionKeys.all,
-      scope?.userId ?? "anonymous",
-      scope?.activeOrganizationId ?? "no-org",
-      search ?? "",
-    ] as const,
-};
+// Back-compat re-export. Prefer `airweaveKeys` from
+// `@/features/Airweave/hooks/airweaveKeys`.
+export const airweaveCollectionKeys = airweaveKeys;
 
 function useCollectionQueryScope(): CollectionQueryScope {
   const { data: session } = useEffectiveSession();
