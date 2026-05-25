@@ -15,15 +15,16 @@
 type ApiEnvelope<T> = { data: T };
 
 export class AirweaveApiError extends Error {
-  constructor(
-    message: string,
-    /** HTTP status code (404, 409, 429, 502, ...). */
-    public readonly status: number,
-    /** Parsed response body (may be `{}` if the body wasn't JSON). */
-    public readonly body: unknown,
-  ) {
+  /** HTTP status code (404, 409, 429, 502, ...). */
+  readonly status: number;
+  /** Parsed response body (may be `{}` if the body wasn't JSON). */
+  readonly body: unknown;
+
+  constructor(message: string, status: number, body: unknown) {
     super(message);
     this.name = 'AirweaveApiError';
+    this.status = status;
+    this.body = body;
   }
 }
 

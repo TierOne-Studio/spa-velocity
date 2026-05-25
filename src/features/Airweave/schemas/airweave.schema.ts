@@ -47,10 +47,10 @@ export const createDirectSourceConnectionSchema = z.object({
    * per-source via Airweave's connector schema.
    */
   credentials: z
-    .record(z.unknown())
+    .record(z.string(), z.unknown())
     .refine(
       (value) => Object.keys(value).length > 0,
-      'At least one credential field is required',
+      { message: 'At least one credential field is required' },
     ),
 });
 
