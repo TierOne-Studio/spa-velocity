@@ -4,6 +4,7 @@ import {
   IconArrowLeft,
   IconDotsVertical,
   IconEdit,
+  IconPlus,
   IconTrash,
 } from "@tabler/icons-react";
 import { Button } from "@/shared/components/ui/button";
@@ -28,6 +29,7 @@ import { AirweaveApiError } from "@/features/Airweave/lib/api-response";
 import { RenameCollectionDialog } from "@/features/Airweave/components/RenameCollectionDialog";
 import { DeleteCollectionDialog } from "@/features/Airweave/components/DeleteCollectionDialog";
 import { SourceConnectionsList } from "@/features/Airweave/components/SourceConnectionsList";
+import { CreateSourceConnectionDialog } from "@/features/Airweave/components/CreateSourceConnectionDialog";
 
 /**
  * `/admin/airweave/:collectionReadableId` — manage a single collection
@@ -51,9 +53,11 @@ export function AirweaveCollectionDetailPage() {
   const { can } = usePermissionsContext();
   const canUpdate = can("airweave", "update");
   const canDelete = can("airweave", "delete");
+  const canManageSources = can("airweave", "manage-sources");
 
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [addSourceOpen, setAddSourceOpen] = useState(false);
 
   const {
     data: collection,
@@ -154,6 +158,14 @@ export function AirweaveCollectionDetailPage() {
           <CardContent>
             <SourceConnectionsList
               collectionReadableId={collectionReadableId}
+              toolbar={
+                canManageSources ? (
+                  <Button size="sm" onClick={() => setAddSourceOpen(true)}>
+                    <IconPlus className="mr-2 h-4 w-4" />
+                    Add source
+                  </Button>
+                ) : undefined
+              }
             />
           </CardContent>
         </Card>
@@ -172,6 +184,13 @@ export function AirweaveCollectionDetailPage() {
           open={deleteOpen}
           onOpenChange={setDeleteOpen}
           onDeleted={() => navigate("/admin/airweave")}
+        />
+      )}
+      {canManageSources && (
+        <CreateSourceConnectionDialog
+          collectionReadableId={collectionReadableId}
+          open={addSourceOpen}
+          onOpenChange={setAddSourceOpen}
         />
       )}
     </div>
