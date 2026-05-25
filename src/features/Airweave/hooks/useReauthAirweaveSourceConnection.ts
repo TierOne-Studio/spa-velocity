@@ -4,9 +4,10 @@ import type { ReauthSourceConnectionResult } from '../types';
 
 /**
  * Issue a fresh OAuth session token for an existing source connection.
- * The caller (`ReauthSourceConnectionButton` in Step 5) immediately
- * passes the returned `sessionToken` to `useAirweaveOAuthPortal.open(...)`
- * so the user can complete the OAuth handshake.
+ * The caller (`ReauthSourceConnectionButton`) wraps this in
+ * `useAirweaveConnectModal`'s `getSessionToken` callback; the SDK then
+ * opens its iframe modal and exchanges the token via postMessage. Per
+ * ADR-011 § Amendment 2.
  *
  * Backend returns 502 BadGatewayException when the source connection's
  * `auth.method !== 'oauth_browser'` — caller surfaces the message via

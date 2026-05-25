@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import {
   IconArrowLeft,
@@ -31,8 +31,7 @@ import { DeleteCollectionDialog } from "@/features/Airweave/components/DeleteCol
 import { SourceConnectionsList } from "@/features/Airweave/components/SourceConnectionsList";
 import { CreateSourceConnectionDialog } from "@/features/Airweave/components/CreateSourceConnectionDialog";
 import { ReauthSourceConnectionButton } from "@/features/Airweave/components/ReauthSourceConnectionButton";
-import { useQueryClient } from "@tanstack/react-query";
-import { airweaveKeys } from "@/features/Airweave/hooks/airweaveKeys";
+import { useAirweaveConnectModal } from "@/features/Airweave/hooks/useAirweaveConnectModal";
 
 /**
  * `/admin/airweave/:collectionReadableId` — manage a single collection
@@ -61,11 +60,56 @@ export function AirweaveCollectionDetailPage() {
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [addSourceOpen, setAddSourceOpen] = useState(false);
-  // Step 5 persistent OAuth-in-progress banner. State stays in this
-  // page's local scope (per architect Q4: simplest level for one
-  // consumer; lift only if a v2 cross-page banner emerges).
-  const [oauthInProgress, setOauthInProgress] = useState(false);
-  const queryClient = useQueryClient();
+
+  // ── OAuth modal lifecycle (lifted to page level — architect HIGH #2) ──
+  //
+  // The Airweave Connect SDK (@airweave/connect-react) is driven via
+  // useAirweaveConnectModal mounted HERE on the page, not inside the
+  // CreateSourceConnectionDialog. The dialog closes immediately after
+  // the create mutation resolves; the SDK's iframe widget then handles
+  // the OAuth handshake against connect.airweave.ai via postMessage.
+  //
+  // Ref-mirror pattern: React 18+ batches setState synchronously WITHIN
+  // an event handler, so the wrapper's closure-captured pendingOAuthToken
+  // would still read `null` if the SDK invokes getSessionToken inside
+  // the same call frame as our setState. Writing the ref FIRST guarantees
+  // a fresh read regardless of batching.
+  //
+  // Unmount safety: a route change mid-OAuth can fire SDK callbacks
+  // against an unmounted page; mountedRef short-circuits the writes.
+  const [, setPendingOAuthToken] = useState<string | null>(null);
+  const pendingTokenRef = useRef<string | null>(null);
+  const mountedRef = useRef(true);
+  useEffect(
+    () => () => {
+      mountedRef.current = false;
+      pendingTokenRef.current = null;
+    },
+    [],
+  );
+
+  const connectModal = useAirweaveConnectModal({
+    collectionReadableId,
+    getSessionToken: async () => {
+      const t = pendingTokenRef.current;
+      if (!t) {
+        throw new Error(
+          "No pending OAuth token — click Reauth on the row to retry.",
+        );
+      }
+      return t;
+    },
+    onConnected: () => {
+      if (!mountedRef.current) return;
+      pendingTokenRef.current = null;
+      setPendingOAuthToken(null);
+    },
+    onCancelled: () => {
+      if (!mountedRef.current) return;
+      pendingTokenRef.current = null;
+      setPendingOAuthToken(null);
+    },
+  });
 
   const {
     data: collection,
@@ -164,40 +208,14 @@ export function AirweaveCollectionDetailPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {oauthInProgress && (
-              <div
-                role="status"
-                className="flex items-center justify-between gap-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950"
-              >
-                <span>
-                  OAuth flow in progress in another tab. After completing,
-                  click below to refresh.
-                </span>
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      void queryClient.invalidateQueries({
-                        queryKey: airweaveKeys.sourceConnections(
-                          collectionReadableId,
-                        ),
-                      });
-                    }}
-                  >
-                    Refresh
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setOauthInProgress(false)}
-                    aria-label="Dismiss OAuth banner"
-                  >
-                    Dismiss
-                  </Button>
-                </div>
-              </div>
-            )}
+            {/*
+              No "OAuth in progress" banner: the @airweave/connect-react
+              SDK invalidates source-connection caches automatically via
+              its onSuccess callback (wired in useAirweaveConnectModal).
+              Per ADR-011 § Amendment 2 — postMessage transport delivers
+              completion events directly, no manual-refresh affordance
+              needed.
+            */}
             <SourceConnectionsList
               collectionReadableId={collectionReadableId}
               toolbar={
@@ -214,7 +232,6 @@ export function AirweaveCollectionDetailPage() {
                       <ReauthSourceConnectionButton
                         key={`reauth-${source.id}`}
                         sourceConnection={source}
-                        onPortalOpened={() => setOauthInProgress(true)}
                       />
                     )
                   : undefined
@@ -244,7 +261,15 @@ export function AirweaveCollectionDetailPage() {
           collectionReadableId={collectionReadableId}
           open={addSourceOpen}
           onOpenChange={setAddSourceOpen}
-          onPortalOpened={() => setOauthInProgress(true)}
+          onOAuthSubmit={(token) => {
+            // Ref FIRST (synchronous; survives React batching), then
+            // state (for any future render-driven UI), then open(). The
+            // SDK reads pendingTokenRef inside the getSessionToken closure
+            // on this same turn.
+            pendingTokenRef.current = token;
+            setPendingOAuthToken(token);
+            connectModal.open();
+          }}
         />
       )}
     </div>

@@ -1,76 +1,56 @@
-import { toast } from "sonner";
 import { IconRefresh } from "@tabler/icons-react";
 import { DropdownMenuItem } from "@/shared/components/ui/dropdown-menu";
 import { useReauthAirweaveSourceConnection } from "@/features/Airweave/hooks/useReauthAirweaveSourceConnection";
-import { useAirweaveOAuthPortal } from "@/features/Airweave/hooks/useAirweaveOAuthPortal";
-import { scrubSessionToken } from "@/features/Airweave/lib/scrub-session-token";
-import { showPopupBlockedToast } from "@/features/Airweave/lib/popup-blocked-toast";
+import { useAirweaveConnectModal } from "@/features/Airweave/hooks/useAirweaveConnectModal";
 import type { AirweaveSourceConnection } from "@/features/Airweave/types";
 
 type Props = {
   sourceConnection: AirweaveSourceConnection;
-  onPortalOpened?: () => void;
 };
 
 /**
  * Per-row Reauth menu item. Renders as a `DropdownMenuItem` so it slots
  * into `SourceConnectionsList`'s `renderRowExtra`.
  *
- * Client-side gating (defense in depth — backend remains source of
- * truth):
- *  - Hidden for sources whose `auth.method !== 'oauth_browser'`. Backend
+ * Click → `useAirweaveConnectModal.open()` → SDK invokes our
+ * `getSessionToken` which calls the backend reauth endpoint to mint a
+ * fresh sessionToken → SDK opens the Airweave Connect iframe widget for
+ * the OAuth handshake. Per ADR-011 § Amendment 2 — postMessage transport,
+ * not window.open.
+ *
+ * Defense-in-depth visibility filter (backend remains source of truth):
+ *  - Hidden for sources whose `authMethod !== 'oauth_browser'`. Backend
  *    returns 502 if the SPA still calls reauth on them; this prevents
  *    the round-trip.
- *  - Hidden when the portal helper reports `isAvailable: false`
- *    (VITE_AIRWEAVE_PORTAL_URL unset). Caller toasts an explanatory
- *    error if `open()` returns false anyway.
  *
- * On success, calls `onPortalOpened` so the detail page can render the
- * persistent "OAuth in progress" banner.
+ * Lifecycle: the button lives inside a row inside a table inside the
+ * detail page — the page is alive during the entire OAuth flow, so the
+ * `useAirweaveConnectModal` hook here is safe (unlike the create-flow
+ * which had to lift to the page level because the dialog unmounts).
  */
-export function ReauthSourceConnectionButton({
-  sourceConnection,
-  onPortalOpened,
-}: Props) {
+export function ReauthSourceConnectionButton({ sourceConnection }: Props) {
   const reauthMutation = useReauthAirweaveSourceConnection();
-  const portal = useAirweaveOAuthPortal();
+  const connectModal = useAirweaveConnectModal({
+    collectionReadableId: sourceConnection.collectionReadableId,
+    getSessionToken: async () => {
+      const result = await reauthMutation.mutateAsync(sourceConnection.id);
+      return result.sessionToken;
+    },
+  });
 
-  // Defense-in-depth visibility filter — see JSDoc.
-  if (!portal.isAvailable) return null;
   if (sourceConnection.authMethod !== "oauth_browser") return null;
-
-  const handleClick = async (event: Event) => {
-    // Prevent the menu from closing before mutateAsync resolves so the
-    // user can see the spinner via the disabled state if we wanted —
-    // simple v1: let it close and show the toast on completion.
-    event.preventDefault();
-    try {
-      const { sessionToken } = await reauthMutation.mutateAsync(
-        sourceConnection.id,
-      );
-      const opened = portal.open(sessionToken);
-      if (!opened) {
-        showPopupBlockedToast();
-        return;
-      }
-      onPortalOpened?.();
-      toast.success("Re-auth started — complete the flow in the new tab.");
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? scrubSessionToken(error.message)
-          : "Failed to start re-auth";
-      toast.error(message);
-    }
-  };
 
   return (
     <DropdownMenuItem
       onSelect={(event) => {
-        // Run async work outside React's event sync boundary.
-        void handleClick(event);
+        // Prevent the menu from closing before the modal opens — keeps
+        // focus management consistent. The SDK's getSessionToken triggers
+        // the reauth mutation; error/cancel/success surface via
+        // useAirweaveConnectModal's own toast wiring.
+        event.preventDefault();
+        connectModal.open();
       }}
-      disabled={reauthMutation.isPending}
+      disabled={reauthMutation.isPending || connectModal.isLoading}
     >
       <IconRefresh className="mr-2 h-4 w-4" />
       Re-authenticate

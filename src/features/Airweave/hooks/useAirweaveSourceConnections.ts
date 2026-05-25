@@ -4,11 +4,12 @@ import { airweaveKeys } from './airweaveKeys';
 import type { AirweaveSourceConnection } from '../types';
 
 /**
- * Fetch all source connections inside a collection. `refetchOnWindowFocus`
- * (TanStack default `true`) is the v1 mechanism by which the detail page
- * picks up source-connection state changes after the user completes an
- * OAuth flow in a new tab — see `useAirweaveOAuthPortal` + ADR-011
- * § Decision 8.
+ * Fetch all source connections inside a collection. Per ADR-011 §
+ * Amendment 2: cache invalidation after OAuth completion is driven by
+ * `useAirweaveConnectModal`'s `onSuccess` callback (which calls
+ * `queryClient.invalidateQueries`); `refetchOnWindowFocus` is a
+ * secondary safety net for any state changes Airweave makes outside
+ * our flow.
  */
 export function useAirweaveSourceConnections(
   collectionReadableId: string,

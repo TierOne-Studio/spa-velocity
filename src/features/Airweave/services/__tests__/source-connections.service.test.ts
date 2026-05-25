@@ -95,21 +95,21 @@ describe('source-connections.service', () => {
         }),
       );
 
+      // Per ADR-011 § Amendment 2: OAuth branch no longer carries
+      // `redirectUri` — the @airweave/connect-react SDK uses postMessage
+      // CONNECTION_CREATED / CLOSE callbacks instead of redirect URIs.
       const result = await createSourceConnection('acme-x-deadbeef', {
         name: 'Slack',
         shortName: 'slack',
-        authentication: {
-          kind: 'oauth',
-          redirectUri: 'https://app.velocity/done',
-        },
+        authentication: { kind: 'oauth' },
       });
 
       const [, init] = lastRequest();
       const body = JSON.parse(String(init.body));
-      expect(body.authentication).toEqual({
-        kind: 'oauth',
-        redirectUri: 'https://app.velocity/done',
-      });
+      expect(body.authentication).toEqual({ kind: 'oauth' });
+      // Defense-in-depth: redirectUri must NOT appear on the wire even
+      // by accident.
+      expect(body.authentication).not.toHaveProperty('redirectUri');
       expect(result.sessionToken).toBe('connect-tok-xyz');
     });
   });

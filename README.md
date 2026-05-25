@@ -477,17 +477,20 @@ To customize, create `.env`:
 ```env
 VITE_API_URL=http://localhost:3000
 
-# Airweave OAuth portal URL — used by /admin/airweave when adding source
-# connections that authenticate via the Airweave portal (Slack, Notion,
-# etc.). The SPA opens this URL in a new tab with `?session_token=<token>`
-# appended. Leave unset to disable the OAuth tab in the
-# create-source-connection dialog (direct-auth still works).
+# Airweave Connect widget URL — used by the @airweave/connect-react SDK
+# embedded in /admin/airweave when adding OAuth-authenticated source
+# connections (Slack, Notion, Google Drive, …). The SDK transports the
+# short-lived session token via postMessage (not URL params), so no
+# Referer-leak concerns. Default is the hosted widget; override for
+# self-hosted Airweave deployments (the SDK's `connectUrl` prop reads
+# this value). Leave unset → SDK falls back to its built-in default
+# https://connect.airweave.ai.
 #
-# v1 uses query-string encoding; URL fragment (`#session_token=`) is
-# preferred for Referer-leak protection and may be adopted when Airweave
-# portal support is confirmed (see the airweave CRUD UI plan, Step 0
-# fragment-vs-query decision).
-VITE_AIRWEAVE_PORTAL_URL=https://app.airweave.ai/connect
+# Per ADR-011 § Amendment 2 (api-velocity): this env var supersedes the
+# prior VITE_AIRWEAVE_PORTAL_URL which assumed a wrong window.open +
+# query-string transport. The official @airweave/connect-react SDK
+# obsoleted that flow entirely.
+VITE_AIRWEAVE_CONNECT_URL=https://connect.airweave.ai
 ```
 
 ---

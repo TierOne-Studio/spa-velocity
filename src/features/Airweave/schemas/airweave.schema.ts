@@ -54,15 +54,12 @@ export const createDirectSourceConnectionSchema = z.object({
     ),
 });
 
+// Per ADR-011 § Amendment 2 (2026-05-25): no `redirectUri` field —
+// @airweave/connect-react SDK uses postMessage CONNECTION_CREATED /
+// CLOSE callbacks; redirect URIs were inherited dead-contract.
 export const createOAuthSourceConnectionSchema = z.object({
   name: trimmedString('Name'),
   shortName: trimmedString('Source identifier', 64),
-  redirectUri: z
-    .string()
-    .trim()
-    .url('Redirect URI must be a valid URL')
-    .optional()
-    .or(z.literal('').transform(() => undefined)),
 });
 
 export const updateSourceConnectionSchema = z.object({

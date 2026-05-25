@@ -29,58 +29,73 @@ import { cn } from "@/shared/lib/utils";
 import {
   createDirectSourceConnectionSchema,
   createOAuthSourceConnectionSchema,
-  type CreateDirectSourceConnectionForm,
-  type CreateOAuthSourceConnectionForm,
 } from "@/features/Airweave/schemas/airweave.schema";
 import { useCreateAirweaveSourceConnection } from "@/features/Airweave/hooks/useCreateAirweaveSourceConnection";
-import { useAirweaveOAuthPortal } from "@/features/Airweave/hooks/useAirweaveOAuthPortal";
 import { scrubSessionToken } from "@/features/Airweave/lib/scrub-session-token";
-import { showPopupBlockedToast } from "@/features/Airweave/lib/popup-blocked-toast";
 
 type Props = {
   collectionReadableId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /**
-   * Called when the OAuth tab successfully kicks off a portal flow so
-   * the detail page can render the persistent "OAuth in progress" banner.
+   * Fires when the OAuth tab successfully kicks off the create+token
+   * issuance. Page lifts the SDK modal (per ADR-011 § Amendment 2 +
+   * architect HIGH #2): page-level `useAirweaveConnectModal` reads the
+   * token from a ref the page sets in this callback, then calls
+   * `open()` on the SDK modal. The dialog itself closes immediately —
+   * it doesn't outlive the OAuth handshake.
    */
-  onPortalOpened?: () => void;
+  onOAuthSubmit?: (sessionToken: string) => void;
 };
 
-type DirectFormShape = Omit<CreateDirectSourceConnectionForm, "credentials"> & {
+/**
+ * Form-value type for the direct-auth branch.
+ *
+ * `credentialsJson` is NOT in the Zod schema (the schema validates the
+ * post-parse `credentials: Record<string, unknown>` shape). `handleSubmit`
+ * runs the JSON parse first, then invokes the Zod resolver on the parsed
+ * payload `{name, shortName, credentials}`. See architect LOW Q4.
+ */
+type DirectFormShape = {
+  name: string;
+  shortName: string;
   credentialsJson: string;
 };
 
 /**
- * Add a source connection — direct auth OR OAuth-via-portal (Step 5).
+ * Form-value type for the OAuth branch.
  *
- * Refactored from the Step-4b single-form dialog: now wraps the existing
- * direct-form in `<Tabs>` and adds an OAuth tab. Each tab is its own
- * `useForm` instance so values don't bleed between branches.
+ * Per ADR-011 § Amendment 2: no `redirectUri` field — the official
+ * `@airweave/connect-react` SDK uses postMessage CONNECTION_CREATED /
+ * CLOSE callbacks; redirect URIs are inherited dead-contract.
+ */
+type OAuthFormShape = {
+  name: string;
+  shortName: string;
+};
+
+/**
+ * Add a source connection — direct auth OR OAuth-via-SDK.
  *
- * OAuth flow:
- *   1. Backend creates the source connection in `pending` and issues a
- *      `sessionToken` (per ADR-011 § Decision 8).
- *   2. SPA opens the Airweave portal in a new tab with the token via
- *      `useAirweaveOAuthPortal` (security hardening: noopener,noreferrer
- *      + token scrubbing on any rendered error).
- *   3. User completes the OAuth at the upstream provider; returns to the
- *      SPA tab; `refetchOnWindowFocus` refreshes the source-connection
- *      list. The detail page also offers a persistent "in progress"
- *      banner with a manual refresh button.
- *   4. If the portal returns a `sessionToken` but `window.open` is
- *      blocked, the user sees a shared "allow popups + click Reauth"
- *      toast (no banner — banner is reserved for the success path).
+ * OAuth flow (per ADR-011 § Amendment 2 — postMessage transport, NOT
+ * window.open):
+ *   1. Backend creates the source connection in `pending` + issues a
+ *      `sessionToken`.
+ *   2. Dialog passes the token up via `onOAuthSubmit(token)` and closes.
+ *   3. Page receives the token, stashes it in a ref, and triggers the
+ *      SDK-driven `useAirweaveConnectModal.open()` (lifted to page level
+ *      so the modal outlives the dialog's unmount cycle).
+ *   4. SDK opens its iframe widget at `connect.airweave.ai`, exchanges
+ *      the token via postMessage REQUEST_TOKEN/TOKEN_RESPONSE, and emits
+ *      onSuccess(connectionId) or onClose('cancel'|'error') on completion.
  */
 export function CreateSourceConnectionDialog({
   collectionReadableId,
   open,
   onOpenChange,
-  onPortalOpened,
+  onOAuthSubmit,
 }: Props) {
   const createMutation = useCreateAirweaveSourceConnection();
-  const portal = useAirweaveOAuthPortal();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -91,21 +106,19 @@ export function CreateSourceConnectionDialog({
             Choose <strong>Direct</strong> for credential-based sources
             (Postgres, S3, API tokens) or <strong>OAuth</strong> for
             sources that need a browser handshake (Slack, Notion, Google
-            Drive, …).
+            Drive, …). OAuth uses the official Airweave Connect widget;
+            you don&apos;t leave Velocity.
           </DialogDescription>
         </DialogHeader>
 
         <Tabs defaultValue="direct" className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="direct">Direct</TabsTrigger>
-            <TabsTrigger value="oauth" disabled={!portal.isAvailable}>
-              OAuth
-            </TabsTrigger>
+            <TabsTrigger value="oauth">OAuth</TabsTrigger>
           </TabsList>
 
           <TabsContent value="direct">
             <DirectAuthForm
-              collectionReadableId={collectionReadableId}
               isPending={createMutation.isPending}
               onSubmit={async (input) => {
                 try {
@@ -135,63 +148,40 @@ export function CreateSourceConnectionDialog({
           </TabsContent>
 
           <TabsContent value="oauth">
-            {portal.isAvailable ? (
-              <OAuthForm
-                collectionReadableId={collectionReadableId}
-                isPending={createMutation.isPending}
-                onSubmit={async (input) => {
-                  try {
-                    const result = await createMutation.mutateAsync({
-                      collectionReadableId,
-                      input: {
-                        name: input.name,
-                        shortName: input.shortName,
-                        authentication: {
-                          kind: "oauth",
-                          redirectUri: input.redirectUri,
-                        },
-                      },
-                    });
-                    const token = result.sessionToken;
-                    if (!token) {
-                      // Backend should always return a token on the OAuth
-                      // branch; surface the contract violation loudly.
-                      toast.error(
-                        "Source created but no OAuth session token was returned — please re-authenticate from the source row.",
-                      );
-                      onOpenChange(false);
-                      return;
-                    }
-                    const opened = portal.open(token);
-                    if (!opened) {
-                      showPopupBlockedToast();
-                      // Source is created; dialog closes so the user can
-                      // see the new row + retry via its Reauth button.
-                      onOpenChange(false);
-                      return;
-                    }
-                    onPortalOpened?.();
-                    toast.success(
-                      "Source created — complete OAuth in the new tab.",
+            <OAuthForm
+              isPending={createMutation.isPending}
+              onSubmit={async (input) => {
+                try {
+                  const result = await createMutation.mutateAsync({
+                    collectionReadableId,
+                    input: {
+                      name: input.name,
+                      shortName: input.shortName,
+                      authentication: { kind: "oauth" },
+                    },
+                  });
+                  const token = result.sessionToken;
+                  if (!token) {
+                    toast.error(
+                      "Source created but no OAuth session token was returned — please use Reauth on the source row.",
                     );
                     onOpenChange(false);
-                  } catch (error) {
-                    const message =
-                      error instanceof Error
-                        ? scrubSessionToken(error.message)
-                        : "Failed to create source connection";
-                    toast.error(message);
+                    return;
                   }
-                }}
-                onCancel={() => onOpenChange(false)}
-              />
-            ) : (
-              <p className="p-4 text-sm text-muted-foreground">
-                The Airweave OAuth portal is not configured in this
-                environment. Set <code>VITE_AIRWEAVE_PORTAL_URL</code> to
-                enable the OAuth tab. Direct-auth sources still work.
-              </p>
-            )}
+                  // Hand off to the page-level SDK modal. Page is alive;
+                  // dialog can safely close now.
+                  onOAuthSubmit?.(token);
+                  onOpenChange(false);
+                } catch (error) {
+                  const message =
+                    error instanceof Error
+                      ? scrubSessionToken(error.message)
+                      : "Failed to create source connection";
+                  toast.error(message);
+                }
+              }}
+              onCancel={() => onOpenChange(false)}
+            />
           </TabsContent>
         </Tabs>
       </DialogContent>
@@ -199,15 +189,13 @@ export function CreateSourceConnectionDialog({
   );
 }
 
-// ── Direct-auth sub-form ──────────────────────────────────────────────────
+// ── Direct-auth sub-form (zodResolver + JSON pre-parse) ──────────────────
 
 function DirectAuthForm({
-  collectionReadableId: _,
   isPending,
   onSubmit,
   onCancel,
 }: {
-  collectionReadableId: string;
   isPending: boolean;
   onSubmit: (data: {
     name: string;
@@ -216,9 +204,9 @@ function DirectAuthForm({
   }) => Promise<void>;
   onCancel: () => void;
 }) {
-  const [credentialsJsonError, setCredentialsJsonError] = useState<string | null>(
-    null,
-  );
+  const [credentialsJsonError, setCredentialsJsonError] = useState<
+    string | null
+  >(null);
 
   const {
     register,
@@ -229,12 +217,15 @@ function DirectAuthForm({
     defaultValues: { name: "", shortName: "", credentialsJson: "{\n  \n}" },
   });
 
+  // Reset on mount (dialog opens fresh). Radix Dialog unmounts content
+  // on close, so this effectively runs at every open.
   useEffect(() => {
     reset({ name: "", shortName: "", credentialsJson: "{\n  \n}" });
     setCredentialsJsonError(null);
   }, [reset]);
 
   const submit = async (values: DirectFormShape) => {
+    // Step 1: parse JSON (this is what zodResolver can't do).
     let credentials: Record<string, unknown>;
     try {
       const parsed: unknown = JSON.parse(values.credentialsJson);
@@ -248,15 +239,28 @@ function DirectAuthForm({
       return;
     }
 
+    // Step 2: validate the post-parse payload via the canonical Zod schema.
     const validation = createDirectSourceConnectionSchema.safeParse({
       name: values.name,
       shortName: values.shortName,
       credentials,
     });
     if (!validation.success) {
-      toast.error(validation.error.issues[0].message);
+      const first = validation.error.issues[0];
+      // Field-level errors surface in <FieldError>; credentials-shape
+      // errors surface in the bespoke <p> below (Zod's `credentials`
+      // refine fires for empty objects, etc.).
+      if (
+        first.path[0] === "credentials" ||
+        first.path.length === 0
+      ) {
+        setCredentialsJsonError(first.message);
+      } else {
+        toast.error(first.message);
+      }
       return;
     }
+
     setCredentialsJsonError(null);
     await onSubmit(validation.data);
   };
@@ -270,7 +274,7 @@ function DirectAuthForm({
             id="airweave-direct-name"
             placeholder="Production Postgres"
             autoFocus
-            {...register("name", { required: "Name is required" })}
+            {...register("name")}
           />
           <FieldError errors={[errors.name]} />
         </Field>
@@ -282,9 +286,7 @@ function DirectAuthForm({
           <Input
             id="airweave-direct-shortname"
             placeholder="postgresql"
-            {...register("shortName", {
-              required: "Source type is required",
-            })}
+            {...register("shortName")}
           />
           <FieldDescription>
             The Airweave connector identifier (<code>postgresql</code>,{" "}
@@ -307,9 +309,7 @@ function DirectAuthForm({
             )}
             rows={8}
             placeholder='{ "host": "...", "user": "...", "password": "..." }'
-            {...register("credentialsJson", {
-              required: "Credentials are required",
-            })}
+            {...register("credentialsJson")}
           />
           <FieldDescription>
             A JSON object whose shape matches the Airweave connector.
@@ -337,17 +337,15 @@ function DirectAuthForm({
   );
 }
 
-// ── OAuth sub-form ────────────────────────────────────────────────────────
+// ── OAuth sub-form (just name + shortName; SDK handles the rest) ─────────
 
 function OAuthForm({
-  collectionReadableId: _,
   isPending,
   onSubmit,
   onCancel,
 }: {
-  collectionReadableId: string;
   isPending: boolean;
-  onSubmit: (data: CreateOAuthSourceConnectionForm) => Promise<void>;
+  onSubmit: (data: OAuthFormShape) => Promise<void>;
   onCancel: () => void;
 }) {
   const {
@@ -355,19 +353,19 @@ function OAuthForm({
     handleSubmit,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<CreateOAuthSourceConnectionForm>({
+  } = useForm<OAuthFormShape>({
     resolver: zodResolver(createOAuthSourceConnectionSchema),
-    defaultValues: { name: "", shortName: "", redirectUri: "" },
+    defaultValues: { name: "", shortName: "" },
   });
 
   useEffect(() => {
-    reset({ name: "", shortName: "", redirectUri: "" });
+    reset({ name: "", shortName: "" });
   }, [reset]);
 
   return (
     <form
       onSubmit={handleSubmit(async (values) =>
-        onSubmit({ ...values, redirectUri: values.redirectUri || undefined }),
+        onSubmit({ name: values.name, shortName: values.shortName }),
       )}
       noValidate
       className="pt-2"
@@ -385,7 +383,9 @@ function OAuthForm({
         </Field>
 
         <Field data-invalid={Boolean(errors.shortName)}>
-          <FieldLabel htmlFor="airweave-oauth-shortname">Source type</FieldLabel>
+          <FieldLabel htmlFor="airweave-oauth-shortname">
+            Source type
+          </FieldLabel>
           <Input
             id="airweave-oauth-shortname"
             placeholder="slack"
@@ -393,26 +393,11 @@ function OAuthForm({
           />
           <FieldDescription>
             The Airweave OAuth connector identifier (<code>slack</code>,{" "}
-            <code>notion</code>, <code>google_drive</code>, …).
+            <code>notion</code>, <code>google_drive</code>, …). Submitting
+            opens the Airweave Connect widget where you&apos;ll complete
+            the OAuth handshake; you never leave Velocity.
           </FieldDescription>
           <FieldError errors={[errors.shortName]} />
-        </Field>
-
-        <Field data-invalid={Boolean(errors.redirectUri)}>
-          <FieldLabel htmlFor="airweave-oauth-redirect">
-            Redirect URI <span className="text-muted-foreground">(optional)</span>
-          </FieldLabel>
-          <Input
-            id="airweave-oauth-redirect"
-            type="url"
-            placeholder="https://app.velocity/admin/airweave"
-            {...register("redirectUri")}
-          />
-          <FieldDescription>
-            Where Airweave should return the user after the OAuth flow.
-            Defaults to a portal-side landing page when omitted.
-          </FieldDescription>
-          <FieldError errors={[errors.redirectUri]} />
         </Field>
       </FieldGroup>
 
@@ -432,3 +417,4 @@ function OAuthForm({
     </form>
   );
 }
+

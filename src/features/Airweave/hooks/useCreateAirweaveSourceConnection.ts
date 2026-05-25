@@ -18,9 +18,11 @@ type Variables = {
  *  - `'direct'`: server creates synchronously + kicks off the initial sync;
  *    `result.sessionToken` is `undefined`.
  *  - `'oauth'`: server creates pending + returns a `sessionToken`. The
- *    caller (`CreateSourceConnectionDialog` Step 5 OAuth tab) passes the
- *    token to `useAirweaveOAuthPortal.open(token)` to launch the browser
- *    OAuth handshake.
+ *    caller (`CreateSourceConnectionDialog` OAuth tab) hands the token
+ *    up to `AirweaveCollectionDetailPage` via `onOAuthSubmit`, which
+ *    drives the SDK-powered modal via `useAirweaveConnectModal`. Per
+ *    ADR-011 § Amendment 2: postMessage transport via
+ *    `@airweave/connect-react`, not window.open.
  *
  * On success invalidates the parent collection's source-connection list
  * AND the collection detail (because `sourceConnectionCount` changed).

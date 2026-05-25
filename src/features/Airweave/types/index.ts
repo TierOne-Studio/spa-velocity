@@ -76,10 +76,11 @@ export type CreateSourceConnectionInput =
   | {
       name: string;
       shortName: string;
+      // Per ADR-011 § Amendment 2: no `redirectUri` field —
+      // @airweave/connect-react SDK uses postMessage CONNECTION_CREATED
+      // / CLOSE callbacks; redirect URIs were inherited dead-contract.
       authentication: {
         kind: 'oauth';
-        /** Optional post-OAuth landing URL. */
-        redirectUri?: string;
       };
     };
 

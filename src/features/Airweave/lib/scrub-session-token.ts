@@ -1,15 +1,15 @@
 /**
- * Strip Airweave portal `session_token=…` values from any rendered string.
+ * Strip Airweave `session_token=…` values from any rendered string.
  *
- * The OAuth-portal flow (see `useAirweaveOAuthPortal`) passes a session
- * token via URL parameter / fragment. If that URL ever lands in an error
- * toast, an unhandled-rejection log, or a console message, the token
- * leaks. This helper is the render-time presentation gate — call it on
- * any string that might contain a URL before passing to toast / console
- * / error UI.
+ * Per ADR-011 § Amendment 2: the official `@airweave/connect-react` SDK
+ * transports the session token via postMessage (not URL), so URL-based
+ * leakage is no longer a real attack surface. This helper is retained
+ * as defense-in-depth on backend error messages — if a 4xx/5xx response
+ * happens to embed `?session_token=xxx` (e.g., a malformed URL echoed
+ * in the message body), we scrub it before render.
  *
- * Matches both `?session_token=…` (query) and `#session_token=…` (fragment)
- * variants, plus `&session_token=…` inside multi-param URLs.
+ * Matches `?session_token=…`, `#session_token=…`, and `&session_token=…`
+ * variants.
  *
  * Placed under `lib/` not `services/` because this is a security
  * presentation helper, not HTTP I/O. Reusable for future bearer-style URL
