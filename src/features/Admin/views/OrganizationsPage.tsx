@@ -236,7 +236,11 @@ export function OrganizationsPage() {
     isSuperadmin || organizationId === currentActiveOrganizationId
   const canManageSelectedOrganization =
     !!selectedOrg && canManageOrganizationFromPage(selectedOrg.id)
-  const canReadCollections = can('project', 'read')
+  // Migrated from `can('project', 'read')` workaround to the proper
+  // `airweave:read` permission shipped by api-velocity#23 (rbac_020).
+  // admin/manager/member all receive `airweave:read` per that migration,
+  // so default-role behavior is preserved.
+  const canReadCollections = can('airweave', 'read')
 
   // Queries
   const { data: orgsResponse, isLoading: orgsLoading } = useOrganizations({ page, limit: pageSize, search: search || undefined })
