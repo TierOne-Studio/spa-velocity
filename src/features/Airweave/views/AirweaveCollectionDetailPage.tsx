@@ -30,6 +30,9 @@ import { RenameCollectionDialog } from "@/features/Airweave/components/RenameCol
 import { DeleteCollectionDialog } from "@/features/Airweave/components/DeleteCollectionDialog";
 import { SourceConnectionsList } from "@/features/Airweave/components/SourceConnectionsList";
 import { CreateSourceConnectionDialog } from "@/features/Airweave/components/CreateSourceConnectionDialog";
+import { ReauthSourceConnectionButton } from "@/features/Airweave/components/ReauthSourceConnectionButton";
+import { useQueryClient } from "@tanstack/react-query";
+import { airweaveKeys } from "@/features/Airweave/hooks/airweaveKeys";
 
 /**
  * `/admin/airweave/:collectionReadableId` — manage a single collection
@@ -58,6 +61,11 @@ export function AirweaveCollectionDetailPage() {
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [addSourceOpen, setAddSourceOpen] = useState(false);
+  // Step 5 persistent OAuth-in-progress banner. State stays in this
+  // page's local scope (per architect Q4: simplest level for one
+  // consumer; lift only if a v2 cross-page banner emerges).
+  const [oauthInProgress, setOauthInProgress] = useState(false);
+  const queryClient = useQueryClient();
 
   const {
     data: collection,
@@ -155,7 +163,41 @@ export function AirweaveCollectionDetailPage() {
               workflow ships in the next slice.
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
+            {oauthInProgress && (
+              <div
+                role="status"
+                className="flex items-center justify-between gap-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950"
+              >
+                <span>
+                  OAuth flow in progress in another tab. After completing,
+                  click below to refresh.
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      void queryClient.invalidateQueries({
+                        queryKey: airweaveKeys.sourceConnections(
+                          collectionReadableId,
+                        ),
+                      });
+                    }}
+                  >
+                    Refresh
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setOauthInProgress(false)}
+                    aria-label="Dismiss OAuth banner"
+                  >
+                    Dismiss
+                  </Button>
+                </div>
+              </div>
+            )}
             <SourceConnectionsList
               collectionReadableId={collectionReadableId}
               toolbar={
@@ -165,6 +207,17 @@ export function AirweaveCollectionDetailPage() {
                     Add source
                   </Button>
                 ) : undefined
+              }
+              renderRowExtra={
+                canManageSources
+                  ? (source) => (
+                      <ReauthSourceConnectionButton
+                        key={`reauth-${source.id}`}
+                        sourceConnection={source}
+                        onPortalOpened={() => setOauthInProgress(true)}
+                      />
+                    )
+                  : undefined
               }
             />
           </CardContent>
@@ -191,6 +244,7 @@ export function AirweaveCollectionDetailPage() {
           collectionReadableId={collectionReadableId}
           open={addSourceOpen}
           onOpenChange={setAddSourceOpen}
+          onPortalOpened={() => setOauthInProgress(true)}
         />
       )}
     </div>

@@ -12,7 +12,12 @@ import {
   DialogTitle,
 } from "@/shared/components/ui/dialog";
 import { Input } from "@/shared/components/ui/input";
-import { cn } from "@/shared/lib/utils";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/shared/components/ui/tabs";
 import {
   Field,
   FieldDescription,
@@ -20,39 +25,197 @@ import {
   FieldGroup,
   FieldLabel,
 } from "@/shared/components/ui/field";
+import { cn } from "@/shared/lib/utils";
 import {
   createDirectSourceConnectionSchema,
+  createOAuthSourceConnectionSchema,
   type CreateDirectSourceConnectionForm,
+  type CreateOAuthSourceConnectionForm,
 } from "@/features/Airweave/schemas/airweave.schema";
 import { useCreateAirweaveSourceConnection } from "@/features/Airweave/hooks/useCreateAirweaveSourceConnection";
+import { useAirweaveOAuthPortal } from "@/features/Airweave/hooks/useAirweaveOAuthPortal";
+import { scrubSessionToken } from "@/features/Airweave/lib/scrub-session-token";
+import { showPopupBlockedToast } from "@/features/Airweave/lib/popup-blocked-toast";
 
 type Props = {
   collectionReadableId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * Called when the OAuth tab successfully kicks off a portal flow so
+   * the detail page can render the persistent "OAuth in progress" banner.
+   */
+  onPortalOpened?: () => void;
 };
 
-type FormShape = Omit<CreateDirectSourceConnectionForm, "credentials"> & {
+type DirectFormShape = Omit<CreateDirectSourceConnectionForm, "credentials"> & {
   credentialsJson: string;
 };
 
 /**
- * Add a new source connection to a collection — DIRECT auth only.
+ * Add a source connection — direct auth OR OAuth-via-portal (Step 5).
  *
- * Per the v1 slicing plan (Step 4b), this dialog ships with NO `<Tabs>`
- * and NO OAuth branch. Step 5 wraps it in `<Tabs>` and adds the OAuth
- * tab; the diff of that change is reviewable in isolation.
+ * Refactored from the Step-4b single-form dialog: now wraps the existing
+ * direct-form in `<Tabs>` and adds an OAuth tab. Each tab is its own
+ * `useForm` instance so values don't bleed between branches.
  *
- * Credentials are entered as a JSON object (e.g. `{"token": "xoxb-…"}`).
- * The per-connector schema is enforced by the Airweave backend, so any
- * 400 from upstream surfaces verbatim via the toast.
+ * OAuth flow:
+ *   1. Backend creates the source connection in `pending` and issues a
+ *      `sessionToken` (per ADR-011 § Decision 8).
+ *   2. SPA opens the Airweave portal in a new tab with the token via
+ *      `useAirweaveOAuthPortal` (security hardening: noopener,noreferrer
+ *      + token scrubbing on any rendered error).
+ *   3. User completes the OAuth at the upstream provider; returns to the
+ *      SPA tab; `refetchOnWindowFocus` refreshes the source-connection
+ *      list. The detail page also offers a persistent "in progress"
+ *      banner with a manual refresh button.
+ *   4. If the portal returns a `sessionToken` but `window.open` is
+ *      blocked, the user sees a shared "allow popups + click Reauth"
+ *      toast (no banner — banner is reserved for the success path).
  */
 export function CreateSourceConnectionDialog({
   collectionReadableId,
   open,
   onOpenChange,
+  onPortalOpened,
 }: Props) {
   const createMutation = useCreateAirweaveSourceConnection();
+  const portal = useAirweaveOAuthPortal();
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Add Source Connection</DialogTitle>
+          <DialogDescription>
+            Choose <strong>Direct</strong> for credential-based sources
+            (Postgres, S3, API tokens) or <strong>OAuth</strong> for
+            sources that need a browser handshake (Slack, Notion, Google
+            Drive, …).
+          </DialogDescription>
+        </DialogHeader>
+
+        <Tabs defaultValue="direct" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="direct">Direct</TabsTrigger>
+            <TabsTrigger value="oauth" disabled={!portal.isAvailable}>
+              OAuth
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="direct">
+            <DirectAuthForm
+              collectionReadableId={collectionReadableId}
+              isPending={createMutation.isPending}
+              onSubmit={async (input) => {
+                try {
+                  await createMutation.mutateAsync({
+                    collectionReadableId,
+                    input: {
+                      name: input.name,
+                      shortName: input.shortName,
+                      authentication: {
+                        kind: "direct",
+                        credentials: input.credentials,
+                      },
+                    },
+                  });
+                  toast.success("Source connection created.");
+                  onOpenChange(false);
+                } catch (error) {
+                  const message =
+                    error instanceof Error
+                      ? scrubSessionToken(error.message)
+                      : "Failed to create source connection";
+                  toast.error(message);
+                }
+              }}
+              onCancel={() => onOpenChange(false)}
+            />
+          </TabsContent>
+
+          <TabsContent value="oauth">
+            {portal.isAvailable ? (
+              <OAuthForm
+                collectionReadableId={collectionReadableId}
+                isPending={createMutation.isPending}
+                onSubmit={async (input) => {
+                  try {
+                    const result = await createMutation.mutateAsync({
+                      collectionReadableId,
+                      input: {
+                        name: input.name,
+                        shortName: input.shortName,
+                        authentication: {
+                          kind: "oauth",
+                          redirectUri: input.redirectUri,
+                        },
+                      },
+                    });
+                    const token = result.sessionToken;
+                    if (!token) {
+                      // Backend should always return a token on the OAuth
+                      // branch; surface the contract violation loudly.
+                      toast.error(
+                        "Source created but no OAuth session token was returned — please re-authenticate from the source row.",
+                      );
+                      onOpenChange(false);
+                      return;
+                    }
+                    const opened = portal.open(token);
+                    if (!opened) {
+                      showPopupBlockedToast();
+                      // Source is created; dialog closes so the user can
+                      // see the new row + retry via its Reauth button.
+                      onOpenChange(false);
+                      return;
+                    }
+                    onPortalOpened?.();
+                    toast.success(
+                      "Source created — complete OAuth in the new tab.",
+                    );
+                    onOpenChange(false);
+                  } catch (error) {
+                    const message =
+                      error instanceof Error
+                        ? scrubSessionToken(error.message)
+                        : "Failed to create source connection";
+                    toast.error(message);
+                  }
+                }}
+                onCancel={() => onOpenChange(false)}
+              />
+            ) : (
+              <p className="p-4 text-sm text-muted-foreground">
+                The Airweave OAuth portal is not configured in this
+                environment. Set <code>VITE_AIRWEAVE_PORTAL_URL</code> to
+                enable the OAuth tab. Direct-auth sources still work.
+              </p>
+            )}
+          </TabsContent>
+        </Tabs>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Direct-auth sub-form ──────────────────────────────────────────────────
+
+function DirectAuthForm({
+  collectionReadableId: _,
+  isPending,
+  onSubmit,
+  onCancel,
+}: {
+  collectionReadableId: string;
+  isPending: boolean;
+  onSubmit: (data: {
+    name: string;
+    shortName: string;
+    credentials: Record<string, unknown>;
+  }) => Promise<void>;
+  onCancel: () => void;
+}) {
   const [credentialsJsonError, setCredentialsJsonError] = useState<string | null>(
     null,
   );
@@ -62,18 +225,16 @@ export function CreateSourceConnectionDialog({
     handleSubmit,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<FormShape>({
+  } = useForm<DirectFormShape>({
     defaultValues: { name: "", shortName: "", credentialsJson: "{\n  \n}" },
   });
 
   useEffect(() => {
-    if (open) {
-      reset({ name: "", shortName: "", credentialsJson: "{\n  \n}" });
-      setCredentialsJsonError(null);
-    }
-  }, [open, reset]);
+    reset({ name: "", shortName: "", credentialsJson: "{\n  \n}" });
+    setCredentialsJsonError(null);
+  }, [reset]);
 
-  const onSubmit = async (values: FormShape) => {
+  const submit = async (values: DirectFormShape) => {
     let credentials: Record<string, unknown>;
     try {
       const parsed: unknown = JSON.parse(values.credentialsJson);
@@ -87,134 +248,187 @@ export function CreateSourceConnectionDialog({
       return;
     }
 
-    // Re-validate via the Zod schema (catches the name/shortName/empty-
-    // credentials rules in one place).
     const validation = createDirectSourceConnectionSchema.safeParse({
       name: values.name,
       shortName: values.shortName,
       credentials,
     });
     if (!validation.success) {
-      // Trigger the field errors via RHF by re-submitting through the
-      // resolver path — simpler: surface the first issue as a toast.
-      const first = validation.error.issues[0];
-      toast.error(first.message);
+      toast.error(validation.error.issues[0].message);
       return;
     }
-
-    try {
-      await createMutation.mutateAsync({
-        collectionReadableId,
-        input: {
-          name: validation.data.name,
-          shortName: validation.data.shortName,
-          authentication: {
-            kind: "direct",
-            credentials: validation.data.credentials,
-          },
-        },
-      });
-      toast.success("Source connection created.");
-      onOpenChange(false);
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Failed to create source connection";
-      toast.error(message);
-    }
+    setCredentialsJsonError(null);
+    await onSubmit(validation.data);
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Add Source Connection</DialogTitle>
-          <DialogDescription>
-            Connect a data source (e.g. Postgres, S3) using direct credentials.
-            The Airweave backend validates the credential shape per connector.
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit(onSubmit)} noValidate>
-          <FieldGroup>
-            <Field data-invalid={Boolean(errors.name)}>
-              <FieldLabel htmlFor="airweave-source-create-name">Name</FieldLabel>
-              <Input
-                id="airweave-source-create-name"
-                placeholder="Production Postgres"
-                aria-invalid={Boolean(errors.name)}
-                autoFocus
-                {...register("name", { required: "Name is required" })}
-              />
-              <FieldError errors={[errors.name]} />
-            </Field>
+    <form onSubmit={handleSubmit(submit)} noValidate className="pt-2">
+      <FieldGroup>
+        <Field data-invalid={Boolean(errors.name)}>
+          <FieldLabel htmlFor="airweave-direct-name">Name</FieldLabel>
+          <Input
+            id="airweave-direct-name"
+            placeholder="Production Postgres"
+            autoFocus
+            {...register("name", { required: "Name is required" })}
+          />
+          <FieldError errors={[errors.name]} />
+        </Field>
 
-            <Field data-invalid={Boolean(errors.shortName)}>
-              <FieldLabel htmlFor="airweave-source-create-shortname">
-                Source type
-              </FieldLabel>
-              <Input
-                id="airweave-source-create-shortname"
-                placeholder="postgresql"
-                aria-invalid={Boolean(errors.shortName)}
-                {...register("shortName", {
-                  required: "Source type is required",
-                })}
-              />
-              <FieldDescription>
-                The Airweave connector identifier (e.g. <code>postgresql</code>,
-                <code> s3</code>, <code>mysql</code>). See the Airweave catalog
-                for the full list.
-              </FieldDescription>
-              <FieldError errors={[errors.shortName]} />
-            </Field>
+        <Field data-invalid={Boolean(errors.shortName)}>
+          <FieldLabel htmlFor="airweave-direct-shortname">
+            Source type
+          </FieldLabel>
+          <Input
+            id="airweave-direct-shortname"
+            placeholder="postgresql"
+            {...register("shortName", {
+              required: "Source type is required",
+            })}
+          />
+          <FieldDescription>
+            The Airweave connector identifier (<code>postgresql</code>,{" "}
+            <code>s3</code>, <code>mysql</code>, …).
+          </FieldDescription>
+          <FieldError errors={[errors.shortName]} />
+        </Field>
 
-            <Field data-invalid={Boolean(credentialsJsonError)}>
-              <FieldLabel htmlFor="airweave-source-create-credentials">
-                Credentials (JSON)
-              </FieldLabel>
-              <textarea
-                id="airweave-source-create-credentials"
-                className={cn(
-                  "flex min-h-[160px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-xs shadow-sm font-mono",
-                  "placeholder:text-muted-foreground",
-                  "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-                  "disabled:cursor-not-allowed disabled:opacity-50",
-                )}
-                rows={8}
-                aria-invalid={Boolean(credentialsJsonError)}
-                placeholder='{ "host": "...", "user": "...", "password": "..." }'
-                {...register("credentialsJson", {
-                  required: "Credentials are required",
-                })}
-              />
-              <FieldDescription>
-                A JSON object whose shape matches the Airweave connector.
-                The backend rejects invalid shapes with a descriptive 400.
-              </FieldDescription>
-              {credentialsJsonError && (
-                <p className="text-sm text-destructive">
-                  {credentialsJsonError}
-                </p>
-              )}
-            </Field>
-          </FieldGroup>
+        <Field data-invalid={Boolean(credentialsJsonError)}>
+          <FieldLabel htmlFor="airweave-direct-credentials">
+            Credentials (JSON)
+          </FieldLabel>
+          <textarea
+            id="airweave-direct-credentials"
+            className={cn(
+              "flex min-h-[160px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-xs shadow-sm font-mono",
+              "placeholder:text-muted-foreground",
+              "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+              "disabled:cursor-not-allowed disabled:opacity-50",
+            )}
+            rows={8}
+            placeholder='{ "host": "...", "user": "...", "password": "..." }'
+            {...register("credentialsJson", {
+              required: "Credentials are required",
+            })}
+          />
+          <FieldDescription>
+            A JSON object whose shape matches the Airweave connector.
+          </FieldDescription>
+          {credentialsJsonError && (
+            <p className="text-sm text-destructive">{credentialsJsonError}</p>
+          )}
+        </Field>
+      </FieldGroup>
 
-          <DialogFooter className="mt-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={isSubmitting}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Creating…" : "Create"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+      <DialogFooter className="mt-4">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onCancel}
+          disabled={isSubmitting || isPending}
+        >
+          Cancel
+        </Button>
+        <Button type="submit" disabled={isSubmitting || isPending}>
+          {isSubmitting || isPending ? "Creating…" : "Create"}
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+}
+
+// ── OAuth sub-form ────────────────────────────────────────────────────────
+
+function OAuthForm({
+  collectionReadableId: _,
+  isPending,
+  onSubmit,
+  onCancel,
+}: {
+  collectionReadableId: string;
+  isPending: boolean;
+  onSubmit: (data: CreateOAuthSourceConnectionForm) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<CreateOAuthSourceConnectionForm>({
+    resolver: zodResolver(createOAuthSourceConnectionSchema),
+    defaultValues: { name: "", shortName: "", redirectUri: "" },
+  });
+
+  useEffect(() => {
+    reset({ name: "", shortName: "", redirectUri: "" });
+  }, [reset]);
+
+  return (
+    <form
+      onSubmit={handleSubmit(async (values) =>
+        onSubmit({ ...values, redirectUri: values.redirectUri || undefined }),
+      )}
+      noValidate
+      className="pt-2"
+    >
+      <FieldGroup>
+        <Field data-invalid={Boolean(errors.name)}>
+          <FieldLabel htmlFor="airweave-oauth-name">Name</FieldLabel>
+          <Input
+            id="airweave-oauth-name"
+            placeholder="Acme Slack workspace"
+            autoFocus
+            {...register("name")}
+          />
+          <FieldError errors={[errors.name]} />
+        </Field>
+
+        <Field data-invalid={Boolean(errors.shortName)}>
+          <FieldLabel htmlFor="airweave-oauth-shortname">Source type</FieldLabel>
+          <Input
+            id="airweave-oauth-shortname"
+            placeholder="slack"
+            {...register("shortName")}
+          />
+          <FieldDescription>
+            The Airweave OAuth connector identifier (<code>slack</code>,{" "}
+            <code>notion</code>, <code>google_drive</code>, …).
+          </FieldDescription>
+          <FieldError errors={[errors.shortName]} />
+        </Field>
+
+        <Field data-invalid={Boolean(errors.redirectUri)}>
+          <FieldLabel htmlFor="airweave-oauth-redirect">
+            Redirect URI <span className="text-muted-foreground">(optional)</span>
+          </FieldLabel>
+          <Input
+            id="airweave-oauth-redirect"
+            type="url"
+            placeholder="https://app.velocity/admin/airweave"
+            {...register("redirectUri")}
+          />
+          <FieldDescription>
+            Where Airweave should return the user after the OAuth flow.
+            Defaults to a portal-side landing page when omitted.
+          </FieldDescription>
+          <FieldError errors={[errors.redirectUri]} />
+        </Field>
+      </FieldGroup>
+
+      <DialogFooter className="mt-4">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onCancel}
+          disabled={isSubmitting || isPending}
+        >
+          Cancel
+        </Button>
+        <Button type="submit" disabled={isSubmitting || isPending}>
+          {isSubmitting || isPending ? "Starting…" : "Start OAuth"}
+        </Button>
+      </DialogFooter>
+    </form>
   );
 }
