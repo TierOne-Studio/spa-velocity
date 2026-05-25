@@ -19,6 +19,12 @@ type Props = {
   collection: AirweaveCollection;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * Optional — called after a successful delete (mutation resolved, toast
+   * shown, dialog closed). Used by the detail page to navigate back to
+   * the list once its URL becomes stale.
+   */
+  onDeleted?: () => void;
 };
 
 type DialogState =
@@ -38,7 +44,12 @@ type DialogState =
  * No precedent for this state pattern in spa-velocity — this is the
  * first "delete-blocked-by-references" surface.
  */
-export function DeleteCollectionDialog({ collection, open, onOpenChange }: Props) {
+export function DeleteCollectionDialog({
+  collection,
+  open,
+  onOpenChange,
+  onDeleted,
+}: Props) {
   const [state, setState] = useState<DialogState>({ kind: "confirm" });
   const deleteMutation = useDeleteAirweaveCollection();
 
@@ -52,6 +63,7 @@ export function DeleteCollectionDialog({ collection, open, onOpenChange }: Props
       await deleteMutation.mutateAsync(collection.readableId);
       toast.success(`Collection "${collection.name}" deleted.`);
       handleClose();
+      onDeleted?.();
     } catch (error) {
       if (
         error instanceof AirweaveApiError &&

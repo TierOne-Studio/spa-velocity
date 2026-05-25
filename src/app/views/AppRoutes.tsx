@@ -14,6 +14,7 @@ import {
 import { SettingsPage, AccountPage } from "@features/Dashboard";
 import { UsersPage, SessionsPage, OrganizationsPage, RolesPage } from "@features/Admin";
 import { AirweaveCollectionsPage } from "@features/Airweave/views/AirweaveCollectionsPage";
+import { AirweaveCollectionDetailPage } from "@features/Airweave/views/AirweaveCollectionDetailPage";
 import { AdminDashboardPage } from "@features/AdminDashboard/views/AdminDashboardPage";
 import { ChatPage } from "@features/Chat";
 import { ProjectsPage } from "@features/Projects";
@@ -141,6 +142,17 @@ const AppRoutesContent = () => {
                           fallbackPath="/admin/dashboard"
                         >
                           <AirweaveCollectionsPage />
+                        </AdminRoute>
+                      }
+                    />
+                    <Route
+                      path="admin/airweave/:collectionReadableId"
+                      element={
+                        <AdminRoute
+                          requiredPermission={{ resource: "airweave", action: "read" }}
+                          fallbackPath="/admin/dashboard"
+                        >
+                          <AirweaveCollectionDetailPage />
                         </AdminRoute>
                       }
                     />
