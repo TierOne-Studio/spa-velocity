@@ -59,8 +59,11 @@ export interface UseAirweaveConnectModalReturn {
  * silently accepted. We enforce: undefined OR https:// OR http://localhost
  * (dev only). Anything else throws at load-time so misconfig surfaces
  * immediately, not at first user click.
+ *
+ * Exported for unit-testability — the module-load invocation below uses
+ * the same function on `import.meta.env`.
  */
-function validateConnectUrl(raw: string | undefined): string | undefined {
+export function validateConnectUrl(raw: string | undefined): string | undefined {
   if (!raw) return undefined;
   try {
     const url = new URL(raw);

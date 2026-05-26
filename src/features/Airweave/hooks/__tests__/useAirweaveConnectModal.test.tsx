@@ -34,7 +34,10 @@ vi.mock('sonner', () => ({
   },
 }));
 
-import { useAirweaveConnectModal } from '../useAirweaveConnectModal';
+import {
+  useAirweaveConnectModal,
+  validateConnectUrl,
+} from '../useAirweaveConnectModal';
 import { airweaveKeys } from '../airweaveKeys';
 
 function makeWrapper() {
@@ -243,5 +246,214 @@ describe('useAirweaveConnectModal', () => {
     );
 
     expect(captureProps.current?.connectUrl).toBeUndefined();
+  });
+
+  it('SDK is invoked with showCloseButton: true (a11y mitigation — keyboard close affordance)', () => {
+    const { Wrapper } = makeWrapper();
+    renderHook(
+      () =>
+        useAirweaveConnectModal({
+          getSessionToken,
+          collectionReadableId: 'acme-x-deadbeef',
+        }),
+      { wrapper: Wrapper },
+    );
+    expect(captureProps.current?.showCloseButton).toBe(true);
+  });
+});
+
+// ── validateConnectUrl (security MED #1 remediation) ─────────────────────
+
+describe('validateConnectUrl', () => {
+  it('returns undefined for undefined input (env-var unset is valid; SDK uses default)', () => {
+    expect(validateConnectUrl(undefined)).toBeUndefined();
+  });
+
+  it('accepts https:// URLs (the production case)', () => {
+    expect(validateConnectUrl('https://connect.airweave.ai')).toBe(
+      'https://connect.airweave.ai',
+    );
+    expect(validateConnectUrl('https://self-hosted.example.com/connect')).toBe(
+      'https://self-hosted.example.com/connect',
+    );
+  });
+
+  it('accepts http://localhost (dev only — port and path do not matter)', () => {
+    expect(validateConnectUrl('http://localhost')).toBe('http://localhost');
+    expect(validateConnectUrl('http://localhost:8080')).toBe(
+      'http://localhost:8080',
+    );
+    expect(validateConnectUrl('http://localhost:3000/widget')).toBe(
+      'http://localhost:3000/widget',
+    );
+  });
+
+  it('REJECTS http:// to non-localhost (would silently weaken postMessage origin pin)', () => {
+    expect(() => validateConnectUrl('http://attacker.example')).toThrow(
+      /must be https:\/\/.*got: http:\/\/attacker\.example/,
+    );
+    expect(() =>
+      validateConnectUrl('http://connect.airweave.ai'),
+    ).toThrow(/must be https:\/\//);
+  });
+
+  it('REJECTS non-http(s) protocols (file://, ftp://, javascript:)', () => {
+    expect(() => validateConnectUrl('file:///etc/passwd')).toThrow(
+      /must be https:\/\//,
+    );
+    expect(() => validateConnectUrl('ftp://example.com')).toThrow(
+      /must be https:\/\//,
+    );
+  });
+
+  it('REJECTS malformed URLs with a clear "not a valid URL" message', () => {
+    expect(() => validateConnectUrl('not-a-url')).toThrow(
+      /is not a valid URL: 'not-a-url'/,
+    );
+    expect(() => validateConnectUrl('://broken')).toThrow(
+      /is not a valid URL/,
+    );
+  });
+});
+
+// ── Focus capture + RAF restore (a11y HIGH remediation) ──────────────────
+
+describe('useAirweaveConnectModal — focus capture + restore', () => {
+  // RAF doesn't fire in jsdom by default; we synchronously invoke the
+  // callback to simulate the next frame.
+  let rafSpy: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation(
+      ((cb: FrameRequestCallback) => {
+        cb(0);
+        return 0;
+      }) as typeof window.requestAnimationFrame,
+    );
+  });
+  afterEach(() => rafSpy.mockRestore());
+
+  function focusButton(): HTMLButtonElement {
+    const btn = document.createElement('button');
+    btn.textContent = 'trigger';
+    document.body.appendChild(btn);
+    btn.focus();
+    return btn;
+  }
+
+  it('open() snapshots document.activeElement as the focus-restore target', () => {
+    const sdkOpen = vi.fn();
+    mockUseAirweaveConnect.mockReturnValue({ open: sdkOpen, isLoading: false });
+    const { Wrapper } = makeWrapper();
+    const { result } = renderHook(
+      () =>
+        useAirweaveConnectModal({
+          getSessionToken: vi.fn().mockResolvedValue('tok'),
+          collectionReadableId: 'acme-x-deadbeef',
+        }),
+      { wrapper: Wrapper },
+    );
+
+    const btn = focusButton();
+    expect(document.activeElement).toBe(btn);
+
+    result.current.open();
+    expect(sdkOpen).toHaveBeenCalledTimes(1);
+
+    // Now simulate the SDK firing onSuccess → restoreFocus → RAF → .focus()
+    const focusSpy = vi.spyOn(btn, 'focus');
+    const sdkProps = captureProps.current as {
+      onSuccess: (id: string) => void;
+    };
+    sdkProps.onSuccess('conn-1');
+
+    expect(rafSpy).toHaveBeenCalled();
+    expect(focusSpy).toHaveBeenCalledTimes(1);
+
+    btn.remove();
+  });
+
+  it('onError restores focus to the captured trigger', () => {
+    mockUseAirweaveConnect.mockReturnValue({
+      open: vi.fn(),
+      isLoading: false,
+    });
+    const { Wrapper } = makeWrapper();
+    const { result } = renderHook(
+      () =>
+        useAirweaveConnectModal({
+          getSessionToken: vi.fn().mockResolvedValue('tok'),
+          collectionReadableId: 'acme-x-deadbeef',
+        }),
+      { wrapper: Wrapper },
+    );
+
+    const btn = focusButton();
+    result.current.open();
+    const focusSpy = vi.spyOn(btn, 'focus');
+
+    const sdkProps = captureProps.current as {
+      onError: (e: { message: string }) => void;
+    };
+    sdkProps.onError({ message: 'something failed' });
+
+    expect(focusSpy).toHaveBeenCalledTimes(1);
+    btn.remove();
+  });
+
+  it("onClose('cancel') restores focus to the captured trigger", () => {
+    mockUseAirweaveConnect.mockReturnValue({
+      open: vi.fn(),
+      isLoading: false,
+    });
+    const { Wrapper } = makeWrapper();
+    const { result } = renderHook(
+      () =>
+        useAirweaveConnectModal({
+          getSessionToken: vi.fn().mockResolvedValue('tok'),
+          collectionReadableId: 'acme-x-deadbeef',
+        }),
+      { wrapper: Wrapper },
+    );
+
+    const btn = focusButton();
+    result.current.open();
+    const focusSpy = vi.spyOn(btn, 'focus');
+
+    const sdkProps = captureProps.current as {
+      onClose: (reason: 'success' | 'cancel' | 'error') => void;
+    };
+    sdkProps.onClose('cancel');
+
+    expect(focusSpy).toHaveBeenCalledTimes(1);
+    btn.remove();
+  });
+
+  it("onClose('success' | 'error') does NOT double-restore (handled by onSuccess/onError)", () => {
+    mockUseAirweaveConnect.mockReturnValue({
+      open: vi.fn(),
+      isLoading: false,
+    });
+    const { Wrapper } = makeWrapper();
+    const { result } = renderHook(
+      () =>
+        useAirweaveConnectModal({
+          getSessionToken: vi.fn().mockResolvedValue('tok'),
+          collectionReadableId: 'acme-x-deadbeef',
+        }),
+      { wrapper: Wrapper },
+    );
+
+    const btn = focusButton();
+    result.current.open();
+    const focusSpy = vi.spyOn(btn, 'focus');
+
+    const sdkProps = captureProps.current as {
+      onClose: (reason: 'success' | 'cancel' | 'error') => void;
+    };
+    sdkProps.onClose('success');
+    sdkProps.onClose('error');
+
+    expect(focusSpy).not.toHaveBeenCalled();
+    btn.remove();
   });
 });
