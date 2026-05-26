@@ -4,6 +4,7 @@ import {
   IconBooks,
   IconBuilding,
   IconChartBar,
+  IconCloud,
   IconHome,
   IconInnerShadowTop,
   IconMessageCircle,
@@ -84,6 +85,15 @@ const getNavItems = (
       url: "/admin/roles",
       icon: IconShield,
       isActive: pathname === "/admin/roles",
+    })
+  }
+
+  if (can("airweave", "read")) {
+    adminItems.push({
+      title: "Airweave",
+      url: "/admin/airweave",
+      icon: IconCloud,
+      isActive: pathname.startsWith("/admin/airweave"),
     })
   }
 

@@ -47,6 +47,7 @@ vi.mock("@tabler/icons-react", () => ({
   IconBooks: () => null,
   IconBuilding: () => null,
   IconChartBar: () => null,
+  IconCloud: () => null,
   IconFolder: () => null,
   IconHome: () => null,
   IconInnerShadowTop: () => null,
