@@ -98,7 +98,7 @@ describe('useCreateAirweaveSourceConnection', () => {
       },
     });
 
-    expect(out.sessionToken).toBeUndefined();
+    expect(out.sourceConnection.id).toBe('src-1');
     expect(spy).toHaveBeenCalledWith({
       queryKey: airweaveKeys.sourceConnections('acme-x-deadbeef'),
     });
@@ -108,32 +108,13 @@ describe('useCreateAirweaveSourceConnection', () => {
     expect(spy).toHaveBeenCalledWith({ queryKey: airweaveKeys.all });
   });
 
-  it('OAuth branch — returns sessionToken alongside the source connection', async () => {
-    mockFetch.mockResolvedValue(
-      jsonResponse({
-        data: {
-          sourceConnection: { id: 'src-2' },
-          sessionToken: 'connect-tok',
-        },
-      }),
-    );
-    const { Wrapper } = makeWrapper();
-
-    const { result } = renderHook(() => useCreateAirweaveSourceConnection(), {
-      wrapper: Wrapper,
-    });
-
-    const out = await result.current.mutateAsync({
-      collectionReadableId: 'acme-x-deadbeef',
-      input: {
-        name: 'Slack',
-        shortName: 'slack',
-        authentication: { kind: 'oauth' },
-      },
-    });
-
-    expect(out.sessionToken).toBe('connect-tok');
-  });
+  // ADR-011 § Amendment 4: the "OAuth branch — returns sessionToken
+  // alongside the source connection" test was removed. OAuth source-
+  // connection creation no longer routes through this hook —
+  // `createSourceConnection` only accepts `kind: 'direct'` and never
+  // returns a `sessionToken`. The OAuth flow lives in the SDK catalog
+  // widget; session tokens come from `createConnectSession` (which has
+  // its own test coverage in source-connections.service.test.ts).
 });
 
 describe('useUpdateAirweaveSourceConnection', () => {

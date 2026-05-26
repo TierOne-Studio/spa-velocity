@@ -27,16 +27,19 @@ export {
 
 // Schemas are surfaced so other features (e.g. Projects' future
 // inline-create dialog) can reuse the same validation contract.
+//
+// ADR-011 § Amendment 4 (2026-05-26): `createOAuthSourceConnectionSchema`
+// + `CreateOAuthSourceConnectionForm` were removed when the OAuth
+// source-create flow moved into the Airweave Connect catalog widget.
+// Direct-auth is the only Velocity-side source-create surface.
 export {
   createCollectionSchema,
   updateCollectionSchema,
   createDirectSourceConnectionSchema,
-  createOAuthSourceConnectionSchema,
   updateSourceConnectionSchema,
   type CreateCollectionForm,
   type UpdateCollectionForm,
   type CreateDirectSourceConnectionForm,
-  type CreateOAuthSourceConnectionForm,
   type UpdateSourceConnectionForm,
 } from './schemas/airweave.schema';
 

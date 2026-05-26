@@ -85,32 +85,32 @@ describe('source-connections.service', () => {
       expect(body.authentication.credentials).toEqual({ token: 'xoxb-…' });
     });
 
-    it('POSTs the OAuth body and returns sessionToken alongside the source connection', async () => {
+    // ADR-011 § Amendment 4 (2026-05-26): the "POSTs the OAuth body
+    // and returns sessionToken" test was removed because the service
+    // no longer accepts `kind: 'oauth'` and the result no longer
+    // carries a `sessionToken`. The catalog-widget flow uses
+    // `createConnectSession` for token issuance (own coverage below)
+    // and Airweave creates the source-connection itself.
+  });
+
+  describe('createConnectSession', () => {
+    it('POSTs {collectionId} to /api/airweave/connect/session and returns the sessionToken (Amendment 4 primary OAuth path)', async () => {
+      // Imported below — pulled into scope for this single block.
+      const { createConnectSession } = await import(
+        '../source-connections.service'
+      );
       mockFetch.mockResolvedValue(
-        jsonResponse({
-          data: {
-            sourceConnection: { id: 'src-2' },
-            sessionToken: 'connect-tok-xyz',
-          },
-        }),
+        jsonResponse({ data: { sessionToken: 'tok-from-backend' } }),
       );
 
-      // Per ADR-011 § Amendment 2: OAuth branch no longer carries
-      // `redirectUri` — the @airweave/connect-react SDK uses postMessage
-      // CONNECTION_CREATED / CLOSE callbacks instead of redirect URIs.
-      const result = await createSourceConnection('acme-x-deadbeef', {
-        name: 'Slack',
-        shortName: 'slack',
-        authentication: { kind: 'oauth' },
-      });
+      const result = await createConnectSession('acme-x-deadbeef');
 
-      const [, init] = lastRequest();
+      expect(result.sessionToken).toBe('tok-from-backend');
+      const [url, init] = lastRequest();
+      expect(url).toMatch(/\/api\/airweave\/connect\/session$/);
+      expect(init.method).toBe('POST');
       const body = JSON.parse(String(init.body));
-      expect(body.authentication).toEqual({ kind: 'oauth' });
-      // Defense-in-depth: redirectUri must NOT appear on the wire even
-      // by accident.
-      expect(body.authentication).not.toHaveProperty('redirectUri');
-      expect(result.sessionToken).toBe('connect-tok-xyz');
+      expect(body).toEqual({ collectionId: 'acme-x-deadbeef' });
     });
   });
 
