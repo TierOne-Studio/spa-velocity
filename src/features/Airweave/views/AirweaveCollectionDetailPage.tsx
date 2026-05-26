@@ -85,13 +85,20 @@ export function AirweaveCollectionDetailPage() {
   // path (per qa-validator HIGH #3 — close failure-mode #13).
   const pendingTokenRef = useRef<string | null>(null);
   const mountedRef = useRef(true);
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    // Initialize on EVERY effect run, not just the initial mount.
+    // React.StrictMode (dev) runs the effect → cleanup → effect again
+    // immediately after mount. Without re-setting `mountedRef.current
+    // = true` here, the cleanup from the first invocation flips the
+    // ref to false and getSessionToken throws "Page unmounted" forever
+    // even though the component is alive. Caught by airweave-live
+    // SDK-iframe smoke against the real backend.
+    mountedRef.current = true;
+    return () => {
       mountedRef.current = false;
       pendingTokenRef.current = null;
-    },
-    [],
-  );
+    };
+  }, []);
 
   const connectModal = useAirweaveConnectModal({
     collectionReadableId,

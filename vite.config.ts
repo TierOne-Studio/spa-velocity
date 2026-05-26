@@ -22,6 +22,14 @@ export default defineConfig({
         ),
       },
     ],
+    // Force a single React instance across the host SPA and the
+    // optimizeDeps-prebundled `@airweave/connect-react`. Without this,
+    // Vite's prebundle step ships its own React copy with the SDK, so
+    // the SDK's `useState`/`useEffect` calls happen in a different
+    // React than the host — setState updates fire but don't trigger
+    // re-renders in the SDK's component tree, so its iframe portal
+    // never mounts. Caught by `airweave-live.spec.ts` SDK-iframe test.
+    dedupe: ["react", "react-dom"],
   },
   optimizeDeps: {
     // esbuild's dep-prebundle step needs to resolve the shimmed imports the

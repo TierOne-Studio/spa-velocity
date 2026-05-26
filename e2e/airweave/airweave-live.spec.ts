@@ -309,4 +309,281 @@ test.describe('Airweave — LIVE Airweave API + LIVE backend + LIVE Postgres', (
       );
     }
   });
+
+  test('Reauth endpoint returns a fresh sessionToken from real Airweave', async ({
+    page,
+  }) => {
+    // Closes the reauth coverage gap — until this, reauth was only
+    // proven against mocked backend (e2e/airweave/reauth.spec.ts).
+    // Validates that POST /api/airweave/source-connections/:id/reauth
+    // really round-trips through Airweave and returns a fresh token
+    // usable by the SDK widget.
+    await loginAsAdmin(page);
+    const token = await getBearer(page);
+
+    const suffix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const slugHint = `e2e-live-ra-${suffix.slice(0, 8)}`;
+
+    const collRes = await fetch(`${API_BASE_URL}/api/airweave/collections`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ name: `E2E Live Reauth ${suffix}`, slugHint }),
+    });
+    expect(collRes.status).toBe(201);
+    const coll = ((await collRes.json()) as { data: { readableId: string } })
+      .data;
+    createdInTest.push({ readableId: coll.readableId });
+
+    const srcRes = await fetch(
+      `${API_BASE_URL}/api/airweave/collections/${encodeURIComponent(coll.readableId)}/source-connections`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name: 'E2E Live Slack Reauth',
+          shortName: 'slack',
+          authentication: { kind: 'oauth' },
+        }),
+      },
+    );
+    expect(srcRes.status).toBe(201);
+    const srcBody = (await srcRes.json()) as {
+      data: {
+        sourceConnection: { id: string };
+        sessionToken: string;
+      };
+    };
+    const sourceId = srcBody.data.sourceConnection.id;
+    const initialToken = srcBody.data.sessionToken;
+    expect(sourceId).toBeTruthy();
+    expect(initialToken).toBeTruthy();
+
+    // Call /reauth — backend goes back to Airweave for a brand-new
+    // session token for the SAME source-connection (pending OAuth row).
+    const reauthRes = await fetch(
+      `${API_BASE_URL}/api/airweave/source-connections/${encodeURIComponent(sourceId)}/reauth`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    );
+    // Backend's controller returns 201 from POST /reauth (NestJS @Post
+    // default), not 200. Both signal success — the SPA uses the body,
+    // not the status, to drive the SDK handoff.
+    expect(reauthRes.status, `reauth body: ${await reauthRes
+      .clone()
+      .text()
+      .catch(() => '<unreadable>')}`).toBe(201);
+    const reauthBody = (await reauthRes.json()) as {
+      data: { sessionToken: string };
+    };
+    expect(reauthBody.data.sessionToken).toBeTruthy();
+    expect(typeof reauthBody.data.sessionToken).toBe('string');
+    expect(reauthBody.data.sessionToken.length).toBeGreaterThan(8);
+    // Airweave should issue a DIFFERENT token on reauth (per 10-min TTL
+    // contract). If they're the same, the SDK widget would still work
+    // but the test is less informative — just log a soft warning.
+    if (reauthBody.data.sessionToken === initialToken) {
+      console.warn(
+        '[airweave-live] reauth returned the SAME sessionToken as initial create — unusual but not a failure',
+      );
+    }
+  });
+
+  test('SDK iframe actually mounts at connect.airweave.ai when OAuth dialog submits', async ({
+    page,
+  }) => {
+    // The deepest validation of the OAuth pipeline short of a human
+    // clicking "Authorize" on Slack's page. Walks the SPA UI end-to-end:
+    //   - log in as admin
+    //   - create a real collection via the live backend
+    //   - navigate to its detail page
+    //   - open Add source dialog → OAuth tab → fill name+shortName
+    //   - submit → SPA calls onOAuthSubmit → page ref-mirror writes
+    //     pendingTokenRef → connectModal.open() → SDK mounts its iframe
+    //   - Playwright waits for an iframe whose URL contains
+    //     `connect.airweave.ai` AND reports a non-error status
+    //
+    // This proves the *entire* OAuth handshake plumbing works on real
+    // services: the only thing left to do manually is sign in to the
+    // upstream provider's page inside the iframe (which is gated by
+    // human-only credentials and stays out of e2e by industry norm).
+    await loginAsAdmin(page);
+    const token = await getBearer(page);
+
+    const suffix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const slugHint = `e2e-live-fr-${suffix.slice(0, 8)}`;
+
+    const collRes = await fetch(`${API_BASE_URL}/api/airweave/collections`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        name: `E2E Live Frame ${suffix}`,
+        slugHint,
+      }),
+    });
+    expect(collRes.status).toBe(201);
+    const coll = ((await collRes.json()) as { data: { readableId: string } })
+      .data;
+    createdInTest.push({ readableId: coll.readableId });
+
+    // Capture all console messages + page errors + network requests
+    // for diagnosis. Wrap fetch on the page to log every SDK-relevant
+    // request so we can prove the SPA's `getSessionToken` callback is
+    // (or isn't) reached and what the backend returns.
+    const consoleErrors: string[] = [];
+    const consoleLogs: string[] = [];
+    page.on('console', (msg) => {
+      const text = `[${msg.type()}] ${msg.text()}`;
+      consoleLogs.push(text);
+      if (msg.type() === 'error') consoleErrors.push(msg.text());
+    });
+    page.on('pageerror', (err) => {
+      consoleErrors.push(`[pageerror] ${err.message}`);
+    });
+
+    // Track fetches + body.appendChild calls. document.body may be
+    // null when this init script runs (before DOM parse), so defer
+    // the appendChild wrap until DOMContentLoaded.
+    await page.addInitScript(() => {
+      // @ts-expect-error window props injected for diagnosis
+      window.__airweaveDiag = {
+        fetches: [],
+        bodyAppendChildIds: [],
+      };
+      const origFetch = window.fetch.bind(window);
+      window.fetch = async (...args: Parameters<typeof fetch>) => {
+        const url =
+          typeof args[0] === 'string'
+            ? args[0]
+            : args[0] instanceof URL
+              ? args[0].toString()
+              : (args[0] as Request).url;
+        if (url.includes('airweave') || url.includes('source-connection')) {
+          // @ts-expect-error
+          window.__airweaveDiag.fetches.push({ url, ts: Date.now() });
+        }
+        return origFetch(...args);
+      };
+      const wrapAppend = () => {
+        if (!document.body) return;
+        const origAppend = document.body.appendChild.bind(document.body);
+        document.body.appendChild = ((node: Node) => {
+          const el = node as HTMLElement;
+          // @ts-expect-error
+          window.__airweaveDiag.bodyAppendChildIds.push(
+            `${el.tagName ?? '?'}#${el.id ?? ''} @${Date.now()}`,
+          );
+          return origAppend(node);
+        }) as typeof document.body.appendChild;
+      };
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', wrapAppend);
+      } else {
+        wrapAppend();
+      }
+    });
+
+    await page.goto(`/admin/airweave/${encodeURIComponent(coll.readableId)}`);
+    await expect(
+      page.getByRole('heading', { name: new RegExp(`E2E Live Frame ${suffix}`) }),
+    ).toBeVisible({ timeout: 15000 });
+
+    // Open dialog → OAuth tab → fill + submit
+    await page.getByRole('button', { name: /add source/i }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('tab', { name: /^oauth$/i }).click();
+    await dialog.getByRole('textbox', { name: 'Name' }).fill('Live Slack');
+    await dialog.getByRole('textbox', { name: /source type/i }).fill('slack');
+    await dialog.getByRole('button', { name: /start oauth/i }).click();
+
+    // Dialog closes (handoff complete) — page-level SDK takes over.
+    await expect(
+      page.getByRole('heading', { name: /add source connection/i }),
+    ).toHaveCount(0, { timeout: 10000 });
+
+    // The SDK creates a portal root `<div id="airweave-connect-root">`
+    // appended to document.body, then React-portals its modal + iframe
+    // into that div. Asserting on the root first gives a clearer failure
+    // mode if open() never fires than waiting for the iframe directly.
+    const sdkRoot = page.locator('#airweave-connect-root');
+    try {
+      // 30s ceiling — when Airweave's upstream is slow (rate-limited
+    // after concurrent live tests) the source-create POST + iframe
+    // load can take 20-25s. Solo runs are ~15s; full-suite runs
+    // sometimes need the headroom.
+    await expect(sdkRoot).toBeAttached({ timeout: 30000 });
+    } catch (err) {
+      const allIframes = await page
+        .locator('iframe')
+        .evaluateAll((els) =>
+          els.map((e) => ({
+            src: (e as HTMLIFrameElement).src,
+            title: (e as HTMLIFrameElement).title,
+          })),
+        );
+      const bodyChildren = await page.evaluate(() =>
+        Array.from(document.body.children).map((c) => ({
+          tag: c.tagName,
+          id: c.id,
+          cls: c.className,
+        })),
+      );
+      // Check for sonner toast — if onOAuthSubmit never fired, there
+      // would be a "no OAuth session token" toast (defensive branch).
+      const toastTexts = await page
+        .locator('[data-sonner-toast], [role="status"]')
+        .allTextContents()
+        .catch(() => []);
+      const diag = await page
+        .evaluate(() => (window as unknown as { __airweaveDiag: unknown }).__airweaveDiag)
+        .catch(() => null);
+      console.error(
+        `[live-iframe] No #airweave-connect-root after open().\n` +
+          `  Errors:  ${consoleErrors.join(' | ') || '(none)'}\n` +
+          `  Toasts:  ${JSON.stringify(toastTexts)}\n` +
+          `  iframes: ${JSON.stringify(allIframes)}\n` +
+          `  body:    ${JSON.stringify(bodyChildren)}\n` +
+          `  recent console: ${consoleLogs.slice(-10).join(' || ')}\n` +
+          `  airweave diag: ${JSON.stringify(diag)}`,
+      );
+      throw err;
+    }
+
+    // Now wait for the iframe inside the portal root. The SDK identifies
+    // its iframe with `title="Airweave Connect"` (bundled dist/index.js).
+    const iframeLocator = page.locator('iframe[title="Airweave Connect"]');
+    await expect(iframeLocator).toBeAttached({ timeout: 10000 });
+
+    const iframeUrl = await iframeLocator.first().getAttribute('src');
+    expect(iframeUrl, `iframe src: ${iframeUrl}`).toBeTruthy();
+    expect(iframeUrl).toMatch(/^https:\/\/connect\.airweave\.ai/);
+
+    // Wait for the iframe document itself to load — the SDK's iframe
+    // sends REQUEST_TOKEN on load and our wrapper responds with the
+    // sessionToken. A loaded iframe with a present <body> means that
+    // round-trip completed without a network or origin failure.
+    const frame = page
+      .frameLocator('iframe[title="Airweave Connect"]')
+      .first();
+    await expect(frame.locator('body')).toBeAttached({ timeout: 20000 });
+
+    // Confirm zero SDK-related console errors during the handshake.
+    const sdkErrors = consoleErrors.filter((line) =>
+      /airweave|connect|postMessage|TOKEN_RESPONSE/i.test(line),
+    );
+    expect(
+      sdkErrors,
+      `SDK-related console errors during handshake: ${sdkErrors.join(' | ')}`,
+    ).toEqual([]);
+  });
 });
