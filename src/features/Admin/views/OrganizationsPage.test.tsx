@@ -327,7 +327,7 @@ describe("OrganizationsPage", () => {
     });
     mockCan.mockImplementation((resource: string, action: string) =>
       (resource === "organization" && action === "invite") ||
-      (resource === "project" && action === "read"),
+      (resource === "airweave" && action === "read"),
     );
   });
 
@@ -551,7 +551,7 @@ describe("OrganizationsPage – CRUD and member operations", () => {
     });
     // grant all org permissions by default for these tests
     mockCan.mockImplementation((resource: string, action: string) =>
-      resource === "organization" || (resource === "project" && action === "read"),
+      resource === "organization" || (resource === "airweave" && action === "read"),
     );
   });
 
@@ -1427,7 +1427,7 @@ describe("OrganizationsPage – CRUD and member operations", () => {
     });
     mockUseAuth.mockReturnValue({ user: { id: "mgr-1", role: "manager" } });
     mockCan.mockImplementation((resource: string, action: string) =>
-      resource === "organization" || (resource === "project" && action === "read"),
+      resource === "organization" || (resource === "airweave" && action === "read"),
     );
     mockUseCreateOrganization.mockReturnValue({
       mutateAsync: createOrganizationMutate,
@@ -1571,7 +1571,7 @@ describe("OrganizationsPage – CRUD and member operations", () => {
     mockGetOrganizationRolesMetadata.mockResolvedValue({ roles: [], assignableRoles: [] });
     mockUseAuth.mockReturnValue({ user: { id: "mgr-1", role: "manager" } });
     mockCan.mockImplementation((resource: string, action: string) =>
-      resource === "organization" || (resource === "project" && action === "read"),
+      resource === "organization" || (resource === "airweave" && action === "read"),
     );
     mockUseCreateOrganization.mockReturnValue({
       mutateAsync: createOrganizationMutate,

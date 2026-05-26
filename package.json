@@ -52,7 +52,7 @@
     "test:e2e:isolate:admin": "E2E_API_BASE_URL=http://127.0.0.1:3100 E2E_FE_URL=http://127.0.0.1:4173 E2E_DATABASE_URL=postgresql://mravinale@localhost:5432/nestjs_api_starter_e2e E2E_TEST_USER_EMAIL=delivered+e2e-admin@resend.dev E2E_TEST_USER_PASSWORD=password123 playwright test e2e/admin/admin.spec.ts"
   },
   "dependencies": {
-    "@airweave/connect-react": "^0.9.60",
+    "@airweave/connect-react": "^0.9.62",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/modifiers": "^9.0.0",
     "@dnd-kit/sortable": "^10.0.0",

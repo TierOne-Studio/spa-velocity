@@ -1,0 +1,117 @@
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { toast } from "sonner";
+import { Button } from "@/shared/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/shared/components/ui/dialog";
+import { Input } from "@/shared/components/ui/input";
+import {
+  Field,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "@/shared/components/ui/field";
+import {
+  updateCollectionSchema,
+  type UpdateCollectionForm,
+} from "@/features/Airweave/schemas/airweave.schema";
+import { useUpdateAirweaveCollection } from "@/features/Airweave/hooks/useUpdateAirweaveCollection";
+import type { AirweaveCollection } from "@/features/Airweave/types";
+
+type Props = {
+  collection: AirweaveCollection;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+};
+
+/**
+ * Rename an existing collection. Per ADR-011 § Decision 13 the
+ * `readable_id` is immutable on rename, so the detail-page URL remains
+ * valid after this mutation completes. The mutation hook invalidates
+ * both the list and the specific detail so the UI updates everywhere.
+ */
+export function RenameCollectionDialog({ collection, open, onOpenChange }: Props) {
+  const updateMutation = useUpdateAirweaveCollection();
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<UpdateCollectionForm>({
+    resolver: zodResolver(updateCollectionSchema),
+    defaultValues: { name: collection.name },
+  });
+
+  useEffect(() => {
+    if (open) reset({ name: collection.name });
+  }, [open, reset, collection.name]);
+
+  const onSubmit = async (values: UpdateCollectionForm) => {
+    if (values.name.trim() === collection.name) {
+      onOpenChange(false);
+      return;
+    }
+    try {
+      await updateMutation.mutateAsync({
+        collectionReadableId: collection.readableId,
+        input: { name: values.name.trim() },
+      });
+      toast.success("Collection renamed.");
+      onOpenChange(false);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to rename collection";
+      toast.error(message);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Rename Collection</DialogTitle>
+          <DialogDescription>
+            Changes only the display name. The internal identifier (
+            <span className="font-mono text-xs">{collection.readableId}</span>)
+            stays the same, so existing project references continue to work.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit(onSubmit)} noValidate>
+          <FieldGroup>
+            <Field data-invalid={Boolean(errors.name)}>
+              <FieldLabel htmlFor="airweave-rename-name">Name</FieldLabel>
+              <Input
+                id="airweave-rename-name"
+                aria-invalid={Boolean(errors.name)}
+                autoFocus
+                {...register("name")}
+              />
+              <FieldError errors={[errors.name]} />
+            </Field>
+          </FieldGroup>
+          <DialogFooter className="mt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={isSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}

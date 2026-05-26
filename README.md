@@ -476,6 +476,21 @@ Default API URL: `http://localhost:3000`
 To customize, create `.env`:
 ```env
 VITE_API_URL=http://localhost:3000
+
+# Airweave Connect widget URL — used by the @airweave/connect-react SDK
+# embedded in /admin/airweave when adding OAuth-authenticated source
+# connections (Slack, Notion, Google Drive, …). The SDK transports the
+# short-lived session token via postMessage (not URL params), so no
+# Referer-leak concerns. Default is the hosted widget; override for
+# self-hosted Airweave deployments (the SDK's `connectUrl` prop reads
+# this value). Leave unset → SDK falls back to its built-in default
+# https://connect.airweave.ai.
+#
+# Per ADR-011 § Amendment 2 (api-velocity): this env var supersedes the
+# prior VITE_AIRWEAVE_PORTAL_URL which assumed a wrong window.open +
+# query-string transport. The official @airweave/connect-react SDK
+# obsoleted that flow entirely.
+VITE_AIRWEAVE_CONNECT_URL=https://connect.airweave.ai
 ```
 
 ---

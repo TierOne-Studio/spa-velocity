@@ -4,6 +4,14 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      Referrer-Policy: strict-origin trims the path/query from every
+      outbound Referer header (origin only). Document-wide hardening —
+      protects all current and future <a target="_blank"> and window.open
+      call sites from leaking SPA URLs to upstream services. Zero runtime
+      cost; keep regardless of feature lifecycle.
+    -->
+    <meta name="referrer" content="strict-origin" />
     <title>Velocity</title>
   </head>
   <body>
