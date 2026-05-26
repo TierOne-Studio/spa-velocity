@@ -43,6 +43,16 @@ export type AirweaveMockState = {
   sources: MockSource[];
   /** Bumped on collection/source mutations to short-circuit duplicate writes. */
   seq: number;
+  /**
+   * When set on a collection's readableId, the DELETE handler returns a
+   * 409 with the listed projects (matching the backend's "in-use" body
+   * shape). Lets the e2e drive the DeleteCollectionDialog 409 flow
+   * without needing a real referencing-project row.
+   */
+  deleteCollectionConflicts?: Record<
+    string,
+    Array<{ id: string; name: string }>
+  >;
 };
 
 export type AirweaveMockCalls = {
@@ -54,6 +64,8 @@ export type AirweaveMockCalls = {
     body: Record<string, unknown>;
   }>;
   deleteSource: string[];
+  /** Each `POST /api/airweave/source-connections/:id/reauth` call. */
+  reauthSource: string[];
 };
 
 export function newCalls(): AirweaveMockCalls {
@@ -63,6 +75,7 @@ export function newCalls(): AirweaveMockCalls {
     deleteCollection: [],
     createSource: [],
     deleteSource: [],
+    reauthSource: [],
   };
 }
 
@@ -166,6 +179,20 @@ export async function installAirweaveMocks(
       }
       if (method === 'DELETE') {
         calls.deleteCollection.push(readableId);
+        const conflictProjects = state.deleteCollectionConflicts?.[readableId];
+        if (conflictProjects && conflictProjects.length > 0) {
+          // Matches the backend's 409 "in-use" shape (per ADR-011).
+          // Dialog flips to the "Collection in use" state with the list.
+          await route.fulfill({
+            status: 409,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              message: 'Collection is referenced by projects',
+              projects: conflictProjects,
+            }),
+          });
+          return;
+        }
         state.collections.splice(idx, 1);
         await route.fulfill({ status: 204, body: '' });
         return;
@@ -242,11 +269,43 @@ export async function installAirweaveMocks(
     },
   );
 
-  // Source DELETE on /api/airweave/source-connections/:id
+  // Reauth on /api/airweave/source-connections/:id/reauth
+  // Registered BEFORE the more general /source-connections/* route so it
+  // wins for the suffixed URL (Playwright matches in registration order
+  // last-first, so this needs to be the more-specific pattern declared
+  // later — see source-connection list mock above).
+  await page.route(
+    '**/api/airweave/source-connections/*/reauth',
+    async (route: Route) => {
+      if (route.request().method() !== 'POST') {
+        await route.fallback();
+        return;
+      }
+      const url = new URL(route.request().url());
+      const segments = url.pathname.split('/');
+      // /api/airweave/source-connections/:id/reauth → :id is at -2
+      const sourceId = decodeURIComponent(segments[segments.length - 2]);
+      calls.reauthSource.push(sourceId);
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: { sessionToken: opts.nextSessionToken ?? 'tok-reauth-fresh' },
+        }),
+      });
+    },
+  );
+
+  // Source DELETE / PATCH on /api/airweave/source-connections/:id
   await page.route(
     '**/api/airweave/source-connections/*',
     async (route: Route) => {
       const url = new URL(route.request().url());
+      // Skip the /reauth suffix — handled above.
+      if (url.pathname.endsWith('/reauth')) {
+        await route.fallback();
+        return;
+      }
       const segments = url.pathname.split('/');
       const sourceId = decodeURIComponent(segments[segments.length - 1]);
       const method = route.request().method();
