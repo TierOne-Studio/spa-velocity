@@ -65,13 +65,22 @@ type DirectFormShape = {
 /**
  * Form-value type for the OAuth branch.
  *
- * Per ADR-011 § Amendment 2: no `redirectUri` field — the official
- * `@airweave/connect-react` SDK uses postMessage CONNECTION_CREATED /
- * CLOSE callbacks; redirect URIs are inherited dead-contract.
+ * Per ADR-011 § Amendment 3 (2026-05-26): BYOC (Bring Your Own Client)
+ * fields are optional pass-through to Airweave's OAuthBrowser-
+ * Authentication. The dialog hides them under an "Advanced — bring
+ * your own OAuth app" disclosure. Required when the source has
+ * `requires_byoc=true` on Airweave's side (we don't enforce that
+ * client-side; backend forwards verbatim and Airweave returns 4xx if
+ * required fields are missing).
  */
 type OAuthFormShape = {
   name: string;
   shortName: string;
+  clientId?: string;
+  clientSecret?: string;
+  consumerKey?: string;
+  consumerSecret?: string;
+  redirectUri?: string;
 };
 
 /**
@@ -157,7 +166,29 @@ export function CreateSourceConnectionDialog({
                     input: {
                       name: input.name,
                       shortName: input.shortName,
-                      authentication: { kind: "oauth" },
+                      authentication: {
+                        kind: "oauth",
+                        // BYOC pass-through (ADR-011 § Amendment 3).
+                        // Optional fields — Zod schema strips empty
+                        // strings to undefined so we never forward
+                        // `""` as a secret. Service-side `trimAndPick`
+                        // double-checks the same invariant.
+                        ...(input.clientId
+                          ? { clientId: input.clientId }
+                          : {}),
+                        ...(input.clientSecret
+                          ? { clientSecret: input.clientSecret }
+                          : {}),
+                        ...(input.consumerKey
+                          ? { consumerKey: input.consumerKey }
+                          : {}),
+                        ...(input.consumerSecret
+                          ? { consumerSecret: input.consumerSecret }
+                          : {}),
+                        ...(input.redirectUri
+                          ? { redirectUri: input.redirectUri }
+                          : {}),
+                      },
                     },
                   });
                   const token = result.sessionToken;
@@ -368,18 +399,38 @@ function OAuthForm({
     formState: { errors, isSubmitting },
   } = useForm<OAuthFormShape>({
     resolver: zodResolver(createOAuthSourceConnectionSchema),
-    defaultValues: { name: "", shortName: "" },
+    defaultValues: {
+      name: "",
+      shortName: "",
+      clientId: "",
+      clientSecret: "",
+      consumerKey: "",
+      consumerSecret: "",
+      redirectUri: "",
+    },
   });
 
+  // Local UI state: BYOC disclosure starts collapsed because most users
+  // on a fully-configured Airweave account never need it. Opening it
+  // is the explicit signal that the user wants to supply their own
+  // OAuth app credentials.
+  const [byocOpen, setByocOpen] = useState(false);
+
   useEffect(() => {
-    reset({ name: "", shortName: "" });
+    reset({
+      name: "",
+      shortName: "",
+      clientId: "",
+      clientSecret: "",
+      consumerKey: "",
+      consumerSecret: "",
+      redirectUri: "",
+    });
   }, [reset]);
 
   return (
     <form
-      onSubmit={handleSubmit(async (values) =>
-        onSubmit({ name: values.name, shortName: values.shortName }),
-      )}
+      onSubmit={handleSubmit(async (values) => onSubmit(values))}
       noValidate
       className="pt-2"
     >
@@ -412,6 +463,103 @@ function OAuthForm({
           </FieldDescription>
           <FieldError errors={[errors.shortName]} />
         </Field>
+
+        {/*
+         * BYOC (Bring Your Own Client) disclosure — ADR-011 § Amendment 3.
+         * Native <details> so the form stays accessible without pulling
+         * in another Radix primitive. Required when the source has
+         * `requires_byoc=true` upstream (Airweave returns 4xx if missing,
+         * which our toast surfaces verbatim).
+         */}
+        <details
+          className="rounded-md border border-border bg-muted/30 p-3 [&[open]>summary]:mb-3"
+          open={byocOpen}
+          onToggle={(e) =>
+            setByocOpen((e.target as HTMLDetailsElement).open)
+          }
+        >
+          <summary className="cursor-pointer select-none text-sm font-medium">
+            Advanced — Bring your own OAuth app
+          </summary>
+          <FieldDescription className="mb-3">
+            Required if your Airweave account doesn&apos;t have a
+            preconfigured OAuth app for this source (e.g., the source&apos;s
+            <code> requires_byoc </code> flag is true). Provide either
+            OAuth2 fields (<code>Client ID</code> + <code>Client secret</code>)
+            or OAuth1 fields (<code>Consumer key</code> + <code>Consumer secret</code>)
+            from the upstream provider&apos;s app dashboard. Velocity does
+            NOT store these — they&apos;re forwarded to Airweave on this
+            create call only.
+          </FieldDescription>
+
+          <Field data-invalid={Boolean(errors.clientId)}>
+            <FieldLabel htmlFor="airweave-oauth-clientid">
+              Client ID (OAuth2)
+            </FieldLabel>
+            <Input
+              id="airweave-oauth-clientid"
+              autoComplete="off"
+              placeholder="123456789.123456789"
+              {...register("clientId")}
+            />
+            <FieldError errors={[errors.clientId]} />
+          </Field>
+
+          <Field data-invalid={Boolean(errors.clientSecret)}>
+            <FieldLabel htmlFor="airweave-oauth-clientsecret">
+              Client secret (OAuth2)
+            </FieldLabel>
+            <Input
+              id="airweave-oauth-clientsecret"
+              type="password"
+              autoComplete="off"
+              placeholder="••••••••"
+              {...register("clientSecret")}
+            />
+            <FieldError errors={[errors.clientSecret]} />
+          </Field>
+
+          <Field data-invalid={Boolean(errors.consumerKey)}>
+            <FieldLabel htmlFor="airweave-oauth-consumerkey">
+              Consumer key (OAuth1)
+            </FieldLabel>
+            <Input
+              id="airweave-oauth-consumerkey"
+              autoComplete="off"
+              {...register("consumerKey")}
+            />
+            <FieldError errors={[errors.consumerKey]} />
+          </Field>
+
+          <Field data-invalid={Boolean(errors.consumerSecret)}>
+            <FieldLabel htmlFor="airweave-oauth-consumersecret">
+              Consumer secret (OAuth1)
+            </FieldLabel>
+            <Input
+              id="airweave-oauth-consumersecret"
+              type="password"
+              autoComplete="off"
+              {...register("consumerSecret")}
+            />
+            <FieldError errors={[errors.consumerSecret]} />
+          </Field>
+
+          <Field data-invalid={Boolean(errors.redirectUri)}>
+            <FieldLabel htmlFor="airweave-oauth-redirecturi">
+              Redirect URI (optional)
+            </FieldLabel>
+            <Input
+              id="airweave-oauth-redirecturi"
+              placeholder="https://connect.airweave.ai/oauth/callback"
+              {...register("redirectUri")}
+            />
+            <FieldDescription>
+              Override only if your OAuth app requires a non-default
+              callback URL.
+            </FieldDescription>
+            <FieldError errors={[errors.redirectUri]} />
+          </Field>
+        </details>
       </FieldGroup>
 
       <DialogFooter className="mt-4">

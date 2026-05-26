@@ -76,11 +76,18 @@ export type CreateSourceConnectionInput =
   | {
       name: string;
       shortName: string;
-      // Per ADR-011 § Amendment 2: no `redirectUri` field —
-      // @airweave/connect-react SDK uses postMessage CONNECTION_CREATED
-      // / CLOSE callbacks; redirect URIs were inherited dead-contract.
+      // ADR-011 § Amendment 3 (2026-05-26): BYOC (Bring Your Own Client)
+      // fields are optional pass-through to Airweave's OAuthBrowser-
+      // Authentication. Required when the source's `requires_byoc=true`.
+      // We never persist these on our side — Airweave stores them
+      // tied to the source-connection record.
       authentication: {
         kind: 'oauth';
+        clientId?: string;
+        clientSecret?: string;
+        consumerKey?: string;
+        consumerSecret?: string;
+        redirectUri?: string;
       };
     };
 

@@ -280,3 +280,69 @@ describe("CreateSourceConnectionDialog — OAuth success-without-sessionToken br
     expect(onOAuthSubmit).not.toHaveBeenCalled();
   });
 });
+
+// ── ADR-011 § Amendment 3 — BYOC pass-through ────────────────────────────
+
+describe("CreateSourceConnectionDialog — OAuth BYOC fields (ADR-011 Amendment 3)", () => {
+  it("forwards filled BYOC fields (clientId/clientSecret) to the create mutation in the authentication payload", async () => {
+    renderDialog();
+    fireEvent.click(screen.getByRole("button", { name: /^oauth$/i }));
+    fireEvent.change(screen.getByLabelText(/^name$/i), {
+      target: { value: "Acme Slack" },
+    });
+    fireEvent.change(screen.getByLabelText(/source type/i), {
+      target: { value: "slack" },
+    });
+    // Expand the BYOC <details> and fill the OAuth2 fields. The native
+    // <summary> click toggles `open`; React state in OAuthForm syncs
+    // via the onToggle handler so the field inputs render.
+    fireEvent.click(
+      screen.getByText(/advanced — bring your own oauth app/i),
+    );
+    fireEvent.change(screen.getByLabelText(/client id \(oauth2\)/i), {
+      target: { value: "client-abc" },
+    });
+    fireEvent.change(screen.getByLabelText(/client secret \(oauth2\)/i), {
+      target: { value: "secret-xyz" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /start oauth/i }));
+
+    await waitFor(() => {
+      expect(mockMutateAsync).toHaveBeenCalledWith({
+        collectionReadableId: "acme-x-deadbeef",
+        input: {
+          name: "Acme Slack",
+          shortName: "slack",
+          authentication: {
+            kind: "oauth",
+            clientId: "client-abc",
+            clientSecret: "secret-xyz",
+          },
+        },
+      });
+    });
+  });
+
+  it("submitting OAuth WITHOUT opening the BYOC disclosure sends only kind:oauth — empty BYOC fields are stripped to undefined by the Zod transform", async () => {
+    renderDialog();
+    fireEvent.click(screen.getByRole("button", { name: /^oauth$/i }));
+    fireEvent.change(screen.getByLabelText(/^name$/i), {
+      target: { value: "Acme Slack" },
+    });
+    fireEvent.change(screen.getByLabelText(/source type/i), {
+      target: { value: "slack" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /start oauth/i }));
+
+    await waitFor(() => {
+      expect(mockMutateAsync).toHaveBeenCalledWith({
+        collectionReadableId: "acme-x-deadbeef",
+        input: {
+          name: "Acme Slack",
+          shortName: "slack",
+          authentication: { kind: "oauth" },
+        },
+      });
+    });
+  });
+});

@@ -54,12 +54,33 @@ export const createDirectSourceConnectionSchema = z.object({
     ),
 });
 
-// Per ADR-011 § Amendment 2 (2026-05-25): no `redirectUri` field —
-// @airweave/connect-react SDK uses postMessage CONNECTION_CREATED /
-// CLOSE callbacks; redirect URIs were inherited dead-contract.
+/**
+ * BYOC (Bring Your Own Client) fields — optional. Required when the
+ * source's `requires_byoc=true` (e.g., Slack on an Airweave account
+ * without a preconfigured OAuth app). The dialog's "Advanced — bring
+ * your own OAuth app" disclosure surfaces them. Backend forwards
+ * verbatim per ADR-011 § Amendment 3 (2026-05-26).
+ *
+ * Each field is optional and treats empty strings as unset to avoid
+ * forwarding `""` as a secret value to Airweave.
+ */
+const optionalSecret = (label: string) =>
+  z
+    .string()
+    .trim()
+    .max(2048, `${label} is too long (max 2048 chars)`)
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => (typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined));
+
 export const createOAuthSourceConnectionSchema = z.object({
   name: trimmedString('Name'),
   shortName: trimmedString('Source identifier', 64),
+  clientId: optionalSecret('Client ID'),
+  clientSecret: optionalSecret('Client secret'),
+  consumerKey: optionalSecret('Consumer key'),
+  consumerSecret: optionalSecret('Consumer secret'),
+  redirectUri: optionalSecret('Redirect URI'),
 });
 
 export const updateSourceConnectionSchema = z.object({
