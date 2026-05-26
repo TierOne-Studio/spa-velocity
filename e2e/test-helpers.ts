@@ -20,6 +20,12 @@ const MANAGER_ROLE_PERMISSIONS = [
 
 const MEMBER_ROLE_PERMISSIONS = [
   ['organization', 'read'],
+  // Mirrors production rbac_020 (api-velocity) which grants airweave:read
+  // to every default org role so members can SEE Airweave collections their
+  // org owns (silent-filtered list). Without this, member-role e2e tests
+  // would 403-redirect off /admin/airweave even though prod members can
+  // reach it.
+  ['airweave', 'read'],
 ] as const;
 
 async function seedDefaultOrganizationRoles(pool: Pool, organizationId: string): Promise<void> {

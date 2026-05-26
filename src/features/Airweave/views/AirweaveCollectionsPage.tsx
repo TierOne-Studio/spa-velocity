@@ -159,13 +159,20 @@ export function AirweaveCollectionsPage() {
                           <TableCell className="text-sm text-muted-foreground">
                             {new Date(collection.createdAt).toLocaleDateString()}
                           </TableCell>
-                          <TableCell>
+                          {/*
+                            Stop click propagation at the actions cell so
+                            opening the dropdown / selecting a menu item
+                            doesn't ALSO fire the row's onClick → navigate
+                            handler. The trigger's own onClick stopPropagation
+                            isn't sufficient because Radix's `asChild` slot
+                            composition fires the row click first in some
+                            event paths (caught by e2e
+                            airweave/collections-crud.spec.ts).
+                          */}
+                          <TableCell onClick={(e) => e.stopPropagation()}>
                             {(canUpdate || canDelete) && (
                               <DropdownMenu>
-                                <DropdownMenuTrigger
-                                  asChild
-                                  onClick={(e) => e.stopPropagation()}
-                                >
+                                <DropdownMenuTrigger asChild>
                                   <Button
                                     variant="ghost"
                                     size="icon"

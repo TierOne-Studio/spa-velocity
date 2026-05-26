@@ -29,10 +29,20 @@ export default defineConfig({
     },
   },
   resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-      '@shared': path.resolve(__dirname, './src/shared'),
-      '@features': path.resolve(__dirname, './src/features'),
-    },
+    alias: [
+      // Shim for the unpublished `airweave-connect` workspace pkg that
+      // `@airweave/connect-react` declares as a dep. Mirrors vite.config.ts.
+      // The suite-level vi.mock('@airweave/connect-react', ...) in
+      // src/test/setup.ts still wins for tests that exercise the SDK
+      // surface; this alias is the belt-and-suspenders for any test that
+      // transitively imports the SDK module graph without a local mock.
+      {
+        find: /^airweave-connect\/lib\/(.*)$/,
+        replacement: path.resolve(__dirname, './src/shims/airweave-connect/lib/$1'),
+      },
+      { find: '@', replacement: path.resolve(__dirname, './src') },
+      { find: '@shared', replacement: path.resolve(__dirname, './src/shared') },
+      { find: '@features', replacement: path.resolve(__dirname, './src/features') },
+    ],
   },
 });
