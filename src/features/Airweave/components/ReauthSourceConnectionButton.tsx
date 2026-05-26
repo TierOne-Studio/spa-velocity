@@ -2,6 +2,7 @@ import { IconRefresh } from "@tabler/icons-react";
 import { DropdownMenuItem } from "@/shared/components/ui/dropdown-menu";
 import { useReauthAirweaveSourceConnection } from "@/features/Airweave/hooks/useReauthAirweaveSourceConnection";
 import { useAirweaveConnectModal } from "@/features/Airweave/hooks/useAirweaveConnectModal";
+import { useTheme } from "@/shared/components/ui/theme-provider";
 import type { AirweaveSourceConnection } from "@/features/Airweave/types";
 
 type Props = {
@@ -30,8 +31,23 @@ type Props = {
  */
 export function ReauthSourceConnectionButton({ sourceConnection }: Props) {
   const reauthMutation = useReauthAirweaveSourceConnection();
+  // Match the host theme so the SDK widget chrome doesn't render
+  // invisible (see useAirweaveConnectModal docstring + Amendment 4
+  // theme-wiring on the detail page). Same resolution rule: respect
+  // explicit light|dark, fall back to matchMedia for `system`.
+  const { theme: hostTheme } = useTheme();
+  const widgetTheme: "light" | "dark" =
+    hostTheme === "dark"
+      ? "dark"
+      : hostTheme === "light"
+        ? "light"
+        : typeof window !== "undefined" &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches
+          ? "dark"
+          : "light";
   const connectModal = useAirweaveConnectModal({
     collectionReadableId: sourceConnection.collectionReadableId,
+    theme: widgetTheme,
     getSessionToken: async () => {
       const result = await reauthMutation.mutateAsync(sourceConnection.id);
       return result.sessionToken;

@@ -23,8 +23,23 @@
 /** App icon variants the SDK requests per source (e.g. "slack"). */
 export type IconVariant = 'default' | 'light' | 'dark';
 
-/** Theme colors consumed by the SDK iframe wrapper. */
+/** Theme config consumed by the SDK iframe wrapper.
+ *
+ * Critical field is `mode`: the SDK appends `?theme=<mode>` to the
+ * iframe URL based on this — that's what tells the widget which color
+ * scheme to render. Without it the widget defaults to light, and on
+ * dark-mode host apps the widget renders white text on white background
+ * (the visible result is empty modal with only the colorful icon tile
+ * showing — every other text/button is invisible). Caught by manual
+ * smoke post-Amendment-4.
+ *
+ * The other fields are accepted by the SDK's theming hooks but don't
+ * affect URL construction — they're forwarded via postMessage after
+ * the iframe loads.
+ */
 export interface ConnectTheme {
+  /** Color scheme for the iframe widget. MUST be set on dark-mode apps. */
+  mode?: 'light' | 'dark';
   colors?: Partial<{
     background: string;
     foreground: string;

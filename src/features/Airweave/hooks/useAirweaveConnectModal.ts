@@ -34,6 +34,14 @@ export interface UseAirweaveConnectModalProps {
   getSessionToken: () => Promise<string>;
   /** Used to invalidate the right cache slice on successful connect. */
   collectionReadableId: string;
+  /**
+   * Light or dark color scheme for the SDK iframe widget. The SDK
+   * appends `?theme=<mode>` to the iframe URL — without it the widget
+   * renders in default light mode, which on dark-mode host apps leaves
+   * widget text invisible (white-on-white). Pass the host app's
+   * current theme so the widget chrome matches.
+   */
+  theme?: 'light' | 'dark';
   /** Optional — fires after the SDK reports success AND cache invalidation. */
   onConnected?: (connectionId: string) => void;
   /**
@@ -89,6 +97,7 @@ const CONNECT_URL = validateConnectUrl(
 export function useAirweaveConnectModal({
   getSessionToken,
   collectionReadableId,
+  theme,
   onConnected,
   onCancelled,
 }: UseAirweaveConnectModalProps): UseAirweaveConnectModalReturn {
@@ -153,6 +162,12 @@ export function useAirweaveConnectModal({
   const { open: sdkOpen, isLoading } = useAirweaveConnect({
     getSessionToken,
     connectUrl: CONNECT_URL,
+    // SDK reads `theme.mode` and appends `?theme=<mode>` to the iframe
+    // URL. Required for visible UI on dark-mode host apps — without it
+    // the widget renders white-on-white. Only set `theme` prop when
+    // caller passed a mode (omit otherwise so the SDK keeps its own
+    // default behavior).
+    ...(theme ? { theme: { mode: theme } } : {}),
     onSuccess: handleSuccess,
     onError: handleError,
     onClose: handleClose,

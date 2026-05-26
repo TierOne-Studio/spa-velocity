@@ -33,6 +33,7 @@ import { CreateSourceConnectionDialog } from "@/features/Airweave/components/Cre
 import { ReauthSourceConnectionButton } from "@/features/Airweave/components/ReauthSourceConnectionButton";
 import { useAirweaveConnectModal } from "@/features/Airweave/hooks/useAirweaveConnectModal";
 import { createConnectSession } from "@/features/Airweave/services/source-connections.service";
+import { useTheme } from "@/shared/components/ui/theme-provider";
 
 /**
  * `/admin/airweave/:collectionReadableId` — manage a single collection
@@ -96,8 +97,25 @@ export function AirweaveCollectionDetailPage() {
     };
   }, []);
 
+  // Resolve the SPA's current theme to a concrete light|dark value
+  // for the SDK widget. The provider returns 'light' | 'dark' | 'system';
+  // when 'system', fall back to matchMedia so the widget chrome matches
+  // what the user is actually seeing. Without this, the widget renders
+  // light-themed (white bg + white text) on a dark host → invisible UI.
+  const { theme: hostTheme } = useTheme();
+  const widgetTheme: "light" | "dark" =
+    hostTheme === "dark"
+      ? "dark"
+      : hostTheme === "light"
+        ? "light"
+        : typeof window !== "undefined" &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches
+          ? "dark"
+          : "light";
+
   const connectModal = useAirweaveConnectModal({
     collectionReadableId,
+    theme: widgetTheme,
     getSessionToken: async () => {
       // Re-check mount BEFORE the backend round-trip — the SDK invokes
       // us inside open(), so this is the right place to fail-loud on

@@ -260,6 +260,49 @@ describe('useAirweaveConnectModal', () => {
     );
     expect(captureProps.current?.showCloseButton).toBe(true);
   });
+
+  // ── theme prop (ADR-011 § Amendment 4 follow-up) ─────────────────────
+
+  it("forwards theme: 'dark' to the SDK as { mode: 'dark' } so iframe URL gets ?theme=dark", () => {
+    const { Wrapper } = makeWrapper();
+    renderHook(
+      () =>
+        useAirweaveConnectModal({
+          getSessionToken,
+          collectionReadableId: 'acme-x-deadbeef',
+          theme: 'dark',
+        }),
+      { wrapper: Wrapper },
+    );
+    expect(captureProps.current?.theme).toEqual({ mode: 'dark' });
+  });
+
+  it("forwards theme: 'light' to the SDK as { mode: 'light' }", () => {
+    const { Wrapper } = makeWrapper();
+    renderHook(
+      () =>
+        useAirweaveConnectModal({
+          getSessionToken,
+          collectionReadableId: 'acme-x-deadbeef',
+          theme: 'light',
+        }),
+      { wrapper: Wrapper },
+    );
+    expect(captureProps.current?.theme).toEqual({ mode: 'light' });
+  });
+
+  it('omits theme prop entirely when caller does not pass one (preserves SDK default)', () => {
+    const { Wrapper } = makeWrapper();
+    renderHook(
+      () =>
+        useAirweaveConnectModal({
+          getSessionToken,
+          collectionReadableId: 'acme-x-deadbeef',
+        }),
+      { wrapper: Wrapper },
+    );
+    expect(captureProps.current?.theme).toBeUndefined();
+  });
 });
 
 // ── validateConnectUrl (security MED #1 remediation) ─────────────────────
