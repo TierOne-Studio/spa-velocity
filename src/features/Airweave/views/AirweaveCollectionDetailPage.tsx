@@ -32,6 +32,7 @@ import { SourceConnectionsList } from "@/features/Airweave/components/SourceConn
 import { CreateSourceConnectionDialog } from "@/features/Airweave/components/CreateSourceConnectionDialog";
 import { ReauthSourceConnectionButton } from "@/features/Airweave/components/ReauthSourceConnectionButton";
 import { useAirweaveConnectModal } from "@/features/Airweave/hooks/useAirweaveConnectModal";
+import { createConnectSession } from "@/features/Airweave/services/source-connections.service";
 
 /**
  * `/admin/airweave/:collectionReadableId` — manage a single collection
@@ -72,18 +73,15 @@ export function AirweaveCollectionDetailPage() {
   // Ref-mirror pattern: React 18+ batches setState synchronously WITHIN
   // an event handler, so a state-based read inside the SDK's synchronous
   // getSessionToken callback would still see `null`. A ref write is
-  // synchronous; closure-staleness goes away. There is intentionally NO
-  // accompanying useState here — the value is consumed exclusively by
-  // the SDK callback (a non-render path), so render state would be
-  // write-only YAGNI. If a future render-driven indicator needs the
-  // token's presence, derive it from `pendingTokenRef.current` via
-  // forceUpdate or add useState then.
+  // ADR-011 § Amendment 4 (2026-05-26): `pendingTokenRef` removed.
+  // The catalog-widget flow fetches a fresh session token on every
+  // `open()` call directly from `getSessionToken` — no need to stash
+  // a token across the dialog→page handoff because the dialog is no
+  // longer in the path. SDK widget is opened directly from the page.
   //
-  // Unmount safety: a route change mid-OAuth can fire SDK callbacks
-  // against an unmounted page. mountedRef short-circuits the writes
-  // in onConnected/onCancelled AND guards getSessionToken's await
-  // path (per qa-validator HIGH #3 — close failure-mode #13).
-  const pendingTokenRef = useRef<string | null>(null);
+  // mountedRef stays: a route change mid-flow can still fire SDK
+  // callbacks against an unmounted page. Short-circuit guards prevent
+  // setState-after-unmount + abort the in-flight session-token fetch.
   const mountedRef = useRef(true);
   useEffect(() => {
     // Initialize on EVERY effect run, not just the initial mount.
@@ -91,40 +89,38 @@ export function AirweaveCollectionDetailPage() {
     // immediately after mount. Without re-setting `mountedRef.current
     // = true` here, the cleanup from the first invocation flips the
     // ref to false and getSessionToken throws "Page unmounted" forever
-    // even though the component is alive. Caught by airweave-live
-    // SDK-iframe smoke against the real backend.
+    // even though the component is alive.
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      pendingTokenRef.current = null;
     };
   }, []);
 
   const connectModal = useAirweaveConnectModal({
     collectionReadableId,
     getSessionToken: async () => {
-      // Re-check mount BEFORE returning — the SDK invokes us inside
-      // open() so this is the right place to fail-loud on unmount,
-      // not after the await resolves. (Path B per ADR-011 § Amendment 2:
-      // no silent fallback to reauth.)
+      // Re-check mount BEFORE the backend round-trip — the SDK invokes
+      // us inside open(), so this is the right place to fail-loud on
+      // unmount and avoid issuing an orphan session token. Per
+      // ADR-011 § Amendment 4: every catalog-widget open() fetches a
+      // fresh token (no caching) so widget always gets the live state.
       if (!mountedRef.current) {
-        throw new Error("Page unmounted; OAuth flow aborted.");
+        throw new Error("Page unmounted; aborted Airweave session fetch.");
       }
-      const t = pendingTokenRef.current;
-      if (!t) {
-        throw new Error(
-          "No pending OAuth token — click Reauth on the row to retry.",
-        );
-      }
-      return t;
+      const { sessionToken } = await createConnectSession(
+        collectionReadableId,
+      );
+      return sessionToken;
     },
     onConnected: () => {
-      if (!mountedRef.current) return;
-      pendingTokenRef.current = null;
+      // No-op when unmounted; wrapper hook handles cache invalidation
+      // + success toast internally. Page-level work would happen here
+      // (e.g., navigating to the new source) if needed.
     },
     onCancelled: () => {
-      if (!mountedRef.current) return;
-      pendingTokenRef.current = null;
+      // Same — wrapper's cancel toast tells the user what to do next;
+      // page has nothing additional to clean up since no token is
+      // stashed locally anymore.
     },
   });
 
@@ -237,10 +233,35 @@ export function AirweaveCollectionDetailPage() {
               collectionReadableId={collectionReadableId}
               toolbar={
                 canManageSources ? (
-                  <Button size="sm" onClick={() => setAddSourceOpen(true)}>
-                    <IconPlus className="mr-2 h-4 w-4" />
-                    Add source
-                  </Button>
+                  // Primary path: catalog widget. Opens the Airweave
+                  // Connect SDK with the full source picker; user
+                  // chooses + authenticates inline. Per ADR-011 §
+                  // Amendment 4 this is the canonical OAuth + most-
+                  // direct-source entry point.
+                  //
+                  // Secondary "Add direct" button (advanced) is kept
+                  // for users with API keys / DSNs in hand who don't
+                  // want to round-trip through the widget. The shared
+                  // dialog state (`addSourceOpen`) drives it.
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => connectModal.open()}
+                      disabled={connectModal.isLoading}
+                    >
+                      <IconPlus className="mr-2 h-4 w-4" />
+                      {connectModal.isLoading
+                        ? "Opening…"
+                        : "Connect a source"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setAddSourceOpen(true)}
+                    >
+                      Add direct source
+                    </Button>
+                  </div>
                 ) : undefined
               }
               renderRowExtra={
@@ -278,14 +299,6 @@ export function AirweaveCollectionDetailPage() {
           collectionReadableId={collectionReadableId}
           open={addSourceOpen}
           onOpenChange={setAddSourceOpen}
-          onOAuthSubmit={(token) => {
-            // Ref-write THEN open(). Synchronous ref-write survives
-            // React batching; the SDK reads pendingTokenRef inside the
-            // getSessionToken closure on this same turn. See the
-            // module-level lifecycle comment above.
-            pendingTokenRef.current = token;
-            connectModal.open();
-          }}
         />
       )}
     </div>

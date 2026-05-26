@@ -96,14 +96,12 @@ import { CreateSourceConnectionDialog } from "../CreateSourceConnectionDialog";
 
 function renderDialog(overrides: Partial<{
   onOpenChange: (open: boolean) => void;
-  onOAuthSubmit: (token: string) => void;
 }> = {}) {
   return render(
     <CreateSourceConnectionDialog
       collectionReadableId="acme-x-deadbeef"
       open
       onOpenChange={overrides.onOpenChange ?? vi.fn()}
-      onOAuthSubmit={overrides.onOAuthSubmit}
     />,
   );
 }
@@ -228,121 +226,15 @@ describe("CreateSourceConnectionDialog — DirectAuthForm parse-then-validate", 
   });
 });
 
-// ── Prior MED #5 — OAuthForm success-without-sessionToken ────────────────
-
-describe("CreateSourceConnectionDialog — OAuth success-without-sessionToken branch", () => {
-  async function switchToOAuthTabAndSubmit({
-    name = "Slack",
-    shortName = "slack",
-  } = {}) {
-    // Click the OAuth tab trigger → React state in our stubbed Tabs
-    // re-renders with the OAuth panel active. Then fill + submit.
-    fireEvent.click(screen.getByRole("button", { name: /^oauth$/i }));
-    fireEvent.change(screen.getByLabelText(/^name$/i), {
-      target: { value: name },
-    });
-    fireEvent.change(screen.getByLabelText(/source type/i), {
-      target: { value: shortName },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /start oauth/i }));
-  }
-
-  it("create resolves WITH sessionToken → onOAuthSubmit(token) + dialog closes (happy path)", async () => {
-    const onOpenChange = vi.fn();
-    const onOAuthSubmit = vi.fn();
-    renderDialog({ onOpenChange, onOAuthSubmit });
-    await switchToOAuthTabAndSubmit();
-
-    await waitFor(() => {
-      expect(onOAuthSubmit).toHaveBeenCalledWith("tok-fresh");
-    });
-    expect(onOpenChange).toHaveBeenCalledWith(false);
-    expect(mockToastError).not.toHaveBeenCalled();
-  });
-
-  it("create resolves with NO sessionToken → toast.error + dialog closes; onOAuthSubmit NOT invoked", async () => {
-    mockMutateAsync.mockResolvedValueOnce({
-      sourceConnection: { id: "src-orphan" },
-      // No sessionToken — contract violation. Backend would never
-      // legitimately return this; defensive UX nonetheless.
-    });
-    const onOpenChange = vi.fn();
-    const onOAuthSubmit = vi.fn();
-    renderDialog({ onOpenChange, onOAuthSubmit });
-    await switchToOAuthTabAndSubmit();
-
-    await waitFor(() => {
-      expect(mockToastError).toHaveBeenCalledWith(
-        expect.stringMatching(/no OAuth session token/i),
-      );
-    });
-    expect(onOpenChange).toHaveBeenCalledWith(false);
-    expect(onOAuthSubmit).not.toHaveBeenCalled();
-  });
-});
-
-// ── ADR-011 § Amendment 3 — BYOC pass-through ────────────────────────────
-
-describe("CreateSourceConnectionDialog — OAuth BYOC fields (ADR-011 Amendment 3)", () => {
-  it("forwards filled BYOC fields (clientId/clientSecret) to the create mutation in the authentication payload", async () => {
-    renderDialog();
-    fireEvent.click(screen.getByRole("button", { name: /^oauth$/i }));
-    fireEvent.change(screen.getByLabelText(/^name$/i), {
-      target: { value: "Acme Slack" },
-    });
-    fireEvent.change(screen.getByLabelText(/source type/i), {
-      target: { value: "slack" },
-    });
-    // Expand the BYOC <details> and fill the OAuth2 fields. The native
-    // <summary> click toggles `open`; React state in OAuthForm syncs
-    // via the onToggle handler so the field inputs render.
-    fireEvent.click(
-      screen.getByText(/advanced — bring your own oauth app/i),
-    );
-    fireEvent.change(screen.getByLabelText(/client id \(oauth2\)/i), {
-      target: { value: "client-abc" },
-    });
-    fireEvent.change(screen.getByLabelText(/client secret \(oauth2\)/i), {
-      target: { value: "secret-xyz" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /start oauth/i }));
-
-    await waitFor(() => {
-      expect(mockMutateAsync).toHaveBeenCalledWith({
-        collectionReadableId: "acme-x-deadbeef",
-        input: {
-          name: "Acme Slack",
-          shortName: "slack",
-          authentication: {
-            kind: "oauth",
-            clientId: "client-abc",
-            clientSecret: "secret-xyz",
-          },
-        },
-      });
-    });
-  });
-
-  it("submitting OAuth WITHOUT opening the BYOC disclosure sends only kind:oauth — empty BYOC fields are stripped to undefined by the Zod transform", async () => {
-    renderDialog();
-    fireEvent.click(screen.getByRole("button", { name: /^oauth$/i }));
-    fireEvent.change(screen.getByLabelText(/^name$/i), {
-      target: { value: "Acme Slack" },
-    });
-    fireEvent.change(screen.getByLabelText(/source type/i), {
-      target: { value: "slack" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /start oauth/i }));
-
-    await waitFor(() => {
-      expect(mockMutateAsync).toHaveBeenCalledWith({
-        collectionReadableId: "acme-x-deadbeef",
-        input: {
-          name: "Acme Slack",
-          shortName: "slack",
-          authentication: { kind: "oauth" },
-        },
-      });
-    });
-  });
-});
+// ── ADR-011 § Amendment 4 (2026-05-26) ───────────────────────────────────
+// The OAuth-tab tests + BYOC-disclosure tests were removed because the
+// OAuth tab itself is gone. OAuth source-connection creation happens
+// inside the Airweave Connect catalog widget (opened from the page's
+// "Connect a source" button) — no Velocity-side form, no pre-pinned
+// shortName, no Velocity-managed BYOC pass-through. The widget shows
+// the full source catalog and handles credential entry inline.
+//
+// Coverage for the catalog widget itself lives in:
+//   - e2e/airweave/airweave-live.spec.ts ("SDK iframe actually mounts...")
+//   - src/features/Airweave/hooks/__tests__/useAirweaveConnectModal.test.tsx
+//   - src/features/Airweave/views/__tests__/AirweaveCollectionDetailPage.test.tsx

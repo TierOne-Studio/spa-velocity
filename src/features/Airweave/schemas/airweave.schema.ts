@@ -54,34 +54,11 @@ export const createDirectSourceConnectionSchema = z.object({
     ),
 });
 
-/**
- * BYOC (Bring Your Own Client) fields — optional. Required when the
- * source's `requires_byoc=true` (e.g., Slack on an Airweave account
- * without a preconfigured OAuth app). The dialog's "Advanced — bring
- * your own OAuth app" disclosure surfaces them. Backend forwards
- * verbatim per ADR-011 § Amendment 3 (2026-05-26).
- *
- * Each field is optional and treats empty strings as unset to avoid
- * forwarding `""` as a secret value to Airweave.
- */
-const optionalSecret = (label: string) =>
-  z
-    .string()
-    .trim()
-    .max(2048, `${label} is too long (max 2048 chars)`)
-    .optional()
-    .or(z.literal(''))
-    .transform((v) => (typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined));
-
-export const createOAuthSourceConnectionSchema = z.object({
-  name: trimmedString('Name'),
-  shortName: trimmedString('Source identifier', 64),
-  clientId: optionalSecret('Client ID'),
-  clientSecret: optionalSecret('Client secret'),
-  consumerKey: optionalSecret('Consumer key'),
-  consumerSecret: optionalSecret('Consumer secret'),
-  redirectUri: optionalSecret('Redirect URI'),
-});
+// ADR-011 § Amendment 4 (2026-05-26): `createOAuthSourceConnectionSchema`
+// removed. OAuth source-connection creation no longer happens through a
+// Velocity-side form — the Airweave Connect catalog widget handles
+// source selection, BYOC entry, and authentication inline. Keep this
+// schema file focused on the direct-auth path that we still own.
 
 export const updateSourceConnectionSchema = z.object({
   name: trimmedString('Name'),
@@ -93,9 +70,7 @@ export type UpdateCollectionForm = z.infer<typeof updateCollectionSchema>;
 export type CreateDirectSourceConnectionForm = z.infer<
   typeof createDirectSourceConnectionSchema
 >;
-export type CreateOAuthSourceConnectionForm = z.infer<
-  typeof createOAuthSourceConnectionSchema
->;
+// `CreateOAuthSourceConnectionForm` removed in ADR-011 § Amendment 4.
 export type UpdateSourceConnectionForm = z.infer<
   typeof updateSourceConnectionSchema
 >;

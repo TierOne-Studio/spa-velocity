@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, act } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
@@ -12,6 +12,7 @@ const {
   mockCan,
   mockUseModal,
   mockOpenModal,
+  mockCreateConnectSession,
   capturedModalProps,
   capturedDialogProps,
 } = vi.hoisted(() => ({
@@ -19,8 +20,13 @@ const {
   mockCan: vi.fn(),
   mockUseModal: vi.fn(),
   mockOpenModal: vi.fn(),
+  mockCreateConnectSession: vi.fn(),
   capturedModalProps: { current: null as null | Record<string, unknown> },
   capturedDialogProps: { current: null as null | Record<string, unknown> },
+}));
+
+vi.mock("@/features/Airweave/services/source-connections.service", () => ({
+  createConnectSession: mockCreateConnectSession,
 }));
 
 vi.mock(
@@ -100,6 +106,8 @@ beforeEach(() => {
   capturedModalProps.current = null;
   capturedDialogProps.current = null;
   mockOpenModal.mockReset();
+  mockCreateConnectSession.mockReset();
+  mockCreateConnectSession.mockResolvedValue({ sessionToken: "tok-from-backend" });
   mockUseModal.mockReturnValue({ open: mockOpenModal, isLoading: false });
   mockCan.mockReturnValue(true);
   mockUseCollectionDetail.mockReturnValue({
@@ -112,45 +120,41 @@ beforeEach(() => {
 
 afterEach(() => vi.clearAllMocks());
 
-describe("AirweaveCollectionDetailPage — ref-mirror + lifecycle (qa HIGH #2)", () => {
-  it("onOAuthSubmit writes pendingTokenRef BEFORE calling connectModal.open() so getSessionToken reads the fresh token", async () => {
+describe("AirweaveCollectionDetailPage — catalog-widget flow (ADR-011 Amendment 4)", () => {
+  it("getSessionToken fetches a fresh token from POST /api/airweave/connect/session each call", async () => {
     renderPage();
-    const dialogProps = capturedDialogProps.current as {
-      onOAuthSubmit: (token: string) => void;
-    };
     const modalProps = capturedModalProps.current as {
       getSessionToken: () => Promise<string>;
     };
 
-    // Initial state: no pending token → getSessionToken throws.
-    await expect(modalProps.getSessionToken()).rejects.toThrow(
-      /No pending OAuth token/,
+    await expect(modalProps.getSessionToken()).resolves.toBe(
+      "tok-from-backend",
     );
+    expect(mockCreateConnectSession).toHaveBeenCalledWith("acme-x-deadbeef");
 
-    // Simulate the dialog's OAuth submit calling back into the page.
-    act(() => {
-      dialogProps.onOAuthSubmit("tok-fresh");
+    // Second call hits the backend AGAIN — no per-page caching, the
+    // widget always gets a fresh-issued token.
+    mockCreateConnectSession.mockResolvedValueOnce({
+      sessionToken: "tok-second",
     });
-
-    // open() was called as part of the handoff.
-    expect(mockOpenModal).toHaveBeenCalledTimes(1);
-
-    // And the ref was written BEFORE open() — proven by getSessionToken
-    // resolving the fresh token after the synchronous handoff.
-    await expect(modalProps.getSessionToken()).resolves.toBe("tok-fresh");
+    await expect(modalProps.getSessionToken()).resolves.toBe("tok-second");
+    expect(mockCreateConnectSession).toHaveBeenCalledTimes(2);
   });
 
-  it("getSessionToken throws the actionable Path-B message when ref is null", async () => {
+  it("getSessionToken surfaces backend failures verbatim (no silent fallback)", async () => {
     renderPage();
     const modalProps = capturedModalProps.current as {
       getSessionToken: () => Promise<string>;
     };
+    mockCreateConnectSession.mockRejectedValueOnce(
+      new Error("Failed to create connect session for 'acme-x-deadbeef'"),
+    );
     await expect(modalProps.getSessionToken()).rejects.toThrow(
-      "No pending OAuth token — click Reauth on the row to retry.",
+      /Failed to create connect session/,
     );
   });
 
-  it("after unmount, getSessionToken fails fast with 'Page unmounted' (qa HIGH #3 — failure-mode #13)", async () => {
+  it("after unmount, getSessionToken fails fast with 'Page unmounted' and does NOT hit the backend (orphan session prevention)", async () => {
     const { unmount } = renderPage();
     const modalProps = capturedModalProps.current as {
       getSessionToken: () => Promise<string>;
@@ -159,6 +163,8 @@ describe("AirweaveCollectionDetailPage — ref-mirror + lifecycle (qa HIGH #2)",
     await expect(modalProps.getSessionToken()).rejects.toThrow(
       /Page unmounted/,
     );
+    // Critical: do NOT issue an Airweave session for an unmounted page.
+    expect(mockCreateConnectSession).not.toHaveBeenCalled();
   });
 
   it("after unmount, onConnected callback is a no-op (mountedRef guard prevents setState-after-unmount)", () => {
@@ -180,24 +186,15 @@ describe("AirweaveCollectionDetailPage — ref-mirror + lifecycle (qa HIGH #2)",
     expect(() => modalProps.onCancelled()).not.toThrow();
   });
 
-  it("cleanup useEffect clears pendingTokenRef on unmount (leak prevention)", async () => {
-    const { unmount } = renderPage();
-    const dialogProps = capturedDialogProps.current as {
-      onOAuthSubmit: (token: string) => void;
-    };
-    const modalProps = capturedModalProps.current as {
-      getSessionToken: () => Promise<string>;
-    };
-
-    act(() => {
-      dialogProps.onOAuthSubmit("tok-fresh");
-    });
-    unmount();
-
-    // After unmount, the ref is nulled AND the unmounted check fires
-    // first (defense-in-depth: both throws are acceptable, both indicate
-    // the token is no longer in scope).
-    await expect(modalProps.getSessionToken()).rejects.toThrow();
+  it("dialog mounts WITHOUT onOAuthSubmit prop (ADR-011 § Amendment 4: OAuth no longer routes through this dialog)", () => {
+    renderPage();
+    const dialogProps = capturedDialogProps.current as Record<string, unknown>;
+    expect(dialogProps).not.toHaveProperty("onOAuthSubmit");
+    // The dialog still owns the direct-auth path; it gets the
+    // standard open/onOpenChange/collectionReadableId trio.
+    expect(dialogProps).toHaveProperty("collectionReadableId");
+    expect(dialogProps).toHaveProperty("open");
+    expect(dialogProps).toHaveProperty("onOpenChange");
   });
 
   it("page renders SourceConnectionsList + collection name when not loading", () => {

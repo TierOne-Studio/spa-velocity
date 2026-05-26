@@ -99,8 +99,15 @@ test.describe.serial('Airweave Permissions — admin vs member affordances', () 
     ).toBeVisible();
 
     await page.goto(`/admin/airweave/${COLLECTION_READABLE_ID}`);
+    // ADR-011 § Amendment 4: primary CTA is "Connect a source"
+    // (catalog widget); the legacy "Add direct source" stays for
+    // advanced use. Asserting on the primary affordance is enough
+    // to prove manage-sources permission carried through.
     await expect(
-      page.getByRole('button', { name: /^add source$/i }),
+      page.getByRole('button', { name: /^connect a source$/i }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: /^add direct source$/i }),
     ).toBeVisible();
     await expect(
       page.getByRole('button', { name: /collection actions/i }),
@@ -136,8 +143,13 @@ test.describe.serial('Airweave Permissions — admin vs member affordances', () 
     ).toHaveCount(0);
 
     await page.goto(`/admin/airweave/${COLLECTION_READABLE_ID}`);
+    // Both source-add affordances hidden per Amendment 4 (member
+    // lacks `airweave:manage-sources`).
     await expect(
-      page.getByRole('button', { name: /^add source$/i }),
+      page.getByRole('button', { name: /^connect a source$/i }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole('button', { name: /^add direct source$/i }),
     ).toHaveCount(0);
     await expect(
       page.getByRole('button', { name: /collection actions/i }),

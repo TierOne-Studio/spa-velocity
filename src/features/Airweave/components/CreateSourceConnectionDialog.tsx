@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -13,12 +12,6 @@ import {
 } from "@/shared/components/ui/dialog";
 import { Input } from "@/shared/components/ui/input";
 import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/shared/components/ui/tabs";
-import {
   Field,
   FieldDescription,
   FieldError,
@@ -26,10 +19,7 @@ import {
   FieldLabel,
 } from "@/shared/components/ui/field";
 import { cn } from "@/shared/lib/utils";
-import {
-  createDirectSourceConnectionSchema,
-  createOAuthSourceConnectionSchema,
-} from "@/features/Airweave/schemas/airweave.schema";
+import { createDirectSourceConnectionSchema } from "@/features/Airweave/schemas/airweave.schema";
 import { useCreateAirweaveSourceConnection } from "@/features/Airweave/hooks/useCreateAirweaveSourceConnection";
 import { scrubSessionToken } from "@/features/Airweave/lib/scrub-session-token";
 
@@ -37,15 +27,6 @@ type Props = {
   collectionReadableId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /**
-   * Fires when the OAuth tab successfully kicks off the create+token
-   * issuance. Page lifts the SDK modal (per ADR-011 § Amendment 2 +
-   * architect HIGH #2): page-level `useAirweaveConnectModal` reads the
-   * token from a ref the page sets in this callback, then calls
-   * `open()` on the SDK modal. The dialog itself closes immediately —
-   * it doesn't outlive the OAuth handshake.
-   */
-  onOAuthSubmit?: (sessionToken: string) => void;
 };
 
 /**
@@ -63,46 +44,27 @@ type DirectFormShape = {
 };
 
 /**
- * Form-value type for the OAuth branch.
+ * Add a **direct-auth** source connection — for sources that take API
+ * keys or DSNs (Postgres, S3, Stripe, …). The user supplies all the
+ * credentials upfront and the source-connection is created synchronously
+ * with an immediate sync kick-off.
  *
- * Per ADR-011 § Amendment 3 (2026-05-26): BYOC (Bring Your Own Client)
- * fields are optional pass-through to Airweave's OAuthBrowser-
- * Authentication. The dialog hides them under an "Advanced — bring
- * your own OAuth app" disclosure. Required when the source has
- * `requires_byoc=true` on Airweave's side (we don't enforce that
- * client-side; backend forwards verbatim and Airweave returns 4xx if
- * required fields are missing).
- */
-type OAuthFormShape = {
-  name: string;
-  shortName: string;
-  clientId?: string;
-  clientSecret?: string;
-  consumerKey?: string;
-  consumerSecret?: string;
-  redirectUri?: string;
-};
-
-/**
- * Add a source connection — direct auth OR OAuth-via-SDK.
+ * **OAuth-based sources (Slack, Notion, Google Drive, …) do NOT use this
+ * dialog.** Per ADR-011 § Amendment 4 (2026-05-26), OAuth flows go
+ * through the Airweave Connect catalog widget — opened from the page's
+ * "Connect a source" button — which lets the user browse the full
+ * connector catalog and authenticate inline. Pre-creating an OAuth
+ * source-connection with a chosen `shortName` upfront (the pre-Amendment-4
+ * design) broke the catalog UX and surfaced empty widgets when the
+ * source required BYOC. The catalog widget is the canonical OAuth path.
  *
- * OAuth flow (per ADR-011 § Amendment 2 — postMessage transport, NOT
- * window.open):
- *   1. Backend creates the source connection in `pending` + issues a
- *      `sessionToken`.
- *   2. Dialog passes the token up via `onOAuthSubmit(token)` and closes.
- *   3. Page receives the token, stashes it in a ref, and triggers the
- *      SDK-driven `useAirweaveConnectModal.open()` (lifted to page level
- *      so the modal outlives the dialog's unmount cycle).
- *   4. SDK opens its iframe widget at `connect.airweave.ai`, exchanges
- *      the token via postMessage REQUEST_TOKEN/TOKEN_RESPONSE, and emits
- *      onSuccess(connectionId) or onClose('cancel'|'error') on completion.
+ * This dialog stays for the smaller surface where the catalog widget
+ * is overkill (you already have a Postgres DSN in clipboard, etc.).
  */
 export function CreateSourceConnectionDialog({
   collectionReadableId,
   open,
   onOpenChange,
-  onOAuthSubmit,
 }: Props) {
   const createMutation = useCreateAirweaveSourceConnection();
 
@@ -110,117 +72,50 @@ export function CreateSourceConnectionDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Add Source Connection</DialogTitle>
+          <DialogTitle>Add direct source connection</DialogTitle>
           <DialogDescription>
-            Choose <strong>Direct</strong> for credential-based sources
-            (Postgres, S3, API tokens) or <strong>OAuth</strong> for
-            sources that need a browser handshake (Slack, Notion, Google
-            Drive, …). OAuth uses the official Airweave Connect widget;
-            you don&apos;t leave Velocity.
+            For sources that authenticate with API keys or connection
+            strings (Postgres, S3, Stripe, …). For Slack, Notion, Google
+            Drive, and other OAuth providers, use{" "}
+            <strong>Connect a source</strong> on the collection page
+            instead — it opens the Airweave catalog with the full source
+            picker.
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="direct" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="direct">Direct</TabsTrigger>
-            <TabsTrigger value="oauth">OAuth</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="direct">
-            <DirectAuthForm
-              isPending={createMutation.isPending}
-              onSubmit={async (input) => {
-                try {
-                  await createMutation.mutateAsync({
-                    collectionReadableId,
-                    input: {
-                      name: input.name,
-                      shortName: input.shortName,
-                      authentication: {
-                        kind: "direct",
-                        credentials: input.credentials,
-                      },
-                    },
-                  });
-                  toast.success("Source connection created.");
-                  onOpenChange(false);
-                } catch (error) {
-                  const message =
-                    error instanceof Error
-                      ? scrubSessionToken(error.message)
-                      : "Failed to create source connection";
-                  toast.error(message);
-                }
-              }}
-              onCancel={() => onOpenChange(false)}
-            />
-          </TabsContent>
-
-          <TabsContent value="oauth">
-            <OAuthForm
-              isPending={createMutation.isPending}
-              onSubmit={async (input) => {
-                try {
-                  const result = await createMutation.mutateAsync({
-                    collectionReadableId,
-                    input: {
-                      name: input.name,
-                      shortName: input.shortName,
-                      authentication: {
-                        kind: "oauth",
-                        // BYOC pass-through (ADR-011 § Amendment 3).
-                        // Optional fields — Zod schema strips empty
-                        // strings to undefined so we never forward
-                        // `""` as a secret. Service-side `trimAndPick`
-                        // double-checks the same invariant.
-                        ...(input.clientId
-                          ? { clientId: input.clientId }
-                          : {}),
-                        ...(input.clientSecret
-                          ? { clientSecret: input.clientSecret }
-                          : {}),
-                        ...(input.consumerKey
-                          ? { consumerKey: input.consumerKey }
-                          : {}),
-                        ...(input.consumerSecret
-                          ? { consumerSecret: input.consumerSecret }
-                          : {}),
-                        ...(input.redirectUri
-                          ? { redirectUri: input.redirectUri }
-                          : {}),
-                      },
-                    },
-                  });
-                  const token = result.sessionToken;
-                  if (!token) {
-                    toast.error(
-                      "Source created but no OAuth session token was returned — please use Reauth on the source row.",
-                    );
-                    onOpenChange(false);
-                    return;
-                  }
-                  // Hand off to the page-level SDK modal. Page is alive;
-                  // dialog can safely close now.
-                  onOAuthSubmit?.(token);
-                  onOpenChange(false);
-                } catch (error) {
-                  const message =
-                    error instanceof Error
-                      ? scrubSessionToken(error.message)
-                      : "Failed to create source connection";
-                  toast.error(message);
-                }
-              }}
-              onCancel={() => onOpenChange(false)}
-            />
-          </TabsContent>
-        </Tabs>
+        <DirectAuthForm
+          isPending={createMutation.isPending}
+          onSubmit={async (input) => {
+            try {
+              await createMutation.mutateAsync({
+                collectionReadableId,
+                input: {
+                  name: input.name,
+                  shortName: input.shortName,
+                  authentication: {
+                    kind: "direct",
+                    credentials: input.credentials,
+                  },
+                },
+              });
+              toast.success("Source connection created.");
+              onOpenChange(false);
+            } catch (error) {
+              const message =
+                error instanceof Error
+                  ? scrubSessionToken(error.message)
+                  : "Failed to create source connection";
+              toast.error(message);
+            }
+          }}
+          onCancel={() => onOpenChange(false)}
+        />
       </DialogContent>
     </Dialog>
   );
 }
 
-// ── Direct-auth sub-form (zodResolver + JSON pre-parse) ──────────────────
+// ── Direct-auth sub-form (JSON pre-parse + zodResolver) ──────────────────
 
 function DirectAuthForm({
   isPending,
@@ -281,10 +176,7 @@ function DirectAuthForm({
       // Field-level errors surface in <FieldError>; credentials-shape
       // errors surface in the bespoke <p> below (Zod's `credentials`
       // refine fires for empty objects, etc.).
-      if (
-        first.path[0] === "credentials" ||
-        first.path.length === 0
-      ) {
+      if (first.path[0] === "credentials" || first.path.length === 0) {
         setCredentialsJsonError(first.message);
       } else {
         toast.error(first.message);
@@ -380,202 +272,3 @@ function DirectAuthForm({
     </form>
   );
 }
-
-// ── OAuth sub-form (just name + shortName; SDK handles the rest) ─────────
-
-function OAuthForm({
-  isPending,
-  onSubmit,
-  onCancel,
-}: {
-  isPending: boolean;
-  onSubmit: (data: OAuthFormShape) => Promise<void>;
-  onCancel: () => void;
-}) {
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors, isSubmitting },
-  } = useForm<OAuthFormShape>({
-    resolver: zodResolver(createOAuthSourceConnectionSchema),
-    defaultValues: {
-      name: "",
-      shortName: "",
-      clientId: "",
-      clientSecret: "",
-      consumerKey: "",
-      consumerSecret: "",
-      redirectUri: "",
-    },
-  });
-
-  // Local UI state: BYOC disclosure starts collapsed because most users
-  // on a fully-configured Airweave account never need it. Opening it
-  // is the explicit signal that the user wants to supply their own
-  // OAuth app credentials.
-  const [byocOpen, setByocOpen] = useState(false);
-
-  useEffect(() => {
-    reset({
-      name: "",
-      shortName: "",
-      clientId: "",
-      clientSecret: "",
-      consumerKey: "",
-      consumerSecret: "",
-      redirectUri: "",
-    });
-  }, [reset]);
-
-  return (
-    <form
-      onSubmit={handleSubmit(async (values) => onSubmit(values))}
-      noValidate
-      className="pt-2"
-    >
-      <FieldGroup>
-        <Field data-invalid={Boolean(errors.name)}>
-          <FieldLabel htmlFor="airweave-oauth-name">Name</FieldLabel>
-          <Input
-            id="airweave-oauth-name"
-            placeholder="Acme Slack workspace"
-            autoFocus
-            {...register("name")}
-          />
-          <FieldError errors={[errors.name]} />
-        </Field>
-
-        <Field data-invalid={Boolean(errors.shortName)}>
-          <FieldLabel htmlFor="airweave-oauth-shortname">
-            Source type
-          </FieldLabel>
-          <Input
-            id="airweave-oauth-shortname"
-            placeholder="slack"
-            {...register("shortName")}
-          />
-          <FieldDescription>
-            The Airweave OAuth connector identifier (<code>slack</code>,{" "}
-            <code>notion</code>, <code>google_drive</code>, …). Submitting
-            opens the Airweave Connect widget where you&apos;ll complete
-            the OAuth handshake; you never leave Velocity.
-          </FieldDescription>
-          <FieldError errors={[errors.shortName]} />
-        </Field>
-
-        {/*
-         * BYOC (Bring Your Own Client) disclosure — ADR-011 § Amendment 3.
-         * Native <details> so the form stays accessible without pulling
-         * in another Radix primitive. Required when the source has
-         * `requires_byoc=true` upstream (Airweave returns 4xx if missing,
-         * which our toast surfaces verbatim).
-         */}
-        <details
-          className="rounded-md border border-border bg-muted/30 p-3 [&[open]>summary]:mb-3"
-          open={byocOpen}
-          onToggle={(e) =>
-            setByocOpen((e.target as HTMLDetailsElement).open)
-          }
-        >
-          <summary className="cursor-pointer select-none text-sm font-medium">
-            Advanced — Bring your own OAuth app
-          </summary>
-          <FieldDescription className="mb-3">
-            Required if your Airweave account doesn&apos;t have a
-            preconfigured OAuth app for this source (e.g., the source&apos;s
-            <code> requires_byoc </code> flag is true). Provide either
-            OAuth2 fields (<code>Client ID</code> + <code>Client secret</code>)
-            or OAuth1 fields (<code>Consumer key</code> + <code>Consumer secret</code>)
-            from the upstream provider&apos;s app dashboard. Velocity does
-            NOT store these — they&apos;re forwarded to Airweave on this
-            create call only.
-          </FieldDescription>
-
-          <Field data-invalid={Boolean(errors.clientId)}>
-            <FieldLabel htmlFor="airweave-oauth-clientid">
-              Client ID (OAuth2)
-            </FieldLabel>
-            <Input
-              id="airweave-oauth-clientid"
-              autoComplete="off"
-              placeholder="123456789.123456789"
-              {...register("clientId")}
-            />
-            <FieldError errors={[errors.clientId]} />
-          </Field>
-
-          <Field data-invalid={Boolean(errors.clientSecret)}>
-            <FieldLabel htmlFor="airweave-oauth-clientsecret">
-              Client secret (OAuth2)
-            </FieldLabel>
-            <Input
-              id="airweave-oauth-clientsecret"
-              type="password"
-              autoComplete="off"
-              placeholder="••••••••"
-              {...register("clientSecret")}
-            />
-            <FieldError errors={[errors.clientSecret]} />
-          </Field>
-
-          <Field data-invalid={Boolean(errors.consumerKey)}>
-            <FieldLabel htmlFor="airweave-oauth-consumerkey">
-              Consumer key (OAuth1)
-            </FieldLabel>
-            <Input
-              id="airweave-oauth-consumerkey"
-              autoComplete="off"
-              {...register("consumerKey")}
-            />
-            <FieldError errors={[errors.consumerKey]} />
-          </Field>
-
-          <Field data-invalid={Boolean(errors.consumerSecret)}>
-            <FieldLabel htmlFor="airweave-oauth-consumersecret">
-              Consumer secret (OAuth1)
-            </FieldLabel>
-            <Input
-              id="airweave-oauth-consumersecret"
-              type="password"
-              autoComplete="off"
-              {...register("consumerSecret")}
-            />
-            <FieldError errors={[errors.consumerSecret]} />
-          </Field>
-
-          <Field data-invalid={Boolean(errors.redirectUri)}>
-            <FieldLabel htmlFor="airweave-oauth-redirecturi">
-              Redirect URI (optional)
-            </FieldLabel>
-            <Input
-              id="airweave-oauth-redirecturi"
-              placeholder="https://connect.airweave.ai/oauth/callback"
-              {...register("redirectUri")}
-            />
-            <FieldDescription>
-              Override only if your OAuth app requires a non-default
-              callback URL.
-            </FieldDescription>
-            <FieldError errors={[errors.redirectUri]} />
-          </Field>
-        </details>
-      </FieldGroup>
-
-      <DialogFooter className="mt-4">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onCancel}
-          disabled={isSubmitting || isPending}
-        >
-          Cancel
-        </Button>
-        <Button type="submit" disabled={isSubmitting || isPending}>
-          {isSubmitting || isPending ? "Starting…" : "Start OAuth"}
-        </Button>
-      </DialogFooter>
-    </form>
-  );
-}
-

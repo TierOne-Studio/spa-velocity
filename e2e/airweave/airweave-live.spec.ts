@@ -229,24 +229,24 @@ test.describe('Airweave — LIVE Airweave API + LIVE backend + LIVE Postgres', (
     expect([403, 404]).toContain(reRes.status);
   });
 
-  test('OAuth connect-session endpoint returns a usable sessionToken from real Airweave', async ({
+  test('POST /api/airweave/connect/session returns a real sessionToken (ADR-011 Amendment 4)', async ({
     page,
   }) => {
-    // This validates the LAST mile of the SDK handoff that the unit
-    // suite stubs and the mocked e2e fakes. With real Airweave creds,
-    // POST /api/airweave/collections/:id/source-connections (OAuth
-    // branch) MUST return a sessionToken the SDK can hand off to
-    // connect.airweave.ai.
+    // This is the canonical SDK handoff endpoint per Amendment 4 — the
+    // SPA's catalog-widget flow calls it every time the user clicks
+    // "Connect a source". The token is what the SDK passes to the
+    // Airweave Connect widget; the widget then drives source-picker +
+    // upstream-auth itself.
     //
-    // We don't drive the upstream provider flow (Slack login etc.) —
-    // that needs interactive credentials. We DO prove the token is
-    // present and shaped correctly.
+    // No source-connection is pre-created here — that's the
+    // architectural correction Amendment 4 introduces. The widget
+    // creates the source-connection AFTER the user picks + auths.
     await loginAsAdmin(page);
     const token = await getBearer(page);
 
     const suffix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-    const collName = `E2E Live OAuth ${suffix}`;
-    const slugHint = `e2e-live-oa-${suffix.slice(0, 8)}`;
+    const collName = `E2E Live Connect ${suffix}`;
+    const slugHint = `e2e-live-cs-${suffix.slice(0, 8)}`;
 
     const collRes = await fetch(`${API_BASE_URL}/api/airweave/collections`, {
       method: 'POST',
@@ -261,56 +261,40 @@ test.describe('Airweave — LIVE Airweave API + LIVE backend + LIVE Postgres', (
       .data;
     createdInTest.push({ readableId: coll.readableId });
 
-    // Initiate an OAuth source-connection. Slack is a common OAuth
-    // connector and ships in the default Airweave catalog.
-    const srcRes = await fetch(
-      `${API_BASE_URL}/api/airweave/collections/${encodeURIComponent(coll.readableId)}/source-connections`,
+    const sessionRes = await fetch(
+      `${API_BASE_URL}/api/airweave/connect/session`,
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          name: 'E2E Live Slack',
-          shortName: 'slack',
-          authentication: { kind: 'oauth' },
-        }),
+        body: JSON.stringify({ collectionId: coll.readableId }),
       },
     );
-    expect(srcRes.status, `oauth source body: ${await srcRes
+    expect(sessionRes.status, `connect-session body: ${await sessionRes
       .clone()
       .text()
-      .catch(() => '<unreadable>')}`).toBeLessThan(500);
+      .catch(() => '<unreadable>')}`).toBe(201);
 
-    if (srcRes.status === 201) {
-      const body = (await srcRes.json()) as {
-        data: { sourceConnection: { id: string }; sessionToken?: string };
-      };
-      expect(body.data.sourceConnection.id).toBeTruthy();
-      // The contract the SDK depends on (ADR-011 Amendment 2): the
-      // OAuth-branch response carries `sessionToken` directly in the
-      // envelope's data. If this is absent, the SPA's
-      // "no OAuth session token" toast fires — the defensive branch
-      // we already e2e-tested in oauth-flow.spec.ts. Asserting truthy
-      // here closes that branch on REAL Airweave.
-      expect(body.data.sessionToken).toBeTruthy();
-      expect(typeof body.data.sessionToken).toBe('string');
-      expect(body.data.sessionToken!.length).toBeGreaterThan(8);
-    } else {
-      // Upstream Airweave may return 422 if `slack` isn't enabled on
-      // the shared test account. Surface the error verbatim — it's
-      // information about Airweave config, not a SPA/backend bug.
-      const errorText = await srcRes.text().catch(() => '<unreadable>');
-      throw new Error(
-        `Real-Airweave OAuth source create returned ${srcRes.status}. ` +
-          `If this is 422 with "source 'slack' is not enabled", enable ` +
-          `OAuth connectors on the team Airweave account. Body: ${errorText}`,
-      );
-    }
+    const body = (await sessionRes.json()) as {
+      data: { sessionToken: string };
+    };
+    expect(body.data.sessionToken).toBeTruthy();
+    expect(typeof body.data.sessionToken).toBe('string');
+    expect(body.data.sessionToken.length).toBeGreaterThan(8);
   });
 
-  test('Reauth endpoint returns a fresh sessionToken from real Airweave', async ({
+  // ADR-011 § Amendment 4: the "Reauth endpoint returns a fresh
+  // sessionToken from real Airweave" test was removed because we no
+  // longer have a way to create a pending OAuth source-connection
+  // without driving the catalog widget through real human-OAuth. The
+  // reauth wire contract stays covered by `reauth.spec.ts` (mocked
+  // backend) plus the connect-session live test above (real upstream
+  // session-token endpoint). To re-add this test against real
+  // Airweave, we'd need to call Airweave's POST /source-connections
+  // directly with AIRWEAVE_API_KEY — out of scope for now.
+  test.skip('Reauth endpoint returns a fresh sessionToken from real Airweave', async ({
     page,
   }) => {
     // Closes the reauth coverage gap — until this, reauth was only
@@ -396,24 +380,26 @@ test.describe('Airweave — LIVE Airweave API + LIVE backend + LIVE Postgres', (
     }
   });
 
-  test('SDK iframe actually mounts at connect.airweave.ai when OAuth dialog submits', async ({
+  test('SDK catalog widget mounts at connect.airweave.ai when "Connect a source" is clicked (ADR-011 Amendment 4)', async ({
     page,
   }) => {
-    // The deepest validation of the OAuth pipeline short of a human
-    // clicking "Authorize" on Slack's page. Walks the SPA UI end-to-end:
+    // The deepest validation of the catalog-widget flow short of a
+    // human clicking "Authorize" on Slack's page. Walks the SPA UI
+    // end-to-end:
     //   - log in as admin
     //   - create a real collection via the live backend
     //   - navigate to its detail page
-    //   - open Add source dialog → OAuth tab → fill name+shortName
-    //   - submit → SPA calls onOAuthSubmit → page ref-mirror writes
-    //     pendingTokenRef → connectModal.open() → SDK mounts its iframe
-    //   - Playwright waits for an iframe whose URL contains
-    //     `connect.airweave.ai` AND reports a non-error status
+    //   - click "Connect a source" (Amendment 4 primary CTA)
+    //   - page calls POST /api/airweave/connect/session → backend
+    //     returns sessionToken → SDK opens iframe at connect.airweave.ai
+    //   - Playwright waits for the SDK's `#airweave-connect-root`
+    //     portal + iframe with `title="Airweave Connect"`
     //
-    // This proves the *entire* OAuth handshake plumbing works on real
-    // services: the only thing left to do manually is sign in to the
-    // upstream provider's page inside the iframe (which is gated by
-    // human-only credentials and stays out of e2e by industry norm).
+    // The widget renders its catalog (full source picker) inside the
+    // iframe — that's the per-Amendment-4 UX the docs describe at
+    // https://docs.airweave.ai/connect. The user picks a source +
+    // authenticates inline; the human-OAuth click stays out of e2e by
+    // industry norm.
     await loginAsAdmin(page);
     const token = await getBearer(page);
 
@@ -498,18 +484,15 @@ test.describe('Airweave — LIVE Airweave API + LIVE backend + LIVE Postgres', (
       page.getByRole('heading', { name: new RegExp(`E2E Live Frame ${suffix}`) }),
     ).toBeVisible({ timeout: 15000 });
 
-    // Open dialog → OAuth tab → fill + submit
-    await page.getByRole('button', { name: /add source/i }).click();
-    const dialog = page.getByRole('dialog');
-    await dialog.getByRole('tab', { name: /^oauth$/i }).click();
-    await dialog.getByRole('textbox', { name: 'Name' }).fill('Live Slack');
-    await dialog.getByRole('textbox', { name: /source type/i }).fill('slack');
-    await dialog.getByRole('button', { name: /start oauth/i }).click();
-
-    // Dialog closes (handoff complete) — page-level SDK takes over.
-    await expect(
-      page.getByRole('heading', { name: /add source connection/i }),
-    ).toHaveCount(0, { timeout: 10000 });
+    // Click "Connect a source" — the primary catalog-widget CTA per
+    // ADR-011 § Amendment 4. The page calls POST /api/airweave/connect/session,
+    // hands the returned token to the SDK, and the SDK opens its iframe
+    // pointed at connect.airweave.ai. No dialog, no shortName form, no
+    // pre-created source-connection — the widget will create one after
+    // the user picks a source + authenticates.
+    await page
+      .getByRole('button', { name: /^connect a source$/i })
+      .click();
 
     // The SDK creates a portal root `<div id="airweave-connect-root">`
     // appended to document.body, then React-portals its modal + iframe

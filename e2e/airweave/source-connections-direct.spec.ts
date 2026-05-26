@@ -71,13 +71,13 @@ test.describe('Airweave Source Connections — direct auth (admin)', () => {
       page.getByText(/no source connections yet/i),
     ).toBeVisible();
 
-    await page.getByRole('button', { name: /add source/i }).click();
+    await page.getByRole('button', { name: /^add direct source$/i }).click();
     const dialog = page.getByRole('dialog');
     await expect(
-      dialog.getByRole('heading', { name: /add source connection/i }),
+      dialog.getByRole('heading', { name: /add direct source connection/i }),
     ).toBeVisible();
 
-    // Direct tab is the default — fill it and submit.
+    // Per ADR-011 § Amendment 4 the dialog is direct-only; no tabs.
     await dialog.getByRole('textbox', { name: 'Name' }).fill('Production Postgres');
     await dialog.getByRole('textbox', { name: /source type/i }).fill('postgresql');
     await dialog
@@ -116,7 +116,7 @@ test.describe('Airweave Source Connections — direct auth (admin)', () => {
 
     await loginAsAdmin(page);
     await page.goto(`/admin/airweave/${COLLECTION_READABLE_ID}`);
-    await page.getByRole('button', { name: /add source/i }).click();
+    await page.getByRole('button', { name: /^add direct source$/i }).click();
     const dialog = page.getByRole('dialog');
 
     await dialog.getByRole('textbox', { name: 'Name' }).fill('Pg');

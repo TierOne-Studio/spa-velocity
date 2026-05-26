@@ -67,29 +67,18 @@ export interface DirectAuthCredentials {
   credentials: Record<string, unknown>;
 }
 
-export type CreateSourceConnectionInput =
-  | {
-      name: string;
-      shortName: string;
-      authentication: { kind: 'direct' } & DirectAuthCredentials;
-    }
-  | {
-      name: string;
-      shortName: string;
-      // ADR-011 § Amendment 3 (2026-05-26): BYOC (Bring Your Own Client)
-      // fields are optional pass-through to Airweave's OAuthBrowser-
-      // Authentication. Required when the source's `requires_byoc=true`.
-      // We never persist these on our side — Airweave stores them
-      // tied to the source-connection record.
-      authentication: {
-        kind: 'oauth';
-        clientId?: string;
-        clientSecret?: string;
-        consumerKey?: string;
-        consumerSecret?: string;
-        redirectUri?: string;
-      };
-    };
+/**
+ * ADR-011 § Amendment 4 (2026-05-26): the OAuth variant of this input
+ * was removed. OAuth source-connection creation goes through the SDK
+ * catalog widget (POST /api/airweave/connect/session + the widget
+ * does the rest), not this endpoint. Direct-auth remains for users
+ * with API keys / DSNs in hand.
+ */
+export type CreateSourceConnectionInput = {
+  name: string;
+  shortName: string;
+  authentication: { kind: 'direct' } & DirectAuthCredentials;
+};
 
 export interface UpdateSourceConnectionInput {
   name: string;
@@ -99,8 +88,9 @@ export interface UpdateSourceConnectionInput {
 
 export interface CreateSourceConnectionResult {
   sourceConnection: AirweaveSourceConnection;
-  /** Present only for the OAuth branch (the frontend opens the Airweave portal with this token). */
-  sessionToken?: string;
+  // `sessionToken` field removed in ADR-011 § Amendment 4. OAuth
+  // session tokens come from POST /api/airweave/connect/session,
+  // never bundled with a direct-auth create response.
 }
 
 export interface ReauthSourceConnectionResult {
