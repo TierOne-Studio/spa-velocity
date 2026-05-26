@@ -66,6 +66,12 @@ export type AirweaveMockCalls = {
   deleteSource: string[];
   /** Each `POST /api/airweave/source-connections/:id/reauth` call. */
   reauthSource: string[];
+  /**
+   * Each `POST /api/airweave/connect/session` call (ADR-011 § Amendment 4
+   * primary OAuth path — opens the SDK catalog widget). Body is the
+   * `{collectionId}` payload the SPA sends.
+   */
+  connectSession: Array<{ collectionId: string }>;
 };
 
 export function newCalls(): AirweaveMockCalls {
@@ -76,6 +82,7 @@ export function newCalls(): AirweaveMockCalls {
     createSource: [],
     deleteSource: [],
     reauthSource: [],
+    connectSession: [],
   };
 }
 
@@ -268,6 +275,26 @@ export async function installAirweaveMocks(
       });
     },
   );
+
+  // Connect session on /api/airweave/connect/session — ADR-011 Amendment 4
+  // primary OAuth path. SPA's "Connect a source" button POSTs here with
+  // {collectionId} on every click; backend returns {sessionToken} that
+  // gets handed to the SDK catalog widget.
+  await page.route('**/api/airweave/connect/session', async (route: Route) => {
+    if (route.request().method() !== 'POST') {
+      await route.fallback();
+      return;
+    }
+    const body = route.request().postDataJSON() as { collectionId: string };
+    calls.connectSession.push({ collectionId: body.collectionId });
+    await route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: { sessionToken: opts.nextSessionToken ?? 'tok-connect-mock' },
+      }),
+    });
+  });
 
   // Reauth on /api/airweave/source-connections/:id/reauth
   // Registered BEFORE the more general /source-connections/* route so it

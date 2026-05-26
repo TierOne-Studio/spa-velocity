@@ -5,14 +5,23 @@ import type { AirweaveSourceConnection } from "@/features/Airweave/types";
 
 // ── Hoisted mocks ────────────────────────────────────────────────────────
 
-const { mockMutateAsync, mockUseReauth, mockOpen, mockUseModal } = vi.hoisted(
-  () => ({
-    mockMutateAsync: vi.fn(),
-    mockUseReauth: vi.fn(),
-    mockOpen: vi.fn(),
-    mockUseModal: vi.fn(),
-  }),
-);
+const {
+  mockMutateAsync,
+  mockUseReauth,
+  mockOpen,
+  mockUseModal,
+  mockUseTheme,
+} = vi.hoisted(() => ({
+  mockMutateAsync: vi.fn(),
+  mockUseReauth: vi.fn(),
+  mockOpen: vi.fn(),
+  mockUseModal: vi.fn(),
+  mockUseTheme: vi.fn(),
+}));
+
+vi.mock("@/shared/components/ui/theme-provider", () => ({
+  useTheme: mockUseTheme,
+}));
 
 vi.mock(
   "@/features/Airweave/hooks/useReauthAirweaveSourceConnection",
@@ -79,6 +88,8 @@ beforeEach(() => {
     isPending: false,
   });
   mockUseModal.mockReturnValue({ open: mockOpen, isLoading: false });
+  // Default to dark for most assertions; theme-resolution tests override.
+  mockUseTheme.mockReturnValue({ theme: "dark", setTheme: () => {} });
 });
 
 afterEach(() => vi.clearAllMocks());
@@ -142,5 +153,63 @@ describe("ReauthSourceConnectionButton", () => {
     expect(mockMutateAsync).toHaveBeenCalledTimes(2);
     expect(mockMutateAsync).toHaveBeenNthCalledWith(1, "src-1");
     expect(mockMutateAsync).toHaveBeenNthCalledWith(2, "src-1");
+  });
+});
+
+// ── Theme wiring (Amendment 4 follow-up — host theme → SDK chrome) ───────
+
+describe("ReauthSourceConnectionButton — theme wiring", () => {
+  it("forwards theme: 'dark' to useAirweaveConnectModal when host theme is 'dark'", () => {
+    mockUseTheme.mockReturnValue({ theme: "dark", setTheme: () => {} });
+    render(<ReauthSourceConnectionButton sourceConnection={oauthSource} />);
+    const passed = mockUseModal.mock.calls[0][0] as { theme?: string };
+    expect(passed.theme).toBe("dark");
+  });
+
+  it("forwards theme: 'light' to useAirweaveConnectModal when host theme is 'light'", () => {
+    mockUseTheme.mockReturnValue({ theme: "light", setTheme: () => {} });
+    render(<ReauthSourceConnectionButton sourceConnection={oauthSource} />);
+    const passed = mockUseModal.mock.calls[0][0] as { theme?: string };
+    expect(passed.theme).toBe("light");
+  });
+
+  it("resolves 'system' via matchMedia(prefers-color-scheme: dark) → 'dark' when system is dark", () => {
+    mockUseTheme.mockReturnValue({ theme: "system", setTheme: () => {} });
+    const matchMediaSpy = vi
+      .spyOn(window, "matchMedia")
+      .mockReturnValue({
+        matches: true,
+        media: "(prefers-color-scheme: dark)",
+        onchange: null,
+        addListener: () => {},
+        removeListener: () => {},
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        dispatchEvent: () => false,
+      });
+    render(<ReauthSourceConnectionButton sourceConnection={oauthSource} />);
+    const passed = mockUseModal.mock.calls[0][0] as { theme?: string };
+    expect(passed.theme).toBe("dark");
+    matchMediaSpy.mockRestore();
+  });
+
+  it("resolves 'system' to 'light' when system is NOT dark", () => {
+    mockUseTheme.mockReturnValue({ theme: "system", setTheme: () => {} });
+    const matchMediaSpy = vi
+      .spyOn(window, "matchMedia")
+      .mockReturnValue({
+        matches: false,
+        media: "(prefers-color-scheme: dark)",
+        onchange: null,
+        addListener: () => {},
+        removeListener: () => {},
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        dispatchEvent: () => false,
+      });
+    render(<ReauthSourceConnectionButton sourceConnection={oauthSource} />);
+    const passed = mockUseModal.mock.calls[0][0] as { theme?: string };
+    expect(passed.theme).toBe("light");
+    matchMediaSpy.mockRestore();
   });
 });

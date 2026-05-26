@@ -550,6 +550,16 @@ test.describe('Airweave — LIVE Airweave API + LIVE backend + LIVE Postgres', (
     const iframeUrl = await iframeLocator.first().getAttribute('src');
     expect(iframeUrl, `iframe src: ${iframeUrl}`).toBeTruthy();
     expect(iframeUrl).toMatch(/^https:\/\/connect\.airweave\.ai/);
+    // Regression-pin for the theme-wiring fix (711905d). Without
+    // ?theme=light|dark in the iframe URL, the widget renders in
+    // its default light scheme and disappears against a dark-mode
+    // host (white text on white bg). The host theme resolution
+    // lives on the detail page; e2e runs in chromium-default
+    // light mode → expect `?theme=light`. If a future refactor
+    // strips the prop, this assertion fails immediately.
+    expect(iframeUrl, `iframe src missing theme query: ${iframeUrl}`).toMatch(
+      /[?&]theme=(light|dark)\b/,
+    );
 
     // Wait for the iframe document itself to load — the SDK's iframe
     // sends REQUEST_TOKEN on load and our wrapper responds with the
