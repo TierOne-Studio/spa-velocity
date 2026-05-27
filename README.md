@@ -1,32 +1,56 @@
-# React SPA Starter
+# spa-velocity
 
-A production-ready **React SPA** with **Better Auth**, **RBAC**, **Admin Panel**, and **Organization Management**.
+A production-ready **React 19 + Vite 7** SPA with **Better Auth**, **RBAC**, **admin panel**, **multi-tenant organizations**, **AI chat**, **projects / SQL connections**, and **Airweave knowledge ingestion**.
 
-## Table of Contents
-
-- [Features](#features)
-- [Quick Start](#quick-start)
-- [Project Structure](#project-structure)
-- [Unified Role Model](#unified-role-model)
-- [Admin Panel](#admin-panel)
-- [Authentication](#authentication)
-- [Unit Testing](#unit-testing)
-- [E2E Testing](#e2e-testing)
-- [Development](#development)
-- [Companion Backend](#companion-backend)
+Companion backend: **[api-velocity](../api-velocity)** (sibling directory).
 
 ---
 
-## Features
+## Table of Contents
 
-| Category | Features |
-|----------|----------|
-| **Authentication** | Login, signup, email verification, password reset |
-| **Authorization** | Unified 3-role model (Admin, Manager, Member), role-based navigation |
-| **Admin Panel** | Users, Sessions, Organizations, Roles & Permissions management |
-| **Organizations** | Create orgs, invite members, manage roles, impersonation |
-| **UI** | Tailwind CSS, shadcn/ui, responsive sidebar, dark mode |
-| **Testing** | 327 Vitest unit tests (≥70% coverage) + 123 Playwright E2E tests |
+- [Onboarding](#onboarding)
+- [Quick Start](#quick-start)
+- [Architecture](#architecture)
+- [Routing & RBAC](#routing--rbac)
+- [Feature Modules](#feature-modules)
+- [State Management](#state-management)
+- [API Client & Auth](#api-client--auth)
+- [Forms & Validation](#forms--validation)
+- [Styling & Theming](#styling--theming)
+- [Testing](#testing)
+- [Environment Variables](#environment-variables)
+- [ADRs](#adrs)
+- [Companion Backend](#companion-backend)
+- [Technology Stack](#technology-stack)
+
+---
+
+## Onboarding
+
+`spa-velocity` is the React SPA that consumes the `api-velocity` NestJS backend. The two repos are expected to live side-by-side:
+
+```
+~/Repositories/Github/
+├── api-velocity/   ← NestJS API (port 3000)
+└── spa-velocity/   ← this repo (port 5173)
+```
+
+### What this SPA gives you
+
+- **Auth flows** — login, signup, email verification, password reset, invitation acceptance, pending-approval and account-rejected pages.
+- **Admin panel** — Users, Sessions, Organizations, Roles & Permissions, an admin dashboard.
+- **Org-scoped product surfaces** — AI Chat, Projects, Airweave collections + OAuth source connections.
+- **Permission-based navigation** — sidebar and routes are gated by `{ resource, action }` permissions, not just role names.
+- **Themed UI** — Tailwind v4 + Radix + shadcn/ui + `next-themes` for light/dark/system.
+
+### Where to start reading
+
+1. `src/app/views/AppRoutes.tsx` — provider stack + route tree.
+2. `src/shared/context/AuthContext.tsx` — auth state machine, approval gating.
+3. `src/shared/context/PermissionsContext.tsx` — RBAC checks consumed by `<AdminRoute>`.
+4. `src/shared/lib/fetch-with-auth.ts` — the single API client (reads `localStorage["bearer_token"]`).
+5. `src/features/<feature>/` — feature-folder layout (one folder per domain).
+6. `docs/decisions/` — load-bearing ADRs (see [ADRs](#adrs)).
 
 ---
 
@@ -34,487 +58,410 @@ A production-ready **React SPA** with **Better Auth**, **RBAC**, **Admin Panel**
 
 ### Prerequisites
 
-- **Node.js** >= 20.x
-- **npm** >= 10.x
-- **Backend API** — [nestjs-api-starter](../nestjs-api-starter) running on port 3000
+- **Node.js** ≥ 20.x
+- **npm** ≥ 10.x
+- A running **[api-velocity](../api-velocity)** backend on `http://localhost:3000`.
 
-### 1. Start Backend
-
-```bash
-cd ../nestjs-api-starter
-npm install
-npm run start:dev
-```
-
-### 2. Start Frontend
+### 1. Start the backend
 
 ```bash
-cd spa-api-starter
+cd ../api-velocity
 npm install
-npm run dev
+npm run start:dev   # port 3000
 ```
 
-Open **http://localhost:5173**
+### 2. Install & run the SPA
 
-### 3. Login
+```bash
+cd spa-velocity
+npm install
+npm run dev         # port 5173
+```
 
-Use the test admin account: `delivered+e2e-test-user@resend.dev` / `password123`
+Open **<http://localhost:5173>**.
+
+### 3. Log in
+
+Use the seeded test admin:
+
+```
+email:    delivered+e2e-test-user@resend.dev
+password: password123
+```
+
+(Seeded by `api-velocity`'s `002_create_test_admin.sql`.)
 
 ---
 
-## Project Structure
+## Architecture
+
+### Layout
 
 ```
 src/
-├── app/                       # Application layer
+├── app/
 │   └── views/
-│       ├── AppRoutes.tsx      # Route configuration
-│       └── RootLayout.tsx     # Layout with sidebar
+│       ├── AppRoutes.tsx              # Provider stack + route tree
+│       └── RootLayout.tsx             # Sidebar + outlet
 │
-├── features/                  # Feature modules
-│   ├── Admin/                 # Admin panel
-│   │   ├── views/
-│   │   │   ├── UsersPage.tsx
-│   │   │   ├── SessionsPage.tsx
-│   │   │   ├── OrganizationsPage.tsx
-│   │   │   └── RolesPage.tsx
-│   │   ├── services/          # API services
-│   │   └── hooks/             # React Query hooks
-│   │
-│   ├── Auth/                  # Authentication
-│   │   └── views/
-│   │       ├── LoginPage.tsx
-│   │       ├── SignupPage.tsx
-│   │       ├── ForgotPasswordPage.tsx
-│   │       └── VerifyEmailPage.tsx
-│   │
-│   └── Dashboard/             # Dashboard
+├── features/                          # One folder per domain
+│   ├── Auth/                          # Login, signup, verify, reset, invitations
+│   ├── Dashboard/                     # User-level settings / account
+│   ├── Admin/                         # Users, Sessions, Organizations, Roles
+│   ├── AdminDashboard/                # Admin-only aggregate dashboard
+│   ├── Chat/                          # Org-scoped AI chat
+│   ├── Projects/                      # Project workspace CRUD
+│   └── Airweave/                      # Collections + OAuth source connections
 │
-├── shared/                    # Shared code
-│   ├── components/
-│   │   ├── ui/                # shadcn/ui components
-│   │   ├── AdminRoute.tsx     # Admin route guard
-│   │   └── ProtectedRoute.tsx # Auth route guard
-│   ├── context/
-│   │   └── AuthContext.tsx    # Auth provider
-│   ├── hooks/
-│   │   ├── useOrgRole.ts      # Organization role hook
-│   │   └── useIsImpersonating.ts
-│   └── lib/
-│       └── auth-client.ts     # Better Auth client
-│
-└── e2e/                       # Playwright tests
-    ├── auth.spec.ts
-    ├── admin.spec.ts
-    ├── rbac-unified-roles.spec.ts
-    └── full-coverage.spec.ts
-```
-
----
-
-## Unified Role Model
-
-The frontend enforces the same **3-role model** as the backend:
-
-| Role | Access | Navigation |
-|------|--------|------------|
-| **Admin** | Full platform access | Users, Sessions, Organizations, Roles & Permissions |
-| **Manager** | Organization-scoped | Dashboard, Invitations (no admin panel) |
-| **Member** | Basic read access | Dashboard, Invitations (no admin panel) |
-
-### Role-Based Navigation
-
-The sidebar automatically shows/hides items based on user role:
-
-```tsx
-// Admin sees:
-- Dashboard
-- My Invitations
-- Admin
-  - Users
-  - Sessions
-  - Organizations
-  - Roles & Permissions
-
-// Manager/Member sees:
-- Dashboard
-- My Invitations
-```
-
-### Route Protection
-
-**AdminRoute** - Only allows `admin` role:
-```tsx
-<Route path="admin/users" element={<AdminRoute><UsersPage /></AdminRoute>} />
-```
-
-**ProtectedRoute** - Requires authentication:
-```tsx
-<Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-```
-
-### Checking Roles
-
-```tsx
-import { useAuth } from "@shared/context/AuthContext";
-
-function MyComponent() {
-  const { user, isAdmin } = useAuth();
-  
-  if (isAdmin) {
-    // Show admin features
-  }
-  
-  // user.role is 'admin' | 'manager' | 'member'
-}
-```
-
----
-
-## Admin Panel
-
-### Pages
-
-| Route | Page | Features |
-|-------|------|----------|
-| `/admin/users` | Users | List, create, edit, ban/unban, change role, impersonate |
-| `/admin/sessions` | Sessions | View sessions, revoke single/all |
-| `/admin/organizations` | Organizations | Create, edit, delete, manage members, invite |
-| `/admin/roles` | Roles & Permissions | View roles, manage permissions |
-
-### Users Page
-
-- Server-side paginated table with search
-- Actions: Edit, Ban/Unban, Change Role, Impersonate, Delete
-- Create new users with role assignment
-
-### Organizations Page
-
-- List all organizations
-- Create/Edit/Delete organizations
-- Manage members (add, remove, change role)
-- Send invitations
-- Cancel pending invitations
-
-### Roles & Permissions Page
-
-- View all roles (Admin, Manager, Member)
-- See permissions assigned to each role
-- Manage permission assignments
-- Create custom roles
-
----
-
-## Unit Testing
-
-### Stack
-
-- **[Vitest](https://vitest.dev/)** — fast unit test runner (jsdom environment)
-- **[React Testing Library](https://testing-library.com/)** — component rendering and interaction
-- **[@testing-library/user-event](https://testing-library.com/docs/user-event/intro/)** — realistic user interactions
-- **[v8 coverage](https://vitest.dev/guide/coverage)** — statement, branch, function, and line coverage
-
-### Running Tests
-
-```bash
-# Run all unit tests (with coverage report)
-npm test
-
-# Watch mode (re-runs on file changes)
-npm run test:watch
-
-# Run a specific file
-npm test -- --run src/features/Auth/views/__tests__/LoginPage.test.tsx
-```
-
-### Coverage Thresholds
-
-All files must meet **≥ 70%** for statements, branches, functions, and lines.
-
-```
-Statements : 96%   Branches : 89%   Functions : 92%   Lines : 98%
-```
-
-### Test File Conventions
-
-```
-src/
-├── features/
-│   └── Auth/
-│       ├── schemas/
-│       │   └── authSchemas.ts          # Zod validation schemas
-│       └── views/__tests__/
-│           └── LoginPage.test.tsx
 ├── shared/
-│   ├── components/__tests__/
-│   │   └── OrganizationSwitcher.test.tsx
-│   └── components/ui/__tests__/
-│       ├── button.test.tsx
-│       ├── dialog.test.tsx
-│       ├── field.test.tsx
-│       └── theme-toggle.test.tsx
-└── features/Admin/services/__tests__/
-    ├── adminService.users.test.ts
-    ├── adminService.impersonation.test.ts
-    ├── adminService.organizationService.test.ts
-    └── rbacService.crud.test.ts
+│   ├── components/
+│   │   ├── ui/                        # shadcn/ui primitives (Radix + CVA)
+│   │   ├── AdminRoute.tsx             # Permission-gated route guard
+│   │   ├── ProtectedRoute.tsx         # Authenticated-only guard
+│   │   └── ThemeProvider.tsx          # next-themes wrapper
+│   ├── context/
+│   │   ├── AuthContext.tsx            # Auth state + actions
+│   │   └── PermissionsContext.tsx     # RBAC checks
+│   ├── hooks/                         # useOrgRole, useIsImpersonating, etc.
+│   ├── lib/
+│   │   ├── auth-client.ts             # Better Auth client
+│   │   └── fetch-with-auth.ts         # API client + bearer injection
+│   └── store/
+│       └── store.ts                   # Minimal Zustand store (theme)
+│
+└── test/
+    └── setup.ts                       # Vitest setup, mocks
 ```
 
-### Form Validation
+`e2e/` (sibling of `src/`) holds Playwright specs grouped by domain.
 
-Forms use **[react-hook-form](https://react-hook-form.com/)** with **[Zod](https://zod.dev/)** schemas via `@hookform/resolvers`:
+### Per-feature layout
+
+Each `features/<Domain>/` folder follows the repo convention:
+
+```
+<Domain>/
+├── views/         # Pages (route components)
+├── components/    # Feature-scoped components
+├── hooks/         # TanStack Query hooks
+├── services/      # API service modules (use fetchWithAuth)
+├── schemas/       # Zod schemas
+└── __tests__/     # Vitest unit + component tests
+```
+
+### Provider stack (`AppRoutes.tsx`)
+
+```
+ThemeProvider
+└── QueryClientProvider (TanStack Query)
+    └── BrowserRouter
+        └── AuthProvider
+            └── PermissionsProvider
+                └── <Routes>
+```
+
+---
+
+## Routing & RBAC
+
+Routes are defined in `src/app/views/AppRoutes.tsx`. Three protection levels:
+
+| Guard | Effect |
+|---|---|
+| (none) | Public (auth pages) |
+| `<ProtectedRoute>` | Requires an authenticated, approved user |
+| `<AdminRoute requiredPermission={{ resource, action }} />` | Requires the permission tuple |
+
+### Route map
+
+#### Public
+
+| Path | Component |
+|---|---|
+| `/login` | LoginPage |
+| `/signup` | SignupPage |
+| `/verify-email` | VerifyEmailPage |
+| `/forgot-password` | ForgotPasswordPage |
+| `/set-new-password` | SetNewPasswordPage |
+| `/accept-invitation/:id` | AcceptInvitationPage |
+| `/pending-approval` | PendingApprovalPage |
+| `/account-rejected` | AccountRejectedPage |
+
+#### Authenticated (under `<RootLayout>`)
+
+| Path | Component | Guard |
+|---|---|---|
+| `/` | → redirects to `/chat` | ProtectedRoute |
+| `/settings` | SettingsPage | ProtectedRoute |
+| `/account` | AccountPage | ProtectedRoute |
+| `/chat` · `/chat/:conversationId` | ChatPage | AdminRoute (`chat`) |
+| `/projects` | ProjectsPage | AdminRoute (`project`) |
+| `/admin/dashboard` | AdminDashboardPage | AdminRoute (`dashboard`) |
+| `/admin/users` | UsersPage | AdminRoute (`user`) |
+| `/admin/sessions` | SessionsPage | AdminRoute (`session`) |
+| `/admin/organizations` | OrganizationsPage | AdminRoute (`organization`) |
+| `/admin/roles` | RolesPage | AdminRoute (`role`) |
+| `/admin/airweave` · `/admin/airweave/:collectionReadableId` | Airweave pages | AdminRoute (`airweave`) |
+
+When permission is denied, `<AdminRoute>` falls back to `/account` rather than throwing.
+
+### Role normalization
+
+`AuthContext` normalizes any incoming backend role to the canonical 3-role model used by the SPA:
+
+```
+superadmin → admin
+admin      → admin
+manager    → manager
+member     → member
+```
+
+This guarantees `isAdmin`, `isManager`, etc. work regardless of legacy values.
+
+---
+
+## Feature Modules
+
+| Feature | Calls (api-velocity) | Notes |
+|---|---|---|
+| **Auth** | `/api/auth/*` (Better Auth) | Bearer token persisted to `localStorage`; approval gate via `/api/admin/users/me/approval-status` |
+| **Admin/Users** | `/api/admin/users` | Server-paginated table, search, ban/role/password, impersonate |
+| **Admin/Sessions** | `/api/admin/users/:userId/sessions` | Revoke single / all |
+| **Admin/Organizations** | `/api/platform-admin/organizations` | CRUD, members, invitations, impersonate-into-org |
+| **Admin/Roles** | `/api/rbac` | Roles + permissions matrix |
+| **AdminDashboard** | `/api/admin/dashboard` | Aggregate counts |
+| **Chat** | `/api/chat` | Streaming AI responses; conversation list |
+| **Projects** | `/api/projects` + `/api/sql-connections` | Workspace CRUD |
+| **Airweave** | `/api/airweave` + `@airweave/connect-react` SDK | Collections list/detail; OAuth source connections via embedded widget (postMessage transport per ADR-011 amendment) |
+
+---
+
+## State Management
+
+Three layers, with strict responsibilities:
+
+| Layer | Tool | Holds |
+|---|---|---|
+| **Server cache** | TanStack Query 5 | All data fetched from `api-velocity` (users, orgs, conversations, collections…) |
+| **Client store** | Zustand 5 (`src/shared/store/store.ts`) | Cross-cutting client state. Currently: theme. |
+| **Component state** | `useState` / `useReducer` | Local UI state, form drafts |
+| **Auth state** | React Context (`AuthContext`) | Current user, isAuthenticated, isLoading, role flags |
+| **RBAC state** | React Context (`PermissionsContext`) | Permission catalog + `hasPermission(resource, action)` |
+
+Bearer token is **not** kept in Zustand or Context — it lives in `localStorage["bearer_token"]` and is read on demand by `fetchWithAuth`.
+
+---
+
+## API Client & Auth
+
+### `fetchWithAuth` (single client)
+
+`src/shared/lib/fetch-with-auth.ts` provides:
+
+- `fetchWithAuth(input, init?)` — wraps `fetch`, injects `Authorization: Bearer <token>` from localStorage, **omits credentials** (no cookies are sent — ADR-007).
+- `fetchApi<T>(path, init?)` — convenience wrapper that resolves URL against `VITE_API_URL`, parses JSON, throws on non-2xx, returns `void` on 204.
+
+All feature `services/` modules go through this; there is no second HTTP client.
+
+### Better Auth client
+
+`src/shared/lib/auth-client.ts` configures the `better-auth/client` with the `organization`, `admin`, and `bearer` plugin clients. Used directly only by `AuthContext` for login/signup/signout/session.
+
+### Bearer-token storage
+
+Per ADR-007, the SPA uses `localStorage["bearer_token"]` (not cookies). `fetchWithAuth` sets `credentials: "omit"` so the API sees a pure bearer call — no CSRF surface.
+
+---
+
+## Forms & Validation
+
+Every form follows the same recipe (ADR-005):
 
 ```tsx
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { loginSchema } from "@/features/Auth/schemas/authSchemas";
 
-const { register, handleSubmit, formState: { errors } } = useForm({
-  resolver: zodResolver(loginSchema),
-});
+const form = useForm({ resolver: zodResolver(loginSchema) });
 ```
+
+- **Schemas** live in `src/features/<Domain>/schemas/*.ts`.
+- **Inputs** use shadcn/ui primitives (`<Input>`, `<Select>`, `<Checkbox>`, `<Form*>`).
+- **Errors** come from `form.formState.errors`; rendered via the shadcn/ui `<FormMessage>`.
 
 ---
 
-## Authentication
+## Styling & Theming
 
-### Auth Routes
-
-| Route | Description |
-|-------|-------------|
-| `/login` | Login page |
-| `/signup` | Registration |
-| `/forgot-password` | Request password reset |
-| `/set-new-password` | Reset password with token |
-| `/verify-email` | Email verification |
-
-### Using Auth Context
-
-```tsx
-import { useAuth } from "@shared/context/AuthContext";
-
-function MyComponent() {
-  const { 
-    user,            // Current user
-    isAuthenticated, // Boolean
-    isAdmin,         // Boolean
-    isLoading,       // Loading state
-    login,           // (email, password) => Promise
-    logout,          // () => Promise
-  } = useAuth();
-}
-```
-
-### Better Auth Client
-
-```tsx
-import { authClient } from "@shared/lib/auth-client";
-
-// Direct API calls
-await authClient.signIn.email({ email, password });
-await authClient.signUp.email({ email, password, name });
-await authClient.signOut();
-```
+- **Tailwind v4** via `@tailwindcss/vite`. Theme tokens are CSS variables.
+- **shadcn/ui** components under `src/shared/components/ui/`.
+- **Radix UI** primitives + `class-variance-authority` (CVA) for variants + `tailwind-merge` for class deduplication via the `cn()` helper.
+- **Dark mode** via `next-themes`:
+  - `<ThemeProvider>` at the root with `storageKey: "vite-ui-theme"` and `defaultTheme: "system"`.
+  - Switch via the theme toggle in the sidebar.
 
 ---
 
-## E2E Testing
+## Testing
 
-### Test Files (123 tests total)
-
-| File | Tests | Coverage |
-|------|-------|----------|
-| `auth.spec.ts` | 17 | Authentication flows |
-| `admin.spec.ts` | 24 | Admin panel navigation |
-| `rbac-unified-roles.spec.ts` | 36 | Role-based access control |
-| `full-coverage.spec.ts` | 36 | CRUD operations |
-| `rbac-impersonation.spec.ts` | 10 | Impersonation UI |
-
-### Running Tests
+### Unit tests — Vitest
 
 ```bash
-# All tests (headless)
-npm run test:e2e
-
-# List all discovered tests
-npm run test:e2e:list
-
-# Watch tests run (headed)
-npm run test:e2e:headed
-
-# Interactive UI
-npm run test:e2e:ui
-
-# View HTML report manually (tests no longer auto-open/stick)
-npm run test:e2e:report
+npm test                 # full suite + coverage (jsdom)
+npm run test:watch       # watch mode
+npm test -- --run <path> # single file
 ```
 
-### Run by Feature Section (faster local loop)
+- ~359 `.test.ts(x)` files across features and shared.
+- Coverage thresholds: ≥ 70 % statements / branches / functions / lines (current actuals ~90 %).
+- Setup in `src/test/setup.ts` (mocks, polyfills).
+
+### E2E tests — Playwright
 
 ```bash
-# Auth section
+npm run test:e2e         # full headless suite
+npm run test:e2e:list    # list discovered tests
+npm run test:e2e:headed  # watch them run
+npm run test:e2e:ui      # interactive UI
+npm run test:e2e:report  # open last HTML report
+```
+
+Grouped runs by feature:
+
+```bash
 npm run test:e2e:auth
-
-# Admin UI section
 npm run test:e2e:admin
-
-# RBAC + impersonation section
 npm run test:e2e:rbac
-
-# CRUD-heavy admin flows
 npm run test:e2e:full-crud
-
-# API-focused E2E checks
 npm run test:e2e:api
 ```
 
-### Isolated E2E Mode (while you keep dev servers running)
+#### Isolated mode (keep dev servers running)
 
-Use isolated ports and database so Playwright does not fight your local dev session:
+Uses dedicated ports and a separate database so Playwright never collides with your active dev session:
 
 ```bash
-# Full isolated suite
 npm run test:e2e:isolate
-
-# Isolated auth-only
 npm run test:e2e:isolate:auth
-
-# Isolated admin-only
 npm run test:e2e:isolate:admin
 ```
 
-Isolated mode uses:
-- API: `http://127.0.0.1:3100`
-- Frontend: `http://127.0.0.1:4173`
-- DB: `postgresql://mravinale@localhost:5432/nestjs_api_starter_e2e`
+Isolated defaults:
 
-You can override these per run with:
-- `E2E_API_BASE_URL`
-- `E2E_FE_URL`
-- `E2E_DATABASE_URL`
-- `E2E_TEST_USER_EMAIL`
-- `E2E_TEST_USER_PASSWORD`
+| Resource | URL |
+|---|---|
+| API | `http://127.0.0.1:3100` |
+| Frontend | `http://127.0.0.1:4173` |
+| Database | `postgresql://<user>@localhost:5432/api_velocity_e2e` |
 
-### Test Coverage
+Override per run:
 
-**Role-Based Access:**
-- ✅ Admin can access all admin pages
-- ✅ Manager cannot access admin pages
-- ✅ Member cannot access admin pages
-- ✅ Direct URL access is blocked for non-admins
+```
+E2E_API_BASE_URL
+E2E_FE_URL
+E2E_DATABASE_URL
+E2E_TEST_USER_EMAIL
+E2E_TEST_USER_PASSWORD
+E2E_REUSE_EXISTING_SERVER
+```
 
-**CRUD Operations:**
-- ✅ Create/Edit/Delete users
-- ✅ Ban/Unban users
-- ✅ Create/Edit/Delete organizations
-- ✅ Add/Remove organization members
-- ✅ Create/Delete roles
-- ✅ Manage permissions
-
-**API Protection:**
-- ✅ Unauthenticated requests rejected (401/403)
+56 spec files across `e2e/{auth,admin,airweave,chat,projects,rbac,shared,api,dashboard,admin-dashboard}/`.
 
 ---
 
-## Development
+## Environment Variables
 
-### Scripts
+Vite exposes only `VITE_*` vars to the client. Create `.env.local`:
 
-```bash
-npm run dev           # Start dev server
-npm run build         # Build for production
-npm run preview       # Preview production build
-npm run lint          # ESLint
-npm test              # Run Vitest unit tests with coverage
-npm run test:e2e      # Run Playwright E2E tests
-```
+| Variable | Default | Purpose |
+|---|---|---|
+| `VITE_API_URL` | `http://localhost:3000` | api-velocity base URL |
+| `VITE_AIRWEAVE_CONNECT_URL` | `https://connect.airweave.ai` | Airweave Connect widget URL consumed by `@airweave/connect-react`. Override for self-hosted Airweave. Per ADR-011 amendment 2: transport is **postMessage**, not URL params (no Referer leak). |
 
-### Adding Admin Features
+### E2E-only (not bundled)
 
-1. Create page in `src/features/Admin/views/`
-2. Add service in `src/features/Admin/services/`
-3. Add hooks in `src/features/Admin/hooks/`
-4. Add route in `src/app/views/AppRoutes.tsx` with `AdminRoute`
-5. Add navigation item in sidebar
+| Variable | Purpose |
+|---|---|
+| `E2E_API_BASE_URL` | API URL for Playwright |
+| `E2E_FE_URL` | Frontend URL for Playwright |
+| `E2E_DATABASE_URL` | Isolated database |
+| `E2E_TEST_USER_EMAIL` / `E2E_TEST_USER_PASSWORD` | Seeded test user credentials |
+| `E2E_REUSE_EXISTING_SERVER` | Reuse a long-running dev server instead of spawning one |
 
-### Adding Protected Routes
+---
 
-```tsx
-// In AppRoutes.tsx
-<Route
-  path="my-feature"
-  element={
-    <ProtectedRoute>
-      <MyFeaturePage />
-    </ProtectedRoute>
-  }
-/>
-```
+## ADRs
+
+Load-bearing decisions live in `docs/decisions/`:
+
+| ADR | Subject |
+|---|---|
+| ADR-001 | Zustand for client state |
+| ADR-002 | TanStack Query for server state |
+| ADR-003 | React Router 7 for routing |
+| ADR-004 | Tailwind 4 + Radix + CVA for styling |
+| ADR-005 | react-hook-form + Zod for forms |
+| ADR-006 | Vitest + Testing Library + Playwright test stack |
+| ADR-007 | Better Auth + `localStorage["bearer_token"]`, `credentials: "omit"` |
+| ADR-008 | No AI attribution in commits / PRs |
+| ADR-009 | Asks-first dependency gate — no silent `npm install`s |
+| ADR-010 | Skill-vs-repo conflict resolution |
+| ADR-011 | Airweave widget integration (postMessage transport, BYOC, theme propagation) |
+
+(SPA ADRs are numbered independently of `api-velocity`'s; the same number can refer to different decisions in each repo — see the `cross-repo-workspace` skill.)
 
 ---
 
 ## Companion Backend
 
-This SPA works with **[nestjs-api-starter](../nestjs-api-starter)**:
+This SPA targets **[api-velocity](../api-velocity)** — NestJS 11 + Better Auth + PostgreSQL.
 
-### Running Together
+### Running both stacks
 
 ```bash
-# Terminal 1: Backend (port 3000)
-cd nestjs-api-starter
+# Terminal 1 — backend (port 3000)
+cd api-velocity
 npm run start:dev
 
-# Terminal 2: Frontend (port 5173)
-cd spa-api-starter
+# Terminal 2 — frontend (port 5173)
+cd ../spa-velocity
 npm run dev
 ```
 
-### API Configuration
+### What the SPA expects from the API
 
-Default API URL: `http://localhost:3000`
-
-To customize, create `.env`:
-```env
-VITE_API_URL=http://localhost:3000
-
-# Airweave Connect widget URL — used by the @airweave/connect-react SDK
-# embedded in /admin/airweave when adding OAuth-authenticated source
-# connections (Slack, Notion, Google Drive, …). The SDK transports the
-# short-lived session token via postMessage (not URL params), so no
-# Referer-leak concerns. Default is the hosted widget; override for
-# self-hosted Airweave deployments (the SDK's `connectUrl` prop reads
-# this value). Leave unset → SDK falls back to its built-in default
-# https://connect.airweave.ai.
-#
-# Per ADR-011 § Amendment 2 (api-velocity): this env var supersedes the
-# prior VITE_AIRWEAVE_PORTAL_URL which assumed a wrong window.open +
-# query-string transport. The official @airweave/connect-react SDK
-# obsoleted that flow entirely.
-VITE_AIRWEAVE_CONNECT_URL=https://connect.airweave.ai
-```
+- All endpoints accept `Authorization: Bearer <token>` (no cookies).
+- CORS origin includes `http://localhost:5173` (api-velocity's `TRUSTED_ORIGINS` default).
+- Approval gate: `GET /api/admin/users/me/approval-status` drives the `/pending-approval` and `/account-rejected` routing branches.
+- Permission catalog: `GET /api/rbac/permissions` hydrates `PermissionsContext`.
 
 ---
 
 ## Technology Stack
 
-| Technology | Version | Purpose |
-|------------|---------|---------|
+| Tech | Version | Purpose |
+|---|---|---|
 | React | 19.x | UI framework |
-| TypeScript | 5.x | Type safety |
-| Vite | 7.x | Build tool |
-| Better Auth | 1.4.x | Auth client |
+| TypeScript | 5.x | Language |
+| Vite | 7.x | Build & dev server |
 | React Router | 7.x | Routing |
-| TanStack Query | 5.x | Server state |
+| TanStack Query | 5.x | Server cache |
+| TanStack Table | 8.x | Data tables |
+| Zustand | 5.x | Client store (theme) |
+| Better Auth | 1.4.x | Auth client (bearer plugin) |
 | Tailwind CSS | 4.x | Styling |
-| shadcn/ui | - | UI components |
-| react-hook-form | 7.x | Form state management |
+| shadcn/ui + Radix | — | UI primitives |
+| CVA + tailwind-merge | — | Variants |
+| next-themes | 0.4.x | Dark mode |
+| react-hook-form | 7.x | Form state |
 | Zod | 4.x | Schema validation |
-| Vitest | 3.x | Unit testing |
-| Playwright | 1.x | E2E testing |
+| @airweave/connect-react | 0.9.x | Airweave OAuth widget |
+| @dnd-kit | 6.x | Drag-and-drop |
+| Vitest | 4.x | Unit / component tests |
+| Playwright | 1.57.x | E2E tests |
 
 ---
 
 ## License
 
 MIT
-
