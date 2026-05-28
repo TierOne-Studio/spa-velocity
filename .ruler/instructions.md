@@ -127,9 +127,14 @@ Subagents run in fresh context to give an independent signal. Each owns ONE conc
 | Implementation with 3+ file changes OR auth/sessions/PII/RBAC | `code-reviewer` (POST-impl) |
 | Same conditions as `code-reviewer`, run in parallel | `qa-validator` (POST-impl) |
 | Auth, sessions, secrets, PII, RBAC, XSS sinks (`dangerouslySetInnerHTML`, raw HTML), `VITE_*` env vars, postMessage/iframes, file upload/download, dependencies | `security-reviewer` (POST-impl) |
+| User-facing feature OR bug fix that alters observable UI / RBAC / multi-step behavior (pure logic/util fixes exempt) | `acceptance-verifier` (POST-impl, **after** `qa-validator` green) |
 | User correction received | `lessons-curator` (read-only proposer) |
 
 If a trigger fires and you skip the subagent without justification, that's a P8 contract violation.
+
+**`acceptance-verifier` runs LAST** (after `qa-validator` returns green), executes the live suite (`npm run test:e2e`), maps each stated acceptance criterion to an EXECUTED assertion, and adversarially checks non-vacuity (would the green test fail if the feature were reverted?) + surface-fidelity (does it test the surface the spec named?). Verdict **ACCEPTED / GAPS / BLOCK**; its BLOCK is **binding on "done"** (see P8.0).
+
+**Per-PR, not per-session.** Every trigger fires **per pull request**. A session producing N PRs runs the gates N times — a second PR may NOT ride on a first PR's review.
 
 ### P4.2 Verdict aggregation
 
@@ -218,6 +223,15 @@ Every code-change response MUST include the following 10 items, in order:
 
 In addition, the response MUST end with a `Skills consulted:` line listing every skill that fired (force-loaded or matched-on-description), so the user can verify which guidance shaped the work.
 
+### P8.0 Definition of "done" (verification artifacts must be EXECUTED)
+
+A change is not "done" — MUST NOT declare it finished, ask the user to test, or open a PR — until:
+
+- **Every verification artifact has been executed**, not merely written. A unit/component/e2e spec that exists but was not run counts as **zero** coverage. An assertion that only checks a serialized shape without exercising the real path is **vacuous** and does not count. (Generalizes `tdd-workflow` Step 5 rubric item 2 from the unit level to all layers.)
+- **For a user-facing feature:** the main agent MUST have authored AND run (a) unit/component tests AND (b) **Playwright e2e** for the feature's flows (in `e2e/<module>/`), and `acceptance-verifier` MUST have returned non-`BLOCK`. The user's manual testing is then optional, not required.
+- **For a bug fix:** a unit/component regression test (authored + run) always; Playwright e2e only when the fix changes an observable UI/RBAC/multi-step behavior (then `acceptance-verifier` fires).
+- A feature with **no stated acceptance criteria** is itself incomplete — write the criteria (in the plan's verification section) before claiming done; "nothing to verify against" is a BLOCK for a user-facing feature.
+
 ### P8.1 Confidence rubric (5 × 0.20 — strict)
 
 | Item | Points | Earned when |
@@ -305,7 +319,8 @@ Task type → skill+subagent recipe. Deviate only with explicit reason; the chai
 7. Run full test suite
 8. `design-review`
 9. POST-impl: `code-reviewer` + `qa-validator`; `security-reviewer` if auth/sessions/PII/XSS-sink/`VITE_*`/dep added
-10. Output per P8 contract; `Skills consulted:` line at the end
+10. **Author + run Playwright e2e for the feature's flows; then `acceptance-verifier`** (binding per P8.0 — not "done" until ACCEPTED/GAPS, never shipped on BLOCK)
+11. Output per P8 contract; `Skills consulted:` line at the end
 
 ### Bug fix
 
@@ -316,6 +331,7 @@ Task type → skill+subagent recipe. Deviate only with explicit reason; the chai
 5. Run full test suite + relevant module e2e
 6. `design-review`
 7. `code-reviewer` if 3+ files; `qa-validator` for the regression coverage; `security-reviewer` if security-adjacent
+8. If the fix alters an observable UI/RBAC/multi-step behavior: author + run the e2e that proves it, then `acceptance-verifier` (binding per P8.0). Pure logic/util fixes stop at the unit layer.
 
 ### Refactor (no new behavior)
 
