@@ -1,4 +1,4 @@
-import { BrowserRouter, Route, Routes, Navigate, useLocation } from "react-router-dom";
+import { BrowserRouter, Route, Routes, Navigate, useLocation, useParams } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "../styles/globals.css";
 import {
@@ -15,6 +15,7 @@ import { SettingsPage, AccountPage } from "@features/Dashboard";
 import { UsersPage, SessionsPage, OrganizationsPage, RolesPage } from "@features/Admin";
 import { AirweaveCollectionsPage } from "@features/Airweave/views/AirweaveCollectionsPage";
 import { AirweaveCollectionDetailPage } from "@features/Airweave/views/AirweaveCollectionDetailPage";
+import { SqlConnectionsPage } from "@features/SqlConnections/views/SqlConnectionsPage";
 import { AdminDashboardPage } from "@features/AdminDashboard/views/AdminDashboardPage";
 import { ChatPage } from "@features/Chat";
 import { ProjectsPage } from "@features/Projects";
@@ -28,6 +29,18 @@ import { ErrorBoundary } from "@shared/components/ErrorBoundary";
 import { Toaster } from "@shared/components/ui/sonner";
 
 const queryClient = new QueryClient();
+
+/**
+ * Legacy `/admin/airweave/:collectionReadableId` → `/collections/:id` redirect
+ * shim. Reads the path param and forwards. Kept for one release post-promotion.
+ */
+function LegacyAirweaveCollectionRedirect() {
+  const { collectionReadableId } = useParams<{ collectionReadableId: string }>();
+  if (!collectionReadableId) {
+    return <Navigate to="/collections" replace />;
+  }
+  return <Navigate to={`/collections/${collectionReadableId}`} replace />;
+}
 
 const AppRoutesContent = () => {
   const location = useLocation();
@@ -134,27 +147,63 @@ const AppRoutesContent = () => {
                         </AdminRoute>
                       }
                     />
+                    {/*
+                     * Collections (renamed from Admin → Airweave) — now a
+                     * first-class Main feature per ADR-011 amendment 5 +
+                     * the PR-2 UX promotion. Permission name `airweave:read`
+                     * is preserved (ADR-012 didn't rename the existing
+                     * Airweave permission family).
+                     */}
                     <Route
-                      path="admin/airweave"
+                      path="collections"
                       element={
                         <AdminRoute
                           requiredPermission={{ resource: "airweave", action: "read" }}
-                          fallbackPath="/admin/dashboard"
+                          fallbackPath="/account"
                         >
                           <AirweaveCollectionsPage />
                         </AdminRoute>
                       }
                     />
                     <Route
-                      path="admin/airweave/:collectionReadableId"
+                      path="collections/:collectionReadableId"
                       element={
                         <AdminRoute
                           requiredPermission={{ resource: "airweave", action: "read" }}
-                          fallbackPath="/admin/dashboard"
+                          fallbackPath="/account"
                         >
                           <AirweaveCollectionDetailPage />
                         </AdminRoute>
                       }
+                    />
+                    {/*
+                     * SQL Connections — promoted from embedded Edit-Org
+                     * modal section to a first-class Main feature per
+                     * ADR-012. Gates on the new `sql-connection:read`
+                     * permission.
+                     */}
+                    <Route
+                      path="sql-connections"
+                      element={
+                        <AdminRoute
+                          requiredPermission={{ resource: "sql-connection", action: "read" }}
+                          fallbackPath="/account"
+                        >
+                          <SqlConnectionsPage />
+                        </AdminRoute>
+                      }
+                    />
+                    {/*
+                     * Legacy redirects from the pre-promotion route paths.
+                     * Keep for one release; remove in the follow-up cleanup.
+                     */}
+                    <Route
+                      path="admin/airweave"
+                      element={<Navigate to="/collections" replace />}
+                    />
+                    <Route
+                      path="admin/airweave/:collectionReadableId"
+                      element={<LegacyAirweaveCollectionRedirect />}
                     />
                     {/* User pages */}
                     <Route path="settings" element={<SettingsPage />} />

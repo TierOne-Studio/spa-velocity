@@ -28,8 +28,6 @@ import {
 import { Input } from "@/shared/components/ui/input"
 import { Label } from "@/shared/components/ui/label"
 import {
-  MultiSelectCombobox,
-  type MultiSelectOption,
 } from "@/shared/components/ui/multi-select-combobox"
 import {
   Select,
@@ -54,7 +52,6 @@ import {
   useSetActiveOrganization,
 } from "../hooks/useOrganizations"
 import { useAirweaveCollections } from "../hooks/useAirweaveCollections"
-import { OrganizationSqlConnectionsSection } from "../components/OrganizationSqlConnectionsSection"
 import {
   formatSqlConnectionDisplay,
   formatSqlConnectionDisplayFull,
@@ -247,11 +244,13 @@ export function OrganizationsPage() {
   const { data: membersData, isLoading: membersLoading } = useOrganizationMembers(
     selectedOrg?.id ?? "",
   )
-  const {
-    data: availableCollections = [],
-    isLoading: collectionsLoading,
-    error: collectionsError,
-  } = useAirweaveCollections({ enabled: canReadCollections })
+  // The allowlist combobox is gone from the modal; we still hydrate
+  // `availableCollections` so the read-only display panel can resolve
+  // collection ids to names. Loading + error states are unused after the
+  // strip — the display falls back to the raw readableId on miss.
+  const { data: availableCollections = [] } = useAirweaveCollections({
+    enabled: canReadCollections,
+  })
 
   // Extract arrays from response data
   const organizations = orgsResponse?.data ?? []
@@ -267,11 +266,6 @@ export function OrganizationsPage() {
       sourceConnectionCount: found?.sourceConnectionCount ?? null,
     }
   })
-  const collectionOptions: MultiSelectOption[] = availableCollections.map((c) => ({
-    value: c.readableId,
-    label: c.name,
-    description: c.readableId,
-  }))
 
   // Mutations
   const createOrg = useCreateOrganization()
@@ -959,28 +953,12 @@ export function OrganizationsPage() {
                 URL: /{newOrgData.slug || "my-organization"}
               </p>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="org-airweave-collection">Airweave collections allowlist</Label>
-              <MultiSelectCombobox
-                id="org-airweave-collection"
-                options={collectionOptions}
-                value={newOrgData.allowedAirweaveCollectionIds}
-                onChange={(next) => setNewOrgData({ ...newOrgData, allowedAirweaveCollectionIds: next })}
-                placeholder={collectionsLoading ? "Loading collections…" : "Select collections"}
-                emptyMessage="No collections available"
-                disabled={pendingCreateOrgDraftPersistence !== null || !canReadCollections || collectionsLoading}
-                data-testid="org-airweave-allowlist-create"
-              />
-              <p className="text-sm text-muted-foreground">
-                {collectionsError instanceof Error
-                  ? collectionsError.message
-                  : !canReadCollections
-                    ? "You need project read access to browse available collections."
-                    : newOrgData.allowedAirweaveCollectionIds.length > 0
-                      ? `Members can attach ${newOrgData.allowedAirweaveCollectionIds.length} collection${newOrgData.allowedAirweaveCollectionIds.length === 1 ? "" : "s"} to their projects.`
-                      : "Leave empty to block Airweave sources for this organization."}
-              </p>
-            </div>
+            {/*
+             * Per ADR-012 + the PR-2 UX promotion, Airweave allowlist is
+             * managed implicitly via `Main → Collections` (create a
+             * collection there → it lands in the active org's allowlist).
+             * The org-create modal no longer pre-stages allowlist entries.
+             */}
             <div className="grid gap-3 rounded-md border p-3" data-testid="org-sql-draft-section">
               <div className="flex items-center justify-between gap-3">
                 <div>
@@ -1157,37 +1135,14 @@ export function OrganizationsPage() {
                 onChange={(e) => setEditOrgData({ ...editOrgData, slug: e.target.value })}
               />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="edit-org-airweave-collection">Airweave collections allowlist</Label>
-              <MultiSelectCombobox
-                id="edit-org-airweave-collection"
-                options={[
-                  ...collectionOptions,
-                  ...editOrgData.allowedAirweaveCollectionIds
-                    .filter((id) => !collectionOptions.some((o) => o.value === id))
-                    .map((id) => ({ value: id, label: `${id} (not visible)`, description: id })),
-                ]}
-                value={editOrgData.allowedAirweaveCollectionIds}
-                onChange={(next) => setEditOrgData({ ...editOrgData, allowedAirweaveCollectionIds: next })}
-                placeholder={collectionsLoading ? "Loading collections…" : "Select collections"}
-                emptyMessage="No collections available"
-                disabled={!canReadCollections || collectionsLoading}
-                data-testid="org-airweave-allowlist-edit"
-              />
-              <p className="text-sm text-muted-foreground">
-                {collectionsError instanceof Error
-                  ? collectionsError.message
-                  : !canReadCollections
-                    ? "You need project read access to browse available collections."
-                    : editOrgData.allowedAirweaveCollectionIds.length > 0
-                      ? `Members can attach ${editOrgData.allowedAirweaveCollectionIds.length} collection${editOrgData.allowedAirweaveCollectionIds.length === 1 ? "" : "s"} to their projects.`
-                      : "Leave empty to block Airweave sources for this organization."}
-              </p>
-            </div>
-            <OrganizationSqlConnectionsSection
-              organizationId={selectedOrg?.id}
-              canManage={canManageSelectedOrganization}
-            />
+            {/*
+             * Per ADR-012 + the PR-2 UX promotion, Airweave allowlist and
+             * SQL connections are managed from `Main → Collections` and
+             * `Main → SQL Connections` respectively. The Edit-Organization
+             * modal now scopes to org identity + members only. Allowlist
+             * is maintained implicitly: creating a collection from Main
+             * adds it to the active org's allowlist; deleting removes it.
+             */}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
