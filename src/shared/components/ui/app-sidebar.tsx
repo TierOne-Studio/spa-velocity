@@ -4,9 +4,10 @@ import {
   IconBooks,
   IconBuilding,
   IconChartBar,
-  IconCloud,
+  IconDatabase,
   IconHome,
   IconInnerShadowTop,
+  IconLibrary,
   IconMessageCircle,
   IconShield,
   IconUsers,
@@ -88,15 +89,6 @@ const getNavItems = (
     })
   }
 
-  if (can("airweave", "read")) {
-    adminItems.push({
-      title: "Airweave",
-      url: "/admin/airweave",
-      icon: IconCloud,
-      isActive: pathname.startsWith("/admin/airweave"),
-    })
-  }
-
   return {
     navMain: [],
     navGroups: [
@@ -106,7 +98,9 @@ const getNavItems = (
         isActive:
           pathname === "/" ||
           pathname.startsWith("/chat") ||
-          pathname.startsWith("/projects"),
+          pathname.startsWith("/projects") ||
+          pathname.startsWith("/collections") ||
+          pathname.startsWith("/sql-connections"),
         items: [
           ...(can("chat", "read")
             ? [
@@ -125,6 +119,30 @@ const getNavItems = (
                   url: "/projects",
                   icon: IconBooks,
                   isActive: pathname.startsWith("/projects"),
+                },
+              ]
+            : []),
+          // ADR-011 amendment 5 + UX promotion: collections move from Admin
+          // to Main; the page is the same component, the nav slot shifts.
+          ...(can("airweave", "read")
+            ? [
+                {
+                  title: "Collections",
+                  url: "/collections",
+                  icon: IconLibrary,
+                  isActive: pathname.startsWith("/collections"),
+                },
+              ]
+            : []),
+          // ADR-012: SQL connections promoted from embedded Edit-Org modal
+          // section to a first-class Main page. Gated on the new permission.
+          ...(can("sql-connection", "read")
+            ? [
+                {
+                  title: "SQL Connections",
+                  url: "/sql-connections",
+                  icon: IconDatabase,
+                  isActive: pathname.startsWith("/sql-connections"),
                 },
               ]
             : []),
