@@ -90,7 +90,9 @@ A test that *passes* is necessary; a test that's *good* is what catches regressi
    - **Good:** `expect(await service.fetch('x')).toEqual(...)` — observable result.
    - **Diagnostic — the rename test:** if you rename an internal helper without changing its signature or behavior, every test should still pass. If a test breaks, that test was asserting on implementation, not behavior. Refactor the test before relying on it.
 
-2. **Fails for the right reason.** Run the test BEFORE the implementation. It must fail because the assertion isn't satisfied — not because of an import error, missing mock setup, or syntax error. If the test "fails" before you've written a line of code under test, you have a bad test.
+2. **Fails for the right reason — and is actually EXECUTED.** Run the test BEFORE the implementation. It must fail because the assertion isn't satisfied — not because of an import error, missing mock setup, or syntax error. If the test "fails" before you've written a line of code under test, you have a bad test.
+   - **Executed, not merely written.** A spec that exists but was never run is **zero** coverage — at every layer (unit, component, e2e). "I wrote the test" is not "the test passes." A change is not done until its verification artifacts have actually been executed green (see `CLAUDE.md` P8.0).
+   - **Non-vacuous (would fail on revert).** An assertion that cannot fail proves nothing. The canonical trap: asserting on a serialized shape, or driving a *different* surface than the one under test, so the test is green regardless of the behavior. If you can revert the behavior and the test stays green, it is vacuous; fix it to exercise the real surface (drive the actual component/flow via Playwright/Testing Library) before relying on it.
 
 3. **Deterministic.** Same input → same output. No `Math.random()`, no `new Date()` without a clock injection, no time-dependent ordering, no reliance on async event-loop ordering across tests.
    - **Bad:** `expect(items).toEqual([a, b, c])` when the underlying code returns them in non-deterministic order.
