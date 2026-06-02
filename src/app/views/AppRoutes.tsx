@@ -16,6 +16,7 @@ import { UsersPage, SessionsPage, OrganizationsPage, RolesPage } from "@features
 import { AirweaveCollectionsPage } from "@features/Airweave/views/AirweaveCollectionsPage";
 import { AirweaveCollectionDetailPage } from "@features/Airweave/views/AirweaveCollectionDetailPage";
 import { SqlConnectionsPage } from "@features/SqlConnections/views/SqlConnectionsPage";
+import { VectordbsPage } from "@features/Vectordb";
 import { AdminDashboardPage } from "@features/AdminDashboard/views/AdminDashboardPage";
 import { ChatPage } from "@features/Chat";
 import { ProjectsPage } from "@features/Projects";
@@ -190,6 +191,21 @@ const AppRoutesContent = () => {
                           fallbackPath="/account"
                         >
                           <SqlConnectionsPage />
+                        </AdminRoute>
+                      }
+                    />
+                    {/*
+                     * Knowledge Bases — first-class Main feature (Slice 2).
+                     * Gates on knowledge-base:read per permissions.ts.
+                     */}
+                    <Route
+                      path="vectordbs"
+                      element={
+                        <AdminRoute
+                          requiredPermission={{ resource: "vectordb", action: "read" }}
+                          fallbackPath="/account"
+                        >
+                          <VectordbsPage />
                         </AdminRoute>
                       }
                     />
