@@ -21,7 +21,7 @@ import {
 import {
   createVectorDbSchema,
   type CreateVectorDbForm,
-} from "../schemas/vector-db.schema";
+} from "../schemas/vectorDbSchema";
 import { useCreateVectorDb } from "../hooks/useCreateVectorDb";
 
 type Props = {

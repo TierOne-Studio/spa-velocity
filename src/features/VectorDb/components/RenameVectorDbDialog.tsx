@@ -21,7 +21,7 @@ import {
 import {
   updateVectorDbSchema,
   type UpdateVectorDbForm,
-} from "../schemas/vector-db.schema";
+} from "../schemas/vectorDbSchema";
 import { useUpdateVectorDb } from "../hooks/useUpdateVectorDb";
 import type { VectorDb } from "../types";
 
