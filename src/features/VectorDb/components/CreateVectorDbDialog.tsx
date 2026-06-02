@@ -48,14 +48,14 @@ export function CreateVectorDbDialog({ open, onOpenChange }: Props) {
 
   const onSubmit = async (values: CreateVectorDbForm) => {
     try {
-      const kb = await createMutation.mutateAsync({
+      const vdb = await createMutation.mutateAsync({
         name: values.name,
         description: values.description || null,
       });
-      toast.success(`Knowledge base "${kb.name}" created.`);
+      toast.success(`Vector database "${vdb.name}" created.`);
       onOpenChange(false);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to create knowledge base");
+      toast.error(error instanceof Error ? error.message : "Failed to create vector database");
     }
   };
 
@@ -63,18 +63,18 @@ export function CreateVectorDbDialog({ open, onOpenChange }: Props) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Create Knowledge Base</DialogTitle>
+          <DialogTitle>Create Vector Database</DialogTitle>
           <DialogDescription>
-            Creates a knowledge base owned by your organization. Upload documents
+            Creates a vector database owned by your organization. Upload documents
             after creation to make them searchable in chat.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} noValidate>
           <FieldGroup>
             <Field data-invalid={Boolean(errors.name)}>
-              <FieldLabel htmlFor="kb-create-name">Name</FieldLabel>
+              <FieldLabel htmlFor="vdb-create-name">Name</FieldLabel>
               <Input
-                id="kb-create-name"
+                id="vdb-create-name"
                 placeholder="Product documentation"
                 aria-invalid={Boolean(errors.name)}
                 autoFocus
@@ -83,12 +83,12 @@ export function CreateVectorDbDialog({ open, onOpenChange }: Props) {
               <FieldError errors={[errors.name]} />
             </Field>
             <Field data-invalid={Boolean(errors.description)}>
-              <FieldLabel htmlFor="kb-create-description">
+              <FieldLabel htmlFor="vdb-create-description">
                 Description <span className="text-muted-foreground">(optional)</span>
               </FieldLabel>
               <Input
-                id="kb-create-description"
-                placeholder="What this knowledge base contains"
+                id="vdb-create-description"
+                placeholder="What this vector database contains"
                 aria-invalid={Boolean(errors.description)}
                 {...register("description")}
               />

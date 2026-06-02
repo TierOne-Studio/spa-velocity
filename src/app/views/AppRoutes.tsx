@@ -195,11 +195,11 @@ const AppRoutesContent = () => {
                       }
                     />
                     {/*
-                     * Knowledge Bases — first-class Main feature (Slice 2).
-                     * Gates on knowledge-base:read per permissions.ts.
+                     * Vector Databases — first-class Main feature (Slice 2).
+                     * Gates on vector-db:read per permissions.ts.
                      */}
                     <Route
-                      path="vectordbs"
+                      path="vector-dbs"
                       element={
                         <AdminRoute
                           requiredPermission={{ resource: "vector-db", action: "read" }}

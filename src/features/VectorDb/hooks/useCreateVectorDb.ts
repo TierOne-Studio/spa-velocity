@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { createVectorDb } from '../services/vector-dbs.service';
+import { createVectorDb } from '../services/vectorDbService';
 import { vectorDbKeys } from './vectorDbKeys';
 import type { CreateVectorDbInput, VectorDb } from '../types';
 

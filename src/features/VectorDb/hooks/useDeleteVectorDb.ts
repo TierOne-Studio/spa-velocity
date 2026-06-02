@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { deleteVectorDb } from '../services/vector-dbs.service';
+import { deleteVectorDb } from '../services/vectorDbService';
 import { vectorDbKeys } from './vectorDbKeys';
 
 export function useDeleteVectorDb() {

@@ -13,14 +13,14 @@ Object.defineProperty(globalThis, 'localStorage', {
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
-import { VectorDbApiError } from '../../lib/api-response';
+import { VectorDbApiError } from '../../lib/apiResponse';
 import {
   createVectorDb,
   deleteVectorDb,
   getVectorDb,
   listVectorDb,
   updateVectorDb,
-} from '../vector-dbs.service';
+} from '../vectorDbService';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -37,17 +37,17 @@ function lastRequest(): [string, RequestInit] {
 beforeEach(() => { mockFetch.mockReset(); });
 afterEach(() => { vi.clearAllMocks(); });
 
-const kb = {
-  id: 'kb-1',
+const vectorDb = {
+  id: 'vdb-1',
   name: 'Docs',
   status: 'empty',
   documentCount: 0,
 };
 
-describe('vector-dbs.service', () => {
+describe('vectorDbService', () => {
   describe('listVectorDb', () => {
     it('GETs /api/vector-dbs and unwraps the envelope', async () => {
-      mockFetch.mockResolvedValue(jsonResponse({ data: [kb] }));
+      mockFetch.mockResolvedValue(jsonResponse({ data: [vectorDb] }));
 
       const result = await listVectorDb();
 
@@ -55,7 +55,7 @@ describe('vector-dbs.service', () => {
       expect(url).toMatch(/\/api\/vector-dbs(\?|$)/);
       expect((init.method ?? 'GET')).toBe('GET');
       expect(result).toHaveLength(1);
-      expect(result[0].id).toBe('kb-1');
+      expect(result[0].id).toBe('vdb-1');
     });
 
     it('throws VectorDbApiError on non-2xx', async () => {
@@ -66,18 +66,18 @@ describe('vector-dbs.service', () => {
 
   describe('getVectorDb', () => {
     it('GETs /api/vector-dbs/:id', async () => {
-      mockFetch.mockResolvedValue(jsonResponse({ data: kb }));
+      mockFetch.mockResolvedValue(jsonResponse({ data: vectorDb }));
 
-      await getVectorDb('kb-1');
+      await getVectorDb('vdb-1');
 
       const [url] = lastRequest();
-      expect(url).toMatch(/\/api\/vector-dbs\/kb-1$/);
+      expect(url).toMatch(/\/api\/vector-dbs\/vdb-1$/);
     });
   });
 
   describe('createVectorDb', () => {
     it('POSTs with the input body and unwraps the result', async () => {
-      mockFetch.mockResolvedValue(jsonResponse({ data: kb }));
+      mockFetch.mockResolvedValue(jsonResponse({ data: vectorDb }));
 
       await createVectorDb({ name: 'Docs', description: 'My docs' });
 
@@ -89,7 +89,7 @@ describe('vector-dbs.service', () => {
 
     it('surfaces 409 as VectorDbApiError', async () => {
       mockFetch.mockResolvedValue(
-        jsonResponse({ message: 'A knowledge base named "Docs" already exists' }, 409),
+        jsonResponse({ message: 'A vector database named "Docs" already exists' }, 409),
       );
       await expect(createVectorDb({ name: 'Docs' })).rejects.toBeInstanceOf(
         VectorDbApiError,
@@ -99,12 +99,12 @@ describe('vector-dbs.service', () => {
 
   describe('updateVectorDb', () => {
     it('PATCHes with the new name', async () => {
-      mockFetch.mockResolvedValue(jsonResponse({ data: { ...kb, name: 'Renamed' } }));
+      mockFetch.mockResolvedValue(jsonResponse({ data: { ...vectorDb, name: 'Renamed' } }));
 
-      await updateVectorDb('kb-1', { name: 'Renamed' });
+      await updateVectorDb('vdb-1', { name: 'Renamed' });
 
       const [url, init] = lastRequest();
-      expect(url).toMatch(/\/api\/vector-dbs\/kb-1$/);
+      expect(url).toMatch(/\/api\/vector-dbs\/vdb-1$/);
       expect(init.method).toBe('PATCH');
       expect(init.body).toBe(JSON.stringify({ name: 'Renamed' }));
     });
@@ -114,22 +114,22 @@ describe('vector-dbs.service', () => {
     it('DELETEs and resolves on 200', async () => {
       mockFetch.mockResolvedValue(jsonResponse({ data: { deleted: true } }));
 
-      await expect(deleteVectorDb('kb-1')).resolves.toBeUndefined();
+      await expect(deleteVectorDb('vdb-1')).resolves.toBeUndefined();
 
       const [url, init] = lastRequest();
-      expect(url).toMatch(/\/api\/vector-dbs\/kb-1$/);
+      expect(url).toMatch(/\/api\/vector-dbs\/vdb-1$/);
       expect(init.method).toBe('DELETE');
     });
 
     it('surfaces 409 as VectorDbApiError when project references exist', async () => {
       mockFetch.mockResolvedValue(
         jsonResponse(
-          { message: 'Cannot delete knowledge base: 2 project data source(s) still reference it.' },
+          { message: 'Cannot delete vector database: 2 project data source(s) still reference it.' },
           409,
         ),
       );
       try {
-        await deleteVectorDb('kb-1');
+        await deleteVectorDb('vdb-1');
         throw new Error('expected throw');
       } catch (err) {
         expect(err).toBeInstanceOf(VectorDbApiError);

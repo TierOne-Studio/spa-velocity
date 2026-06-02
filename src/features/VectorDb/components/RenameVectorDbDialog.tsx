@@ -72,10 +72,10 @@ export function RenameVectorDbDialog({ vectordb, open, onOpenChange }: Props) {
           description: values.description?.trim() || null,
         },
       });
-      toast.success("Knowledge base updated.");
+      toast.success("Vector database updated.");
       onOpenChange(false);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to update knowledge base");
+      toast.error(error instanceof Error ? error.message : "Failed to update vector database");
     }
   };
 
@@ -83,17 +83,17 @@ export function RenameVectorDbDialog({ vectordb, open, onOpenChange }: Props) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Edit Knowledge Base</DialogTitle>
+          <DialogTitle>Edit Vector Database</DialogTitle>
           <DialogDescription>
-            Update the name or description of this knowledge base.
+            Update the name or description of this vector database.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} noValidate>
           <FieldGroup>
             <Field data-invalid={Boolean(errors.name)}>
-              <FieldLabel htmlFor="kb-rename-name">Name</FieldLabel>
+              <FieldLabel htmlFor="vdb-rename-name">Name</FieldLabel>
               <Input
-                id="kb-rename-name"
+                id="vdb-rename-name"
                 aria-invalid={Boolean(errors.name)}
                 autoFocus
                 {...register("name")}
@@ -101,11 +101,11 @@ export function RenameVectorDbDialog({ vectordb, open, onOpenChange }: Props) {
               <FieldError errors={[errors.name]} />
             </Field>
             <Field data-invalid={Boolean(errors.description)}>
-              <FieldLabel htmlFor="kb-rename-description">
+              <FieldLabel htmlFor="vdb-rename-description">
                 Description <span className="text-muted-foreground">(optional)</span>
               </FieldLabel>
               <Input
-                id="kb-rename-description"
+                id="vdb-rename-description"
                 aria-invalid={Boolean(errors.description)}
                 {...register("description")}
               />

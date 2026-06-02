@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffectiveSession } from '@/shared/hooks/useEffectiveSession';
-import { listVectorDb } from '../services/vector-dbs.service';
+import { listVectorDb } from '../services/vectorDbService';
 import { vectorDbKeys } from './vectorDbKeys';
 
 function useVectorDbQueryScope() {

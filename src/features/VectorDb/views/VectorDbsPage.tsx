@@ -63,38 +63,38 @@ export function VectorDbsPage() {
   const [renameTarget, setRenameTarget] = useState<VectorDb | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<VectorDb | null>(null);
 
-  const { data: knowledgeBases, isLoading, isError, error } = useVectorDbs();
+  const { data: vectorDbs, isLoading, isError, error } = useVectorDbs();
 
   return (
     <div className="flex flex-1 flex-col gap-4 p-4 lg:p-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Knowledge Bases</h1>
+          <h1 className="text-2xl font-bold">Vector Databases</h1>
           <p className="text-muted-foreground">
-            Upload documents to build searchable knowledge bases and attach them to
+            Upload documents to build searchable vector databases and attach them to
             projects for grounded chat.
           </p>
         </div>
         {canCreate && (
           <Button onClick={() => setCreateOpen(true)}>
             <IconPlus className="mr-2 h-4 w-4" />
-            Create Knowledge Base
+            Create Vector Database
           </Button>
         )}
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Knowledge Bases ({knowledgeBases?.length ?? 0})</CardTitle>
+          <CardTitle>Vector Databases ({vectorDbs?.length ?? 0})</CardTitle>
           <CardDescription>
-            Knowledge bases owned by this organization. Attach one to a project to
+            Vector databases owned by this organization. Attach one to a project to
             enable document-grounded chat.
           </CardDescription>
         </CardHeader>
         <CardContent>
           {isError && (
             <p className="mb-4 text-sm text-destructive">
-              Failed to load knowledge bases:{" "}
+              Failed to load vector databases:{" "}
               {error instanceof Error ? error.message : "unknown error"}
             </p>
           )}
@@ -119,30 +119,30 @@ export function VectorDbsPage() {
                         </TableCell>
                       </TableRow>
                     ))
-                  : knowledgeBases?.length
-                    ? knowledgeBases.map((kb) => (
-                        <TableRow key={kb.id}>
+                  : vectorDbs?.length
+                    ? vectorDbs.map((vdb) => (
+                        <TableRow key={vdb.id}>
                           <TableCell>
-                            <div className="font-medium">{kb.name}</div>
-                            {kb.description && (
+                            <div className="font-medium">{vdb.name}</div>
+                            {vdb.description && (
                               <div className="text-xs text-muted-foreground">
-                                {kb.description}
+                                {vdb.description}
                               </div>
                             )}
                           </TableCell>
                           <TableCell>
-                            <StatusBadge status={kb.status} />
-                            {kb.status === "error" && kb.statusError && (
+                            <StatusBadge status={vdb.status} />
+                            {vdb.status === "error" && vdb.statusError && (
                               <p className="mt-1 text-xs text-destructive">
-                                {kb.statusError}
+                                {vdb.statusError}
                               </p>
                             )}
                           </TableCell>
                           <TableCell className="text-right">
-                            {kb.documentCount}
+                            {vdb.documentCount}
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground">
-                            {new Date(kb.createdAt).toLocaleDateString()}
+                            {new Date(vdb.createdAt).toLocaleDateString()}
                           </TableCell>
                           <TableCell onClick={(e) => e.stopPropagation()}>
                             {(canUpdate || canDelete) && (
@@ -152,7 +152,7 @@ export function VectorDbsPage() {
                                     variant="ghost"
                                     size="icon"
                                     className="h-8 w-8"
-                                    aria-label={`Actions for ${kb.name}`}
+                                    aria-label={`Actions for ${vdb.name}`}
                                   >
                                     <IconDotsVertical className="h-4 w-4" />
                                   </Button>
@@ -160,7 +160,7 @@ export function VectorDbsPage() {
                                 <DropdownMenuContent align="end">
                                   {canUpdate && (
                                     <DropdownMenuItem
-                                      onClick={() => setRenameTarget(kb)}
+                                      onClick={() => setRenameTarget(vdb)}
                                     >
                                       <IconEdit className="mr-2 h-4 w-4" />
                                       Edit
@@ -172,7 +172,7 @@ export function VectorDbsPage() {
                                   {canDelete && (
                                     <DropdownMenuItem
                                       className="text-destructive"
-                                      onClick={() => setDeleteTarget(kb)}
+                                      onClick={() => setDeleteTarget(vdb)}
                                     >
                                       <IconTrash className="mr-2 h-4 w-4" />
                                       Delete
@@ -190,7 +190,7 @@ export function VectorDbsPage() {
                           colSpan={5}
                           className="text-center text-muted-foreground py-8"
                         >
-                          No knowledge bases yet. Click Create Knowledge Base to get
+                          No vector databases yet. Click Create Vector Database to get
                           started.
                         </TableCell>
                       </TableRow>

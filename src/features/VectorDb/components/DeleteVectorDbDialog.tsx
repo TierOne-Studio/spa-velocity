@@ -31,11 +31,11 @@ export function DeleteVectorDbDialog({
   const handleConfirm = async () => {
     try {
       await deleteMutation.mutateAsync(vectordb.id);
-      toast.success(`Knowledge base "${vectordb.name}" deleted.`);
+      toast.success(`Vector database "${vectordb.name}" deleted.`);
       handleClose();
       onDeleted?.();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to delete knowledge base");
+      toast.error(error instanceof Error ? error.message : "Failed to delete vector database");
     }
   };
 
@@ -43,7 +43,7 @@ export function DeleteVectorDbDialog({
     <Dialog open={open} onOpenChange={(next) => (next ? null : handleClose())}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Delete Knowledge Base</DialogTitle>
+          <DialogTitle>Delete Vector Database</DialogTitle>
           <DialogDescription>
             Permanently delete <strong>{vectordb.name}</strong> and remove
             it from any projects it is attached to. This cannot be undone.
