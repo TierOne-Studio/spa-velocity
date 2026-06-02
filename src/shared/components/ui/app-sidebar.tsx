@@ -102,7 +102,7 @@ const getNavItems = (
           pathname.startsWith("/projects") ||
           pathname.startsWith("/collections") ||
           pathname.startsWith("/sql-connections") ||
-          pathname.startsWith("/vectordbs"),
+          pathname.startsWith("/vector-dbs"),
         items: [
           ...(can("chat", "read")
             ? [
@@ -148,13 +148,13 @@ const getNavItems = (
                 },
               ]
             : []),
-          ...(can("vectordb", "read")
+          ...(can("vector-db", "read")
             ? [
                 {
                   title: "Vector Databases",
-                  url: "/vectordbs",
+                  url: "/vector-dbs",
                   icon: IconBrain,
-                  isActive: pathname.startsWith("/vectordbs"),
+                  isActive: pathname.startsWith("/vector-dbs"),
                 },
               ]
             : []),
