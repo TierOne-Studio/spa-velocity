@@ -1,2 +1,3 @@
 export { VectorDbsPage } from './views/VectorDbsPage';
-export type { VectorDb, VectorDbStatus } from './types';
+export { UploadDocumentDialog } from './components/UploadDocumentDialog';
+export type { VectorDb, VectorDbStatus, IngestionJob } from './types';

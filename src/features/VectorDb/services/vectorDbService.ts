@@ -1,7 +1,8 @@
 import { fetchWithAuth } from '@/shared/lib/fetch-with-auth';
-import { parseVectorDbResponse } from '../lib/apiResponse';
+import { VectorDbApiError, parseVectorDbResponse } from '../lib/apiResponse';
 import type {
   CreateVectorDbInput,
+  IngestionJob,
   VectorDb,
   UpdateVectorDbInput,
 } from '../types';
@@ -57,6 +58,19 @@ export async function updateVectorDb(
   );
 }
 
+export async function listVectorDbFiles(id: string): Promise<IngestionJob[]> {
+  const response = await fetchWithAuth(vectorDbUrl(`/${encodeURIComponent(id)}/files`));
+  return parseVectorDbResponse<IngestionJob[]>(response, `Failed to list files for vector database '${id}'`);
+}
+
+export async function deleteVectorDbFile(id: string, jobId: string): Promise<void> {
+  const response = await fetchWithAuth(
+    vectorDbUrl(`/${encodeURIComponent(id)}/files/${encodeURIComponent(jobId)}`),
+    { method: 'DELETE' },
+  );
+  await parseVectorDbResponse<unknown>(response, `Failed to delete file '${jobId}'`);
+}
+
 export async function deleteVectorDb(id: string): Promise<void> {
   const response = await fetchWithAuth(vectorDbUrl(`/${encodeURIComponent(id)}`), {
     method: 'DELETE',
@@ -65,4 +79,56 @@ export async function deleteVectorDb(id: string): Promise<void> {
     response,
     `Failed to delete vector database '${id}'`,
   );
+}
+
+export function uploadVectorDb(
+  id: string,
+  file: File,
+  onProgress?: (percent: number) => void,
+): Promise<IngestionJob> {
+  return new Promise((resolve, reject) => {
+    const token = localStorage.getItem('bearer_token');
+    const xhr = new XMLHttpRequest();
+
+    if (onProgress) {
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) {
+          onProgress(Math.round((e.loaded / e.total) * 100));
+        }
+      });
+    }
+
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const body = JSON.parse(xhr.responseText) as { data: IngestionJob };
+          resolve(body.data);
+        } catch {
+          reject(new VectorDbApiError('Invalid response from server', xhr.status, null));
+        }
+      } else {
+        let body: unknown = {};
+        try { body = JSON.parse(xhr.responseText); } catch { /* ignore */ }
+        const message =
+          typeof body === 'object' && body !== null &&
+          typeof (body as { message?: unknown }).message === 'string'
+            ? (body as { message: string }).message
+            : `Failed to upload file to vector database '${id}'`;
+        reject(new VectorDbApiError(message, xhr.status, body));
+      }
+    });
+
+    xhr.addEventListener('error', () => {
+      reject(new VectorDbApiError('Network error during file upload', 0, null));
+    });
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    xhr.open('POST', vectorDbUrl(`/${encodeURIComponent(id)}/upload`));
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    }
+    xhr.send(formData);
+  });
 }

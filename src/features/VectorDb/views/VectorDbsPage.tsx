@@ -4,6 +4,7 @@ import {
   IconEdit,
   IconPlus,
   IconTrash,
+  IconUpload,
 } from "@tabler/icons-react";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -34,6 +35,7 @@ import { useVectorDbs } from "../hooks/useVectorDbs";
 import { CreateVectorDbDialog } from "../components/CreateVectorDbDialog";
 import { RenameVectorDbDialog } from "../components/RenameVectorDbDialog";
 import { DeleteVectorDbDialog } from "../components/DeleteVectorDbDialog";
+import { UploadDocumentDialog } from "../components/UploadDocumentDialog";
 import type { VectorDb, VectorDbStatus } from "../types";
 
 const STATUS_STYLES: Record<VectorDbStatus, string> = {
@@ -58,10 +60,12 @@ export function VectorDbsPage() {
   const canCreate = can("vector-db", "create");
   const canUpdate = can("vector-db", "update");
   const canDelete = can("vector-db", "delete");
+  const canUpload = can("vector-db", "upload");
 
   const [createOpen, setCreateOpen] = useState(false);
   const [renameTarget, setRenameTarget] = useState<VectorDb | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<VectorDb | null>(null);
+  const [uploadTarget, setUploadTarget] = useState<VectorDb | null>(null);
 
   const { data: vectorDbs, isLoading, isError, error } = useVectorDbs();
 
@@ -134,7 +138,7 @@ export function VectorDbsPage() {
                             <StatusBadge status={vdb.status} />
                             {vdb.status === "error" && vdb.statusError && (
                               <p className="mt-1 text-xs text-destructive">
-                                {vdb.statusError}
+                                {vdb.statusError.message}
                               </p>
                             )}
                           </TableCell>
@@ -145,7 +149,7 @@ export function VectorDbsPage() {
                             {new Date(vdb.createdAt).toLocaleDateString()}
                           </TableCell>
                           <TableCell onClick={(e) => e.stopPropagation()}>
-                            {(canUpdate || canDelete) && (
+                            {(canUpload || canUpdate || canDelete) && (
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                   <Button
@@ -158,6 +162,17 @@ export function VectorDbsPage() {
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
+                                  {canUpload && (
+                                    <DropdownMenuItem
+                                      onClick={() => setUploadTarget(vdb)}
+                                    >
+                                      <IconUpload className="mr-2 h-4 w-4" />
+                                      Upload document
+                                    </DropdownMenuItem>
+                                  )}
+                                  {canUpload && (canUpdate || canDelete) && (
+                                    <DropdownMenuSeparator />
+                                  )}
                                   {canUpdate && (
                                     <DropdownMenuItem
                                       onClick={() => setRenameTarget(vdb)}
@@ -219,6 +234,13 @@ export function VectorDbsPage() {
           vectordb={deleteTarget}
           open={Boolean(deleteTarget)}
           onOpenChange={(open) => !open && setDeleteTarget(null)}
+        />
+      )}
+      {canUpload && uploadTarget && (
+        <UploadDocumentDialog
+          vectordb={uploadTarget}
+          open={Boolean(uploadTarget)}
+          onOpenChange={(open) => !open && setUploadTarget(null)}
         />
       )}
     </div>

@@ -10,6 +10,17 @@ Object.defineProperty(globalThis, 'localStorage', {
   },
 });
 
+type XhrMock = {
+  upload: { addEventListener: ReturnType<typeof vi.fn> };
+  addEventListener: ReturnType<typeof vi.fn>;
+  open: ReturnType<typeof vi.fn>;
+  setRequestHeader: ReturnType<typeof vi.fn>;
+  send: ReturnType<typeof vi.fn>;
+  status: number;
+  responseText: string;
+};
+let xhrMock: XhrMock;
+
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
@@ -20,6 +31,7 @@ import {
   getVectorDb,
   listVectorDb,
   updateVectorDb,
+  uploadVectorDb,
 } from '../vectorDbService';
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -135,6 +147,110 @@ describe('vectorDbService', () => {
         expect(err).toBeInstanceOf(VectorDbApiError);
         expect((err as VectorDbApiError).status).toBe(409);
       }
+    });
+  });
+
+  describe('uploadVectorDb', () => {
+    function makeXhrMock(): XhrMock {
+      return {
+        upload: { addEventListener: vi.fn() },
+        addEventListener: vi.fn(),
+        open: vi.fn(),
+        setRequestHeader: vi.fn(),
+        send: vi.fn(),
+        status: 201,
+        responseText: '',
+      };
+    }
+
+    beforeEach(() => {
+      xhrMock = makeXhrMock();
+      // eslint-disable-next-line prefer-arrow-callback
+      vi.stubGlobal('XMLHttpRequest', function MockXHR(this: unknown) {
+        return xhrMock;
+      });
+    });
+
+    it('opens POST to /api/vector-dbs/:id/upload and sends FormData', async () => {
+      const job = {
+        id: 'job-1', vectorDbId: 'vdb-1', s3Key: 'k', originalFilename: 'doc.txt',
+        fileSizeBytes: '5', contentType: 'text/plain', status: 'pending',
+        createdAt: '', updatedAt: '',
+      };
+      xhrMock.status = 201;
+      xhrMock.responseText = JSON.stringify({ data: job });
+
+      xhrMock.addEventListener.mockImplementation((event: string, cb: () => void) => {
+        if (event === 'load') setTimeout(cb, 0);
+      });
+
+      const file = new File(['hello'], 'doc.txt', { type: 'text/plain' });
+      const result = await uploadVectorDb('vdb-1', file);
+
+      expect(xhrMock.open).toHaveBeenCalledWith(
+        'POST',
+        expect.stringContaining('/api/vector-dbs/vdb-1/upload'),
+      );
+      expect(xhrMock.send).toHaveBeenCalledWith(expect.any(FormData));
+      expect(result.id).toBe('job-1');
+    });
+
+    it('sets Authorization header when bearer token is present', async () => {
+      storage['bearer_token'] = 'tok-abc';
+      xhrMock.status = 201;
+      xhrMock.responseText = JSON.stringify({
+        data: {
+          id: 'j', vectorDbId: 'vdb-1', s3Key: 'k', originalFilename: 'f',
+          fileSizeBytes: '1', contentType: 'text/plain', status: 'pending',
+          createdAt: '', updatedAt: '',
+        },
+      });
+
+      xhrMock.addEventListener.mockImplementation((event: string, cb: () => void) => {
+        if (event === 'load') setTimeout(cb, 0);
+      });
+
+      const file = new File(['x'], 'x.txt', { type: 'text/plain' });
+      await uploadVectorDb('vdb-1', file);
+
+      expect(xhrMock.setRequestHeader).toHaveBeenCalledWith('Authorization', 'Bearer tok-abc');
+    });
+
+    it('rejects with VectorDbApiError on non-2xx response', async () => {
+      xhrMock.status = 400;
+      xhrMock.responseText = JSON.stringify({ message: 'File type not allowed' });
+
+      xhrMock.addEventListener.mockImplementation((event: string, cb: () => void) => {
+        if (event === 'load') setTimeout(cb, 0);
+      });
+
+      const file = new File(['x'], 'x.exe', { type: 'application/x-executable' });
+      await expect(uploadVectorDb('vdb-1', file)).rejects.toBeInstanceOf(VectorDbApiError);
+    });
+
+    it('rejects with VectorDbApiError on XHR network error event', async () => {
+      xhrMock.addEventListener.mockImplementation((event: string, cb: () => void) => {
+        if (event === 'error') setTimeout(cb, 0);
+      });
+
+      const file = new File(['x'], 'x.txt', { type: 'text/plain' });
+      await expect(uploadVectorDb('vdb-1', file)).rejects.toMatchObject({
+        name: 'VectorDbApiError',
+        status: 0,
+        message: expect.stringContaining('Network error'),
+      });
+    });
+
+    it('rejects with VectorDbApiError when 2xx response body is invalid JSON', async () => {
+      xhrMock.status = 201;
+      xhrMock.responseText = 'not-json';
+
+      xhrMock.addEventListener.mockImplementation((event: string, cb: () => void) => {
+        if (event === 'load') setTimeout(cb, 0);
+      });
+
+      const file = new File(['x'], 'x.txt', { type: 'text/plain' });
+      await expect(uploadVectorDb('vdb-1', file)).rejects.toBeInstanceOf(VectorDbApiError);
     });
   });
 });
