@@ -23,6 +23,9 @@ not restate rationale. `plan-mode` is ephemeral execution sequencing, persisted 
 | [SPEC-002](SPEC-002-admin-rbac.md) | Admin & RBAC (users, roles, sessions, orgs, impersonation) | Implemented | 2026-06-04 | src/features/Admin |
 | [SPEC-003](SPEC-003-sql-connections.md) | SQL Connections (per-org CRUD + test-before-save) | Implemented | 2026-06-04 | src/features/SqlConnections |
 | [SPEC-004](SPEC-004-airweave-collections.md) | Airweave collections & source connections | Implemented | 2026-06-04 | src/features/Airweave |
+| [SPEC-005](SPEC-005-chat.md) | Chat (conversations, streaming, project-scoped Q&A) | Implemented | 2026-06-04 | src/features/Chat |
+| [SPEC-006](SPEC-006-projects.md) | Projects (CRUD, data-source linkage, org scoping) | Implemented | 2026-06-04 | src/features/Projects |
+| [SPEC-007](SPEC-007-dashboards.md) | Dashboards (admin metrics + user account/settings) | Implemented | 2026-06-04 | src/features/AdminDashboard, Dashboard |
 
 ## Status lifecycle
 
