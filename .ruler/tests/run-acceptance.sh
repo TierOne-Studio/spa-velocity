@@ -187,7 +187,8 @@ for a in architect-reviewer code-reviewer qa-validator security-reviewer lessons
   echo "PASS: T3 $af frontmatter + tools"; PASS=$((PASS+1))
 done
 
-# Helper: does an agent's frontmatter list a given tool? Handles both inline ("tools: Read, Grep") and YAML-list ("tools:\n  - Read") forms.
+# Helper: does an agent's frontmatter `tools:` block list a given tool (YAML-list form, e.g. "tools:\n  - Read")?
+# Scoped to the tools: block and matched as a whole list item, so prose/description mentions of a tool name don't false-match.
 agent_has_tool() {
   local agent_file="$1" tool="$2"
   awk -v want="$tool" '
