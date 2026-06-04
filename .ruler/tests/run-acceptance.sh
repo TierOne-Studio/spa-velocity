@@ -86,21 +86,31 @@ REQUIRED_FILES=(
   ".claude/skills/frontend-security/SKILL.md"
   ".claude/skills/bundle-size/SKILL.md"
   ".claude/skills/cross-repo-workspace/SKILL.md"
+  ".claude/skills/spec-workflow/SKILL.md"
   ".claude/agents/architect-reviewer.md"
   ".claude/agents/code-reviewer.md"
   ".claude/agents/qa-validator.md"
   ".claude/agents/security-reviewer.md"
   ".claude/agents/lessons-curator.md"
+  ".claude/agents/spec-steward.md"
   "docs/decisions/README.md"
   "docs/decisions/_template.md"
+  "docs/specs/README.md"
+  "docs/specs/_template.md"
+  "scripts/spec-gate.sh"
+  "scripts/spec-complete-check.sh"
+  "scripts/spec-links-check.sh"
+  ".github/workflows/spec-gate.yml"
 )
 for f in "${REQUIRED_FILES[@]}"; do
   assert_true "T1: $f exists" "test -f '$f'"
 done
-# ADRs 001-010
-for n in 001 002 003 004 005 006 007 008 009 010; do
+# ADRs 001-011
+for n in 001 002 003 004 005 006 007 008 009 010 011; do
   assert_true "T1: ADR-$n exists" "ls docs/decisions/ADR-$n-*.md >/dev/null 2>&1"
 done
+# SPEC-000 (the spec-first workflow dogfoods itself)
+assert_true "T1: SPEC-000 exists" "ls docs/specs/SPEC-000-*.md >/dev/null 2>&1"
 
 # ---------------------------------------------------------------------------
 # T2 — Skill frontmatter well-formed
@@ -114,7 +124,7 @@ OWNED_SKILLS=(
   cyclomatic-complexity meta-skill-hygiene async-error-handling
   react-patterns react-state-management react-performance react-routing
   react-forms react-testing accessibility frontend-security bundle-size
-  repo-conventions cross-repo-workspace
+  repo-conventions cross-repo-workspace spec-workflow
 )
 
 for s in "${OWNED_SKILLS[@]}"; do
@@ -151,7 +161,7 @@ done
 echo
 echo "=== T3: Subagent frontmatter + tool allowlists ==="
 
-for a in architect-reviewer code-reviewer qa-validator security-reviewer lessons-curator; do
+for a in architect-reviewer code-reviewer qa-validator security-reviewer lessons-curator spec-steward; do
   af=".claude/agents/$a.md"
   if [ ! -f "$af" ]; then
     echo "FAIL: T3 $af missing"
@@ -201,12 +211,22 @@ assert_true "T3: code-reviewer has Bash"     "agent_has_tool .claude/agents/code
 assert_true "T3: code-reviewer NO Edit"      "! agent_has_tool .claude/agents/code-reviewer.md Edit"
 assert_true "T3: architect-reviewer NO Bash" "! agent_has_tool .claude/agents/architect-reviewer.md Bash"
 
+# spec-steward is the ONLY write-capable subagent (first precedent), scoped to docs/specs/**.
+assert_true "T3: spec-steward has Edit"   "agent_has_tool .claude/agents/spec-steward.md Edit"
+assert_true "T3: spec-steward has Write"  "agent_has_tool .claude/agents/spec-steward.md Write"
+# No-leak guard: NO OTHER subagent may have gained Edit/Write.
+for a in architect-reviewer code-reviewer qa-validator security-reviewer lessons-curator; do
+  assert_true "T3: $a NO Edit"  "! agent_has_tool .claude/agents/$a.md Edit"
+  assert_true "T3: $a NO Write" "! agent_has_tool .claude/agents/$a.md Write"
+done
+
 # Subagent verdicts present
 assert_true "T3: architect-reviewer emits APPROVE_PLAN"      "grep -q APPROVE_PLAN .claude/agents/architect-reviewer.md"
 assert_true "T3: architect-reviewer emits REVISE_PLAN"       "grep -q REVISE_PLAN  .claude/agents/architect-reviewer.md"
 assert_true "T3: architect-reviewer emits BLOCK"             "grep -q BLOCK         .claude/agents/architect-reviewer.md"
 assert_true "T3: code-reviewer emits APPROVE/CHANGES/BLOCK"  "grep -q 'APPROVE.*CHANGES REQUESTED.*BLOCK' .claude/agents/code-reviewer.md"
 assert_true "T3: qa-validator emits PASS/GAPS/BLOCK"         "grep -q 'PASS.*GAPS.*BLOCK' .claude/agents/qa-validator.md"
+assert_true "T3: spec-steward emits NEEDS-INPUT/SYNCED/UPDATED/BLOCK" "grep -q 'NEEDS-INPUT.*SYNCED.*UPDATED.*BLOCK' .claude/agents/spec-steward.md"
 
 # ---------------------------------------------------------------------------
 # T4 — Router structure (P0..P9 + Skill Pointers + Workflow chains)
@@ -217,6 +237,7 @@ echo "=== T4: Router structure (P0..P9 + Skill Pointers + Workflow chains in ins
 for p in P0 P1 P2 P3 P4 P5 P6 P7 P8 P9; do
   assert_true "T4: $p present in .ruler/instructions.md" "grep -q '^## $p ' .ruler/instructions.md"
 done
+assert_true "T4: P3.0 specification-first"         "grep -q '^### P3.0' .ruler/instructions.md"
 assert_true "T4: P3.4 mandatory skill matrix"      "grep -q '^### P3.4' .ruler/instructions.md"
 assert_true "T4: P3.5 skill-vs-repo resolution"    "grep -q '^### P3.5' .ruler/instructions.md"
 assert_true "T4: P4.1 subagent trigger matrix"     "grep -q '^### P4.1' .ruler/instructions.md"
@@ -366,8 +387,8 @@ fi
 # T13 — P3.4 force-load includes the SPA-critical force-fires
 # ---------------------------------------------------------------------------
 echo
-echo "=== T13: P3.4 force-load includes the 7 SPA-critical skills ==="
-SPA_CRITICAL=(tdd-workflow repo-conventions failure-mode-analysis design-review plan-mode react-patterns accessibility cross-repo-workspace)
+echo "=== T13: P3.4 force-load includes the SPA-critical skills ==="
+SPA_CRITICAL=(tdd-workflow repo-conventions failure-mode-analysis design-review plan-mode react-patterns accessibility cross-repo-workspace spec-workflow)
 P34_BLOCK=$(awk '/^### P3.4/,/^### P3.5/' .ruler/instructions.md)
 for s in "${SPA_CRITICAL[@]}"; do
   if echo "$P34_BLOCK" | grep -q "\`$s\`"; then
