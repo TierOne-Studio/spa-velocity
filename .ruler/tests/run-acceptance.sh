@@ -193,8 +193,9 @@ agent_has_tool() {
   awk -v want="$tool" '
     /^---$/{n++; if(n==2)exit; next}
     n==1 {
-      if ($0 ~ /^tools:/) intools=1
-      if (intools && index($0, want) > 0) found=1
+      if ($0 ~ /^tools:/) { intools=1; next }
+      if (intools && $0 ~ /^[A-Za-z]/) intools=0            # next top-level key ends the tools block
+      if (intools && $0 ~ ("-[[:space:]]+" want "[[:space:]]*$")) found=1   # YAML list item, not a substring
     }
     END { exit (found ? 0 : 1) }
   ' "$agent_file"
