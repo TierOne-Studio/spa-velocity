@@ -19,6 +19,7 @@ not restate rationale. `plan-mode` is ephemeral execution sequencing, persisted 
 | # | Title | Status | Updated | Feature paths |
 |---|---|---|---|---|
 | [SPEC-000](SPEC-000-specification-first-workflow.md) | Specification-first workflow | Draft | 2026-06-03 | .ruler, docs/specs, scripts |
+| [SPEC-001](SPEC-001-auth.md) | Authentication, session & route-guard behavior | Implemented | 2026-06-04 | src/features/Auth + shared auth |
 
 ## Status lifecycle
 
