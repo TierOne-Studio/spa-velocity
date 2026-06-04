@@ -214,11 +214,17 @@ assert_true "T3: architect-reviewer NO Bash" "! agent_has_tool .claude/agents/ar
 # spec-steward is the ONLY write-capable subagent (first precedent), scoped to docs/specs/**.
 assert_true "T3: spec-steward has Edit"   "agent_has_tool .claude/agents/spec-steward.md Edit"
 assert_true "T3: spec-steward has Write"  "agent_has_tool .claude/agents/spec-steward.md Write"
-# No-leak guard: NO OTHER subagent may have gained Edit/Write.
-for a in architect-reviewer code-reviewer qa-validator security-reviewer lessons-curator; do
-  assert_true "T3: $a NO Edit"  "! agent_has_tool .claude/agents/$a.md Edit"
-  assert_true "T3: $a NO Write" "! agent_has_tool .claude/agents/$a.md Write"
+# No-leak guard: NO OTHER subagent may have gained Edit/Write. Derived from disk so it
+# self-maintains — covers acceptance-verifier and any future agent automatically.
+for af in .claude/agents/*.md; do
+  a=$(basename "$af" .md)
+  [ "$a" = "spec-steward" ] && continue
+  assert_true "T3: $a NO Edit"  "! agent_has_tool '$af' Edit"
+  assert_true "T3: $a NO Write" "! agent_has_tool '$af' Write"
 done
+# Spec-gate + spec-lint bash suites must EXECUTE green here (not merely exist).
+assert_true "T3: spec-gate bash suite passes"  "bash scripts/__tests__/spec-gate.test.sh"
+assert_true "T3: spec-lints bash suite passes" "bash scripts/__tests__/spec-lints.test.sh"
 
 # Subagent verdicts present
 assert_true "T3: architect-reviewer emits APPROVE_PLAN"      "grep -q APPROVE_PLAN .claude/agents/architect-reviewer.md"
