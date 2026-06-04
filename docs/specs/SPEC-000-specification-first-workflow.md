@@ -52,7 +52,7 @@ the OpenAPI machine-link (deferred — needs ci-gates Phase C); api-velocity's o
 2. [Confirmed] `run-acceptance.sh` hard-pins the agent set + ADR range + router word budget (T1/T3/T11/T12/T21/T23) — self-test edits must update those fixtures (§13.1).
 3. [Confirmed] `spec-steward` is the first write-capable subagent; containment must be mechanical, not prose-only (test #10).
 4. [Confirmed] On `origin/main`, ADR-011 is free here; `ci-gates-plan.md` also eyes 011 — contention resolved by whoever merges first (flagged in ADR-011).
-5. [Unconfirmed] api-velocity uses `docs/decisions/` (it also has a `docs/adr/` dir) — verify before mirroring.
+5. [Corrected 2026-06-04] api-velocity uses `docs/decisions/` for ADRs (001–012; api spec-first ADR is ADR-013). The `docs/adr/0001-*.md` is an unrelated legacy 4-digit artifact, left untouched. Verified during the api mirror.
 
 ## 5. Affected areas
 
@@ -101,8 +101,9 @@ Harness: `npm run test:claude`. No app-runtime layer (this change touches the ha
 
 ## 10. Open questions
 
-- api-velocity ADR location (`docs/decisions/` vs `docs/adr/`) — resolve before the api mirror.
+- None open (assumption #5 resolved during the api mirror; OpenAPI machine-link deferred to ci-gates Phase C).
 
 ## Change Log
 
+- 2026-06-04 · PR (pending) · Corrected assumption #5 (api uses `docs/decisions/`; api ADR-013) after completing the api mirror; counterpart `api-velocity#SPEC-000` now exists and cross-links resolve.
 - 2026-06-03 · PR (pending) · Slice 0 scaffolding + this SPEC authored · install of the spec-first workflow (spa-velocity, layer ui).
