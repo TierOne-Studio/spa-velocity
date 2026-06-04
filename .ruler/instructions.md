@@ -74,6 +74,10 @@ When generic React advice from a stack skill (`react-patterns`, `react-state-man
 
 ## P3 — CODE-CHANGE DEFAULTS
 
+### P3.0 Specification-first (before P3.1)
+
+Before any **behavioral** code change (feature, fix, refactor-that-changes-behavior, follow-up), create/update a Markdown SPEC and resolve material ambiguities **with the user** BEFORE code; reconcile after. Follow `spec-workflow`; `spec-steward` writes it. Exempt only via `tdd-workflow` waivers; P3.2 applies.
+
 ### P3.1 TDD applies to every executable-code change
 
 Use `tdd-workflow`. Failing test first, minimal implementation, run the full suite, mini self-review. Either follow TDD or include exactly one of the four valid waiver phrases (`tdd-workflow` § Waivers): `TDD waived — non-code change.` / `TDD waived — type-only.` / `TDD waived — config change with no behavior impact.` / `TDD waived — ADR-only change.`
@@ -100,6 +104,7 @@ These skills MUST fire on every executable-code change in this repo, even if the
 | `react-patterns` | Any change touching components, hooks, or rendering. |
 | `accessibility` | Any change touching UI markup or interactive elements. |
 | `cross-repo-workspace` | Session has access to both spa-velocity and api-velocity (primary cwd is one, the other is in Additional working directories). |
+| `spec-workflow` | Any behavioral change — SPEC created/updated before code (per P3.0). |
 
 If a force-fire skill genuinely doesn't apply to the change, state it with reason: `<skill> waived — <reason>`. Silent omission is a P8 contract violation.
 
@@ -124,6 +129,7 @@ Subagents run in fresh context to give an independent signal. Each owns ONE conc
 | Condition | Subagent |
 |---|---|
 | Plan with 3+ file changes OR auth/sessions/RBAC/route-guards/state-mgmt-rewrites/data-migration | `architect-reviewer` (PRE-impl) |
+| Behavioral change (PRE: SPEC + architect review; POST: reconcile spec↔code) | `spec-steward` (PRE + POST) |
 | Implementation with 3+ file changes OR auth/sessions/PII/RBAC | `code-reviewer` (POST-impl) |
 | Same conditions as `code-reviewer`, run in parallel | `qa-validator` (POST-impl) |
 | Auth, sessions, secrets, PII, RBAC, XSS sinks (`dangerouslySetInnerHTML`, raw HTML), `VITE_*` env vars, postMessage/iframes, file upload/download, dependencies | `security-reviewer` (POST-impl) |
@@ -231,6 +237,7 @@ A change is not "done" — MUST NOT declare it finished, ask the user to test, o
 - **For a user-facing feature:** the main agent MUST have authored AND run (a) unit/component tests AND (b) **Playwright e2e** for the feature's flows (in `e2e/<module>/`), and `acceptance-verifier` MUST have returned non-`BLOCK`. The user's manual testing is then optional, not required.
 - **For a bug fix:** a unit/component regression test (authored + run) always; Playwright e2e only when the fix changes an observable UI/RBAC/multi-step behavior (then `acceptance-verifier` fires).
 - A feature with **no stated acceptance criteria** is itself incomplete — write the criteria (in the plan's verification section) before claiming done; "nothing to verify against" is a BLOCK for a user-facing feature.
+- **Behavioral change:** its SPEC was created/updated, passed the readiness rubric, and `spec-steward` returned non-`BLOCK` (per P3.0).
 
 ### P8.1 Confidence rubric (5 × 0.20 — strict)
 
