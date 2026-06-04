@@ -20,6 +20,9 @@ not restate rationale. `plan-mode` is ephemeral execution sequencing, persisted 
 |---|---|---|---|---|
 | [SPEC-000](SPEC-000-specification-first-workflow.md) | Specification-first workflow | Draft | 2026-06-03 | .ruler, docs/specs, scripts |
 | [SPEC-001](SPEC-001-auth.md) | Authentication, session & route-guard behavior | Implemented | 2026-06-04 | src/features/Auth + shared auth |
+| [SPEC-002](SPEC-002-admin-rbac.md) | Admin & RBAC (users, roles, sessions, orgs, impersonation) | Implemented | 2026-06-04 | src/features/Admin |
+| [SPEC-003](SPEC-003-sql-connections.md) | SQL Connections (per-org CRUD + test-before-save) | Implemented | 2026-06-04 | src/features/SqlConnections |
+| [SPEC-004](SPEC-004-airweave-collections.md) | Airweave collections & source connections | Implemented | 2026-06-04 | src/features/Airweave |
 
 ## Status lifecycle
 
