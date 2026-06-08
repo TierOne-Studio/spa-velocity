@@ -12,6 +12,10 @@ import {
 } from "@/shared/components/ui/dialog"
 import { Input } from "@/shared/components/ui/input"
 import { Label } from "@/shared/components/ui/label"
+import {
+    OrgTargetField,
+    type TargetOrganization,
+} from "@/shared/components/forms/OrgTargetField"
 
 import type {
     CreateSqlConnectionInput,
@@ -62,7 +66,7 @@ interface SqlConnectionFormDialogProps {
     connection?: SqlConnection | null
     initialInput?: CreateSqlConnectionInput | null
     onSubmit: (payload:
-        | { mode: "create"; input: CreateSqlConnectionInput }
+        | { mode: "create"; input: CreateSqlConnectionInput; organizationId: string | null }
         | { mode: "edit"; connectionId: string; input: UpdateSqlConnectionInput }) => Promise<void>
     onTest: (input: TestSqlConnectionInput) => Promise<void>
     submitPending?: boolean
@@ -70,6 +74,15 @@ interface SqlConnectionFormDialogProps {
     title?: string
     description?: string
     submitLabel?: string
+    /**
+     * Org-picker support (ADR-011 amendment 5/6). `defaultOrganizationId` is
+     * the owning org for create mode (the page's active org). `organizations`
+     * is the superadmin option list (OrgTargetField sources memberships for
+     * non-superadmins internally). The picker shows only in create mode; org
+     * is immutable on edit.
+     */
+    defaultOrganizationId?: string | null
+    organizations?: TargetOrganization[]
 }
 
 function buildEffectiveSsl(form: FormState): SqlSslConfig {
@@ -121,8 +134,13 @@ export function SqlConnectionFormDialog({
     title,
     description,
     submitLabel,
+    defaultOrganizationId = null,
+    organizations,
 }: SqlConnectionFormDialogProps) {
     const [form, setForm] = useState<FormState>(EMPTY_FORM)
+    const [organizationId, setOrganizationId] = useState<string | null>(
+        defaultOrganizationId,
+    )
     const [testedFingerprint, setTestedFingerprint] = useState<string | null>(null)
     const [requestError, setRequestError] = useState<string | null>(null)
 
@@ -130,6 +148,8 @@ export function SqlConnectionFormDialog({
         if (!open) return
         setTestedFingerprint(null)
         setRequestError(null)
+        // Owning org is chosen only on create; on edit it's fixed to the row's org.
+        setOrganizationId(defaultOrganizationId)
         if (mode === "edit" && connection) {
             const rawSsl = connection.ssl
             const sslObject =
@@ -163,7 +183,7 @@ export function SqlConnectionFormDialog({
                 originalSslObject: sslObject,
             })
         }
-    }, [open, mode, connection, initialInput])
+    }, [open, mode, connection, initialInput, defaultOrganizationId])
 
     const portNumber = Number.parseInt(form.port, 10)
     const portValid = Number.isFinite(portNumber) && portNumber > 0 && portNumber < 65536
@@ -216,6 +236,7 @@ export function SqlConnectionFormDialog({
             if (mode === "create") {
                 await onSubmit({
                     mode,
+                    organizationId,
                     input: {
                         name: form.name.trim(),
                         host: form.host.trim(),
@@ -269,6 +290,21 @@ export function SqlConnectionFormDialog({
                     </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-2">
+                    {/*
+                     * Org picker (ADR-011 amendment 5/6), create mode only —
+                     * the owning org is immutable once a connection exists.
+                     * Hidden for single-org members (defaults to their org).
+                     */}
+                    {mode === "create" && (
+                        <OrgTargetField
+                            value={organizationId}
+                            onChange={setOrganizationId}
+                            disabled={submitPending}
+                            organizations={organizations}
+                            helpText="The connection will belong to this organization."
+                            testId="sql-conn-org"
+                        />
+                    )}
                     <div className="grid gap-2">
                         <Label htmlFor="sql-conn-name">Name</Label>
                         <Input

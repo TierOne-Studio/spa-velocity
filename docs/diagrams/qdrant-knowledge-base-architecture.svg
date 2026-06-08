@@ -1,0 +1,179 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1300" height="1180" viewBox="0 0 1300 1180" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#334155"/>
+    </marker>
+    <marker id="arrowNew" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#15803d"/>
+    </marker>
+  </defs>
+  <rect x="0" y="0" width="1300" height="1180" fill="#f8fafc"/>
+
+  <text x="650" y="38" text-anchor="middle" font-size="22" font-weight="700" fill="#0f172a">Qdrant knowledge base — three decoupled planes</text>
+  <text x="650" y="60" text-anchor="middle" font-size="13" fill="#475569">Manage &amp; ingest (own feature) · attach to a project · chat about it. Green dashed = net-new (no precedent in the repo).</text>
+
+  <!-- ===================== BAND A: MANAGE & INGEST ===================== -->
+  <rect x="30" y="82" width="1240" height="372" rx="12" fill="#eef2ff" stroke="#c7d2fe"/>
+  <text x="50" y="108" font-size="14" font-weight="700" fill="#3730a3">1 · Manage &amp; ingest — new decoupled feature (sibling to Collections / SQL Connections)</text>
+
+  <!-- A1 UI -->
+  <rect x="50" y="150" width="210" height="86" rx="10" fill="#7c3aed" stroke="#5b21b6"/>
+  <text x="155" y="178" text-anchor="middle" font-size="12.5" font-weight="700" fill="#fff">Knowledge Base UI</text>
+  <text x="155" y="197" text-anchor="middle" font-size="10" fill="#ede9fe">spa: features/KnowledgeBases</text>
+  <text x="155" y="213" text-anchor="middle" font-size="10" fill="#ede9fe">create · rename · delete · UPLOAD</text>
+  <rect x="218" y="156" width="36" height="15" rx="4" fill="#15803d"/><text x="236" y="167" text-anchor="middle" font-size="9.5" font-weight="700" fill="#fff">NEW</text>
+
+  <!-- A2 controller -->
+  <rect x="295" y="158" width="205" height="58" rx="10" fill="#475569" stroke="#334155"/>
+  <text x="397" y="182" text-anchor="middle" font-size="12.5" font-weight="700" fill="#fff">knowledge-base module</text>
+  <text x="397" y="200" text-anchor="middle" font-size="10" fill="#e2e8f0">/api/knowledge-bases (NestJS)</text>
+  <rect x="458" y="163" width="36" height="15" rx="4" fill="#15803d"/><text x="476" y="174" text-anchor="middle" font-size="9.5" font-weight="700" fill="#fff">NEW</text>
+
+  <!-- A4 DB -->
+  <rect x="295" y="250" width="205" height="62" rx="10" fill="#16a34a" stroke="#15803d"/>
+  <text x="397" y="274" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">org_knowledge_base</text>
+  <text x="397" y="292" text-anchor="middle" font-size="9.5" fill="#dcfce7">status: pending→processing→ready/failed</text>
+  <rect x="458" y="255" width="36" height="15" rx="4" fill="#0f172a"/><text x="476" y="266" text-anchor="middle" font-size="9.5" font-weight="700" fill="#fff">NEW</text>
+
+  <!-- A3 S3 -->
+  <rect x="545" y="150" width="180" height="60" rx="10" fill="#0ea5e9" stroke="#0284c7"/>
+  <text x="635" y="174" text-anchor="middle" font-size="12.5" font-weight="700" fill="#fff">S3 bucket</text>
+  <text x="635" y="192" text-anchor="middle" font-size="10" fill="#e0f2fe">raw uploaded text / files</text>
+  <rect x="683" y="155" width="36" height="15" rx="4" fill="#15803d"/><text x="701" y="166" text-anchor="middle" font-size="9.5" font-weight="700" fill="#fff">NEW</text>
+
+  <!-- A5 worker -->
+  <rect x="545" y="345" width="200" height="74" rx="10" fill="#d97706" stroke="#b45309"/>
+  <text x="645" y="370" text-anchor="middle" font-size="12.5" font-weight="700" fill="#fff">Ingestion worker</text>
+  <text x="645" y="388" text-anchor="middle" font-size="10" fill="#fff7ed">read S3 → chunk text</text>
+  <text x="645" y="404" text-anchor="middle" font-size="10" fill="#fff7ed">(async job / queue)</text>
+  <rect x="703" y="350" width="36" height="15" rx="4" fill="#15803d"/><text x="721" y="361" text-anchor="middle" font-size="9.5" font-weight="700" fill="#fff">NEW</text>
+
+  <!-- A6 embeddings -->
+  <rect x="785" y="352" width="185" height="60" rx="10" fill="#0d9488" stroke="#0f766e"/>
+  <text x="877" y="376" text-anchor="middle" font-size="12.5" font-weight="700" fill="#fff">OpenAI embeddings</text>
+  <text x="877" y="394" text-anchor="middle" font-size="9.5" fill="#ccfbf1">text-embedding-3-* (new call)</text>
+
+  <!-- A7 Qdrant -->
+  <rect x="1010" y="340" width="195" height="84" rx="10" fill="#16a34a" stroke="#15803d"/>
+  <text x="1107" y="367" text-anchor="middle" font-size="12.5" font-weight="700" fill="#fff">Qdrant collection</text>
+  <text x="1107" y="385" text-anchor="middle" font-size="9.5" fill="#dcfce7">1 per knowledge base</text>
+  <text x="1107" y="400" text-anchor="middle" font-size="9.5" fill="#dcfce7">vectors + payload</text>
+  <rect x="1163" y="345" width="36" height="15" rx="4" fill="#0f172a"/><text x="1181" y="356" text-anchor="middle" font-size="9.5" font-weight="700" fill="#fff">NEW</text>
+
+  <!-- band A edges -->
+  <g stroke="#334155" stroke-width="1.6" fill="none" marker-end="url(#arrow)">
+    <path d="M260,187 L295,187"/>
+    <path d="M500,176 L545,180"/>
+    <path d="M397,216 L397,250"/>
+    <path d="M635,210 L635,345"/>
+    <path d="M745,382 L785,382"/>
+    <path d="M970,382 L1010,382"/>
+    <path d="M345,216 C320,300 410,345 543,372"/>
+  </g>
+  <g stroke="#94a3b8" stroke-width="1.4" fill="none" stroke-dasharray="5 4" marker-end="url(#arrow)">
+    <path d="M560,398 C470,398 440,350 460,314"/>
+  </g>
+  <g font-size="10" fill="#475569">
+    <text x="522" y="172">PUT file</text>
+    <text x="402" y="238">insert row</text>
+    <text x="645" y="285">read file</text>
+    <text x="760" y="372">embed</text>
+    <text x="985" y="372">upsert</text>
+    <text x="360" y="300" fill="#64748b">enqueue</text>
+    <text x="470" y="345" fill="#94a3b8">update status</text>
+  </g>
+
+  <!-- ===================== BAND B: ATTACH ===================== -->
+  <rect x="30" y="466" width="1240" height="124" rx="12" fill="#fef9c3" stroke="#fde68a"/>
+  <text x="50" y="490" font-size="14" font-weight="700" fill="#854d0e">2 · Attach to a project (existing Projects module · new data-source kind)</text>
+
+  <rect x="50" y="508" width="215" height="62" rx="10" fill="#7c3aed" stroke="#5b21b6"/>
+  <text x="157" y="534" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">Project · attach sources</text>
+  <text x="157" y="552" text-anchor="middle" font-size="10" fill="#ede9fe">pick knowledge base(s)</text>
+
+  <rect x="315" y="510" width="235" height="58" rx="10" fill="#475569" stroke="#334155"/>
+  <text x="432" y="534" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">ProjectsService.attachSource</text>
+  <text x="432" y="552" text-anchor="middle" font-size="10" fill="#e2e8f0">projects module (existing)</text>
+
+  <rect x="600" y="503" width="285" height="72" rx="10" fill="#16a34a" stroke="#15803d"/>
+  <text x="742" y="528" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">ProjectDataSource</text>
+  <text x="742" y="546" text-anchor="middle" font-size="10" fill="#dcfce7">kind = knowledge_base (NEW)</text>
+  <text x="742" y="562" text-anchor="middle" font-size="10" fill="#dcfce7">→ references the KB / Qdrant collection</text>
+  <rect x="843" y="508" width="36" height="15" rx="4" fill="#0f172a"/><text x="861" y="519" text-anchor="middle" font-size="9.5" font-weight="700" fill="#fff">NEW</text>
+
+  <text x="915" y="535" font-size="11" font-weight="700" fill="#854d0e">attach / detach =</text>
+  <text x="915" y="551" font-size="11" fill="#854d0e">gate on whether chat can see this KB</text>
+
+  <g stroke="#334155" stroke-width="1.6" fill="none" marker-end="url(#arrow)">
+    <path d="M265,539 L315,539"/>
+    <path d="M550,539 L600,539"/>
+  </g>
+
+  <!-- ===================== BAND C: CHAT ===================== -->
+  <rect x="30" y="606" width="1240" height="470" rx="12" fill="#ecfdf5" stroke="#bbf7d0"/>
+  <text x="50" y="630" font-size="14" font-weight="700" fill="#166534">3 · Chat about it — reuses the existing RAG lane  (+1 provider; no new route or sub-agent required)</text>
+
+  <rect x="530" y="648" width="250" height="54" rx="10" fill="#7c3aed" stroke="#5b21b6"/>
+  <text x="655" y="671" text-anchor="middle" font-size="12.5" font-weight="700" fill="#fff">Chat UI</text>
+  <text x="655" y="689" text-anchor="middle" font-size="10" fill="#ede9fe">POST /messages/stream (SSE)</text>
+
+  <rect x="535" y="716" width="240" height="52" rx="10" fill="#475569" stroke="#334155"/>
+  <text x="655" y="739" text-anchor="middle" font-size="12.5" font-weight="700" fill="#fff">ChatAgentService</text>
+  <text x="655" y="757" text-anchor="middle" font-size="10" fill="#e2e8f0">generateReplyStreaming</text>
+
+  <rect x="515" y="782" width="280" height="50" rx="24" fill="#0891b2" stroke="#0e7490"/>
+  <text x="655" y="804" text-anchor="middle" font-size="12.5" font-weight="700" fill="#fff">Router · classify()</text>
+  <text x="655" y="821" text-anchor="middle" font-size="10" fill="#cffafe">route → rag / agent</text>
+
+  <rect x="545" y="850" width="220" height="60" rx="10" fill="#2563eb" stroke="#1d4ed8"/>
+  <text x="655" y="875" text-anchor="middle" font-size="12.5" font-weight="700" fill="#fff">OUTER CHAT AGENT</text>
+  <text x="655" y="893" text-anchor="middle" font-size="10" fill="#dbeafe">picks tools · synthesizes</text>
+
+  <rect x="510" y="940" width="290" height="56" rx="10" fill="#d97706" stroke="#b45309"/>
+  <text x="655" y="964" text-anchor="middle" font-size="12.5" font-weight="700" fill="#fff">Tool: search_knowledge_base</text>
+  <text x="655" y="982" text-anchor="middle" font-size="10" fill="#fff7ed">fans out to ALL retrieval providers</text>
+
+  <rect x="300" y="1010" width="230" height="54" rx="10" fill="#0d9488" stroke="#0f766e"/>
+  <text x="415" y="1033" text-anchor="middle" font-size="11.5" font-weight="700" fill="#fff">AirweaveCollectionProvider</text>
+  <text x="415" y="1051" text-anchor="middle" font-size="10" fill="#ccfbf1">existing → Airweave SDK</text>
+
+  <rect x="720" y="1004" width="255" height="64" rx="10" fill="#0d9488" stroke="#15803d" stroke-width="2.5" stroke-dasharray="6 3"/>
+  <text x="847" y="1028" text-anchor="middle" font-size="11.5" font-weight="700" fill="#fff">KnowledgeBaseProvider.search()</text>
+  <text x="847" y="1046" text-anchor="middle" font-size="10" fill="#ccfbf1">embed query (OpenAI) → Qdrant search</text>
+  <text x="847" y="1061" text-anchor="middle" font-size="9.5" fill="#a7f3d0">implements DataSourceProvider</text>
+  <rect x="933" y="1009" width="36" height="15" rx="4" fill="#15803d"/><text x="951" y="1020" text-anchor="middle" font-size="9.5" font-weight="700" fill="#fff">NEW</text>
+
+  <g stroke="#334155" stroke-width="1.6" fill="none" marker-end="url(#arrow)">
+    <path d="M655,702 L655,716"/>
+    <path d="M655,768 L655,782"/>
+    <path d="M655,832 L655,850"/>
+    <path d="M655,910 L655,940"/>
+    <path d="M540,832 C455,885 455,925 510,948"/>
+    <path d="M580,996 C470,1010 450,1010 532,1037"/>
+    <path d="M770,996 L820,1004"/>
+  </g>
+  <g font-size="10" fill="#475569">
+    <text x="666" y="845">agent</text>
+    <text x="452" y="900">rag</text>
+  </g>
+
+  <!-- cross-band: same Qdrant collection -->
+  <g stroke="#15803d" stroke-width="2" fill="none" stroke-dasharray="7 4" marker-end="url(#arrowNew)">
+    <path d="M975,1034 C1255,1034 1255,386 1207,384"/>
+  </g>
+  <text x="1262" y="710" font-size="11" font-weight="700" fill="#166534" transform="rotate(90 1262 710)">same Qdrant collection — written by ingestion, read by chat</text>
+
+  <!-- legend -->
+  <g font-size="11.5" fill="#334155">
+    <rect x="30" y="1096" width="1240" height="56" rx="10" fill="#fff" stroke="#e2e8f0"/>
+    <rect x="50" y="1116" width="16" height="13" rx="3" fill="#7c3aed"/><text x="74" y="1127">Client UI</text>
+    <rect x="160" y="1116" width="16" height="13" rx="3" fill="#475569"/><text x="184" y="1127">Service / module</text>
+    <rect x="310" y="1116" width="16" height="13" rx="3" fill="#d97706"/><text x="334" y="1127">Tool / worker</text>
+    <rect x="450" y="1116" width="16" height="13" rx="3" fill="#0891b2"/><text x="474" y="1127">Router</text>
+    <rect x="540" y="1116" width="16" height="13" rx="3" fill="#2563eb"/><text x="564" y="1127">LLM agent</text>
+    <rect x="650" y="1116" width="16" height="13" rx="3" fill="#0d9488"/><text x="674" y="1127">Provider / embeddings</text>
+    <rect x="820" y="1116" width="16" height="13" rx="3" fill="#0ea5e9"/><text x="844" y="1127">Object store (S3)</text>
+    <rect x="970" y="1116" width="16" height="13" rx="3" fill="#16a34a"/><text x="994" y="1127">DB / vector store</text>
+    <rect x="1110" y="1115" width="16" height="15" rx="3" fill="#fff" stroke="#15803d" stroke-width="2.5" stroke-dasharray="5 3"/><text x="1134" y="1127">NEW (net-new)</text>
+  </g>
+</svg>

@@ -31,6 +31,13 @@ export const createCollectionSchema = z.object({
     )
     .optional()
     .or(z.literal('').transform(() => undefined)),
+  /**
+   * Target organization that will own the collection (ADR-011 amendment 5/6).
+   * Single-org users: defaulted to their org (the picker is hidden). Multi-org
+   * users: chosen via OrgTargetField. Superadmin: any org. The backend
+   * re-validates membership (non-superadmin) and org-existence (everyone).
+   */
+  organizationId: z.string().trim().min(1).nullable().optional(),
 });
 
 export const updateCollectionSchema = z.object({

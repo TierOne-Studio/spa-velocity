@@ -5,10 +5,41 @@ import type {
   LabelHTMLAttributes,
   ReactNode,
 } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";
+
+// OrgTargetField (ADR-011 amendment 5/6 picker) pulls in useOrgCapabilities →
+// useEffectiveSession → useQuery, which needs no real QueryClient if we mock
+// the capabilities hook. Default = single-org member (picker renders null), so
+// the pre-existing dialog tests are unaffected; picker tests override below.
+const { mockUseOrgCapabilities } = vi.hoisted(() => ({
+  mockUseOrgCapabilities: vi.fn(),
+}));
+vi.mock("@/shared/hooks/useOrgCapabilities", () => ({
+  useOrgCapabilities: () => mockUseOrgCapabilities(),
+}));
+
+function setOrgCapabilities(
+  override: Partial<ReturnType<typeof buildSingleOrgCaps>> = {},
+) {
+  mockUseOrgCapabilities.mockReturnValue({ ...buildSingleOrgCaps(), ...override });
+}
+function buildSingleOrgCaps() {
+  return {
+    isSuperadmin: false,
+    isMultiOrgMember: false,
+    isSingleOrgMember: true,
+    memberOrganizations: [{ id: "org-1", name: "Org One", slug: "org-1" }],
+    activeOrganizationId: "org-1",
+    isLoading: false,
+  };
+}
+
+beforeEach(() => {
+  setOrgCapabilities();
+});
 
 vi.mock("@/shared/components/ui/button", () => ({
   Button: ({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => (
@@ -105,6 +136,10 @@ describe("SqlConnectionFormDialog", () => {
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledWith({
         mode: "create",
+        // organizationId is null here because no defaultOrganizationId prop is
+        // passed in this test; the manager falls back to its active org
+        // (ADR-011 amendment 5/6). Single-org members never see the picker.
+        organizationId: null,
         input: {
           name: "Reporting DB",
           host: "db.example.com",
@@ -289,5 +324,125 @@ describe("SqlConnectionFormDialog", () => {
     expect(toast.error).toHaveBeenCalledWith(
       "self-signed certificate in certificate chain",
     );
+  });
+
+  // ── ADR-011 amendment 5/6 org picker ───────────────────────────────────
+
+  it("hides the org picker for a single-org member on create", () => {
+    setOrgCapabilities(); // default = single-org member
+    render(
+      <SqlConnectionFormDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        mode="create"
+        onSubmit={vi.fn()}
+        onTest={vi.fn()}
+        defaultOrganizationId="org-1"
+      />,
+    );
+    expect(screen.queryByTestId("sql-conn-org")).toBeNull();
+  });
+
+  it("shows the org picker for a superadmin on create", () => {
+    setOrgCapabilities({
+      isSuperadmin: true,
+      isSingleOrgMember: false,
+      memberOrganizations: [],
+    });
+    render(
+      <SqlConnectionFormDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        mode="create"
+        onSubmit={vi.fn()}
+        onTest={vi.fn()}
+        defaultOrganizationId="org-1"
+        organizations={[{ id: "org-9", name: "Any Org" }]}
+      />,
+    );
+    expect(screen.getByTestId("sql-conn-org")).toBeInTheDocument();
+  });
+
+  it("does NOT show the org picker on EDIT mode (owning org is immutable)", () => {
+    setOrgCapabilities({
+      isMultiOrgMember: true,
+      isSingleOrgMember: false,
+      memberOrganizations: [
+        { id: "org-1", name: "Org One", slug: "org-1" },
+        { id: "org-2", name: "Org Two", slug: "org-2" },
+      ],
+    });
+    render(
+      <SqlConnectionFormDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        mode="edit"
+        connection={{
+          id: "c1",
+          name: "Existing",
+          host: "h",
+          port: 5432,
+          database: "d",
+          username: "u",
+          ssl: false,
+          schemaName: "public",
+          status: "ready",
+          statusError: null,
+        } as never}
+        onSubmit={vi.fn()}
+        onTest={vi.fn()}
+        defaultOrganizationId="org-1"
+      />,
+    );
+    // Even for a multi-org member, edit mode hides the picker.
+    expect(screen.queryByTestId("sql-conn-org")).toBeNull();
+  });
+
+  it("shows the org picker for a multi-org member and forwards the owning org in the create payload", async () => {
+    setOrgCapabilities({
+      isMultiOrgMember: true,
+      isSingleOrgMember: false,
+      memberOrganizations: [
+        { id: "org-1", name: "Org One", slug: "org-1" },
+        { id: "org-2", name: "Org Two", slug: "org-2" },
+      ],
+    });
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const onTest = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <SqlConnectionFormDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        mode="create"
+        onSubmit={onSubmit}
+        onTest={onTest}
+        defaultOrganizationId="org-2"
+      />,
+    );
+
+    // Picker is visible for a multi-org member.
+    expect(screen.getByTestId("sql-conn-org")).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/^name$/i), "Reporting DB");
+    await user.type(screen.getByLabelText(/host/i), "db.example.com");
+    await user.clear(screen.getByLabelText(/port/i));
+    await user.type(screen.getByLabelText(/port/i), "5432");
+    await user.type(screen.getByLabelText(/^database/i), "reporting");
+    await user.type(screen.getByLabelText(/^username/i), "reader");
+    await user.type(screen.getByLabelText(/password/i), "typed-secret");
+    await user.click(screen.getByTestId("sql-conn-test"));
+    await waitFor(() => expect(onTest).toHaveBeenCalled());
+
+    await user.click(screen.getByTestId("sql-conn-submit"));
+
+    // The dialog owns the org selection and forwards it (default = org-2 here,
+    // the page's active org; a multi-org user could change it via the picker).
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ mode: "create", organizationId: "org-2" }),
+      );
+    });
   });
 });

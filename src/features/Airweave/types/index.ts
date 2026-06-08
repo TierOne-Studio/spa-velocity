@@ -56,6 +56,12 @@ export interface CreateCollectionInput {
    * random-suffix shape of the resulting `readable_id`.
    */
   slugHint?: string;
+  /**
+   * Optional target organization that will own the collection (ADR-011
+   * amendment 5/6). When omitted, the backend falls back to the active org.
+   * Forwarded verbatim in the request body.
+   */
+  organizationId?: string;
 }
 
 export interface UpdateCollectionInput {

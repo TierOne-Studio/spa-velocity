@@ -1,6 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { Button } from "@/shared/components/ui/button";
@@ -20,6 +20,9 @@ import {
   FieldGroup,
   FieldLabel,
 } from "@/shared/components/ui/field";
+import { OrgTargetField } from "@/shared/components/forms/OrgTargetField";
+import { useOrgCapabilities } from "@/shared/hooks/useOrgCapabilities";
+import { useOrganizations } from "@/features/Admin/hooks/useOrganizations";
 import {
   createCollectionSchema,
   type CreateCollectionForm,
@@ -44,27 +47,45 @@ type Props = {
 export function CreateCollectionDialog({ open, onOpenChange }: Props) {
   const navigate = useNavigate();
   const createMutation = useCreateAirweaveCollection();
+  const { isSuperadmin, activeOrganizationId } = useOrgCapabilities();
+
+  // Superadmin picks from all orgs; everyone else from their memberships
+  // (OrgTargetField sources memberships internally). Only fetch for superadmin.
+  const { data: orgsResponse } = useOrganizations(
+    { page: 1, limit: 100 },
+    { enabled: isSuperadmin && open },
+  );
+  const organizations = useMemo(
+    () => orgsResponse?.data ?? [],
+    [orgsResponse],
+  );
 
   const {
     register,
     handleSubmit,
     reset,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<CreateCollectionForm>({
     resolver: zodResolver(createCollectionSchema),
-    defaultValues: { name: "", slugHint: "" },
+    defaultValues: { name: "", slugHint: "", organizationId: activeOrganizationId },
   });
 
   // Reset the form when the dialog re-opens so stale values don't appear.
+  // organizationId defaults to the active org (single-org users never see the
+  // picker, so this default is what gets submitted for them).
   useEffect(() => {
-    if (open) reset({ name: "", slugHint: "" });
-  }, [open, reset]);
+    if (open) {
+      reset({ name: "", slugHint: "", organizationId: activeOrganizationId });
+    }
+  }, [open, reset, activeOrganizationId]);
 
   const onSubmit = async (values: CreateCollectionForm) => {
     try {
       const collection = await createMutation.mutateAsync({
         name: values.name,
         slugHint: values.slugHint || undefined,
+        organizationId: values.organizationId ?? undefined,
       });
       toast.success(`Collection "${collection.name}" created.`);
       onOpenChange(false);
@@ -120,6 +141,27 @@ export function CreateCollectionDialog({ open, onOpenChange }: Props) {
               </FieldDescription>
               <FieldError errors={[errors.slugHint]} />
             </Field>
+
+            {/*
+             * Org picker (ADR-011 amendment 5/6). Renders nothing for
+             * single-org members (their org is the default); a dropdown for
+             * multi-org members and superadmin. The collection lands in the
+             * selected org's allowlist.
+             */}
+            <Controller
+              control={control}
+              name="organizationId"
+              render={({ field }) => (
+                <OrgTargetField
+                  value={field.value ?? null}
+                  onChange={field.onChange}
+                  disabled={isSubmitting}
+                  organizations={organizations}
+                  helpText="The collection will be owned by this organization."
+                  testId="create-collection-org"
+                />
+              )}
+            />
           </FieldGroup>
 
           <DialogFooter className="mt-4">

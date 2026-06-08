@@ -1,8 +1,9 @@
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { IconEdit, IconPlus, IconTrash, IconPlayerPlay } from "@tabler/icons-react"
 import { toast } from "sonner"
 
 import { Button } from "@/shared/components/ui/button"
+import { useOrgCapabilities } from "@/shared/hooks/useOrgCapabilities"
 
 import {
     useDeleteSqlConnection,
@@ -12,6 +13,7 @@ import {
     useCreateSqlConnection,
     useUpdateSqlConnection,
 } from "../hooks/useSqlConnections"
+import { useOrganizations } from "../hooks/useOrganizations"
 import type { SqlConnection } from "../types"
 import {
     formatSqlConnectionDisplay,
@@ -43,6 +45,15 @@ export function OrganizationSqlConnectionsSection({
     const connectionsQuery = useSqlConnections(organizationId, {
         enabled: Boolean(organizationId),
     })
+    const { isSuperadmin } = useOrgCapabilities()
+    // Superadmin picks the owning org from all orgs; non-superadmins are
+    // constrained to their memberships (OrgTargetField sources those itself).
+    // Fetched only for superadmin; TanStack Query caches the result.
+    const { data: orgsResponse } = useOrganizations(
+        { page: 1, limit: 100 },
+        { enabled: isSuperadmin },
+    )
+    const organizations = useMemo(() => orgsResponse?.data ?? [], [orgsResponse])
     const createMutation = useCreateSqlConnection()
     const updateMutation = useUpdateSqlConnection()
     const deleteMutation = useDeleteSqlConnection()
@@ -181,6 +192,8 @@ export function OrganizationSqlConnectionsSection({
                 onOpenChange={setFormOpen}
                 mode={editing ? "edit" : "create"}
                 connection={editing}
+                defaultOrganizationId={organizationId ?? null}
+                organizations={organizations}
                 submitPending={createMutation.isPending || updateMutation.isPending}
                 testPending={credentialTestMutation.isPending}
                 onTest={async (input) => {
@@ -189,9 +202,11 @@ export function OrganizationSqlConnectionsSection({
                 }}
                 onSubmit={async (payload) => {
                     if (payload.mode === "create") {
+                        // The dialog's org picker wins; fall back to the page's
+                        // active org for single-org users (picker hidden).
                         await createMutation.mutateAsync({
                             ...payload.input,
-                            organizationId,
+                            organizationId: payload.organizationId ?? organizationId,
                         })
                         toast.success("SQL connection created")
                         return
