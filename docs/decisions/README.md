@@ -18,6 +18,7 @@ Append-only. Don't edit accepted ADRs except to update Status (Accepted → Supe
 | [ADR-008](ADR-008-no-ai-attribution-in-commits.md) | No AI-attribution trailers in commits, PRs, or issues | Accepted | 2026-05-09 |
 | [ADR-009](ADR-009-asks-first-dependency-gate.md) | Asks-first dependency gate | Accepted | 2026-05-09 |
 | [ADR-010](ADR-010-skill-vs-repo-conflict-resolution.md) | Skill-vs-repo conflict resolution | Accepted | 2026-05-09 |
+| [ADR-011](ADR-011-spec-first-documentation-workflow.md) | Specification-first documentation workflow | Accepted | 2026-06-04 |
 
 ## Adding an ADR
 
