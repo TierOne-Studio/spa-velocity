@@ -58,6 +58,33 @@ async function mockProjectsApi(
     });
   });
 
+  await page.route('**/api/vector-dbs**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: [
+          {
+            id: 'vdb-1',
+            organizationId,
+            name: 'Handbook',
+            description: null,
+            vectorStoreKind: 'qdrant',
+            vectorStoreRef: 'vdb_vdb-1',
+            status: 'ready',
+            statusError: null,
+            documentCount: 2,
+            version: 1,
+            processingStartedAt: null,
+            lastIngestedAt: null,
+            createdAt: '',
+            updatedAt: '',
+          },
+        ],
+      }),
+    });
+  });
+
   await page.route('**/api/projects**', async (route, request) => {
     const url = new URL(request.url());
     const method = request.method();
@@ -217,6 +244,32 @@ test.describe('Projects CRUD', () => {
 
     await expect(page.getByText(/project created/i)).toBeVisible({ timeout: 10000 });
     expect(calls.create.length).toBeGreaterThan(0);
+  });
+
+  test('creates a project with a vector_db source attached', async ({ page }) => {
+    const calls = { create: [] as unknown[] };
+    await mockProjectsApi(page, [], calls);
+    await loginAndSetOrg(page);
+    await page.goto('/projects', { waitUntil: 'domcontentloaded' });
+
+    await page.getByTestId('projects-new-button').click();
+    await expect(page.getByTestId('project-form-dialog')).toBeVisible();
+
+    await page.getByLabel('Name').fill('RAG Project');
+    await page.getByRole('button', { name: /select vector databases/i }).click();
+    await page.getByRole('option', { name: /handbook/i }).click();
+    await page.keyboard.press('Escape');
+    await page.getByTestId('project-form-submit').click();
+
+    await expect(page.getByText(/project created/i)).toBeVisible({ timeout: 10000 });
+    const created = calls.create[0] as { initialSources?: Array<{ kind: string; config: { vectorDbId: string } }> };
+    expect(created.initialSources).toEqual([
+      {
+        kind: 'vector_db',
+        name: 'Handbook',
+        config: { vectorDbId: 'vdb-1', vectorDbName: 'Handbook' },
+      },
+    ]);
   });
 
   test('opens the edit dialog with Organization disabled and keeps row in place', async ({ page }) => {

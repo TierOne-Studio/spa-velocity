@@ -2,6 +2,7 @@ import * as React from "react"
 import { Link, useLocation } from "react-router-dom"
 import {
   IconBooks,
+  IconBrain,
   IconBuilding,
   IconChartBar,
   IconDatabase,
@@ -100,7 +101,8 @@ const getNavItems = (
           pathname.startsWith("/chat") ||
           pathname.startsWith("/projects") ||
           pathname.startsWith("/collections") ||
-          pathname.startsWith("/sql-connections"),
+          pathname.startsWith("/sql-connections") ||
+          pathname.startsWith("/vector-dbs"),
         items: [
           ...(can("chat", "read")
             ? [
@@ -143,6 +145,16 @@ const getNavItems = (
                   url: "/sql-connections",
                   icon: IconDatabase,
                   isActive: pathname.startsWith("/sql-connections"),
+                },
+              ]
+            : []),
+          ...(can("vector-db", "read")
+            ? [
+                {
+                  title: "Vector Databases",
+                  url: "/vector-dbs",
+                  icon: IconBrain,
+                  isActive: pathname.startsWith("/vector-dbs"),
                 },
               ]
             : []),

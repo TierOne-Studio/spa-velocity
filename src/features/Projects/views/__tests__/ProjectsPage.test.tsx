@@ -69,6 +69,10 @@ vi.mock("@/features/Admin/hooks/useSqlConnections", () => ({
   useSqlConnections: () => ({ data: [], isLoading: false, error: null }),
 }));
 
+vi.mock("@/features/VectorDb/hooks/useVectorDbs", () => ({
+  useVectorDbs: () => ({ data: [], isLoading: false }),
+}));
+
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));

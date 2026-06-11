@@ -24,6 +24,7 @@ import {
 } from "@/features/Admin/hooks/useOrganizations";
 import { useAirweaveCollections } from "@/features/Admin/hooks/useAirweaveCollections";
 import { useSqlConnections } from "@/features/Admin/hooks/useSqlConnections";
+import { useVectorDbs } from "@/features/VectorDb/hooks/useVectorDbs";
 
 import {
   useCreateProject,
@@ -93,6 +94,26 @@ function getDatabaseSourceIdByConnectionId(
   return match ? match.id : null;
 }
 
+function getVectorDbIds(sources: ProjectDataSource[]): string[] {
+  return sources
+    .filter((s): s is ProjectDataSource & { kind: "vector_db" } =>
+      s.kind === "vector_db",
+    )
+    .map((s) => s.config.vectorDbId)
+    .filter((id) => id.length > 0);
+}
+
+function getVectorDbSourceIdByVectorDbId(
+  sources: ProjectDataSource[],
+  vectorDbId: string,
+): string | null {
+  const match = sources.find(
+    (s): s is ProjectDataSource & { kind: "vector_db" } =>
+      s.kind === "vector_db" && s.config.vectorDbId === vectorDbId,
+  );
+  return match ? match.id : null;
+}
+
 export function ProjectFormDialog({ open, onOpenChange, project }: Props) {
   const isEdit = !!project;
   const { isSuperadmin, activeOrganizationId: activeOrgId } = useOrgCapabilities();
@@ -112,6 +133,7 @@ export function ProjectFormDialog({ open, onOpenChange, project }: Props) {
   const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [selectedCollectionIds, setSelectedCollectionIds] = useState<string[]>([]);
   const [selectedConnectionIds, setSelectedConnectionIds] = useState<string[]>([]);
+  const [selectedVectorDbIds, setSelectedVectorDbIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (!open) return;
@@ -121,12 +143,14 @@ export function ProjectFormDialog({ open, onOpenChange, project }: Props) {
       setOrganizationId(project.organizationId);
       setSelectedCollectionIds(getAirweaveCollectionIds(project.sources));
       setSelectedConnectionIds(getDatabaseConnectionIds(project.sources));
+      setSelectedVectorDbIds(getVectorDbIds(project.sources));
     } else {
       setName("");
       setDescription("");
       setOrganizationId(activeOrgId);
       setSelectedCollectionIds([]);
       setSelectedConnectionIds([]);
+      setSelectedVectorDbIds([]);
     }
   }, [open, project, activeOrgId]);
 
@@ -192,6 +216,23 @@ export function ProjectFormDialog({ open, onOpenChange, project }: Props) {
       }));
   }, [sqlConnections, selectedConnectionIds]);
 
+  // `useVectorDbs` is scoped to the caller's active organization (like
+  // `useAirweaveCollections`), so the list reflects the active org. For a
+  // superadmin who targets a different org, the API still rejects a cross-org
+  // attach (404), so this is a benign list-staleness, not a correctness hole.
+  const { data: vectorDbsData, isLoading: vectorDbsLoading } = useVectorDbs();
+
+  const vectorDbOptions = useMemo<MultiSelectOption[]>(() => {
+    // Show every vector database (not just `ready`): one legitimately starts
+    // `empty` and becomes searchable after ingestion, so users must be able to
+    // attach it ahead of time. Surface the status so the readiness is visible.
+    return (vectorDbsData ?? []).map((db) => ({
+      value: db.id,
+      label: db.name,
+      description: db.status === "ready" ? "ready" : db.status,
+    }));
+  }, [vectorDbsData]);
+
   const isSubmitting =
     createProject.isPending ||
     updateProject.isPending ||
@@ -212,6 +253,7 @@ export function ProjectFormDialog({ open, onOpenChange, project }: Props) {
     const sqlConnectionsById = new Map(
       (sqlConnections ?? []).map((c) => [c.id, c]),
     );
+    const vectorDbsById = new Map((vectorDbsData ?? []).map((db) => [db.id, db]));
 
     if (isEdit && project) {
       try {
@@ -291,6 +333,40 @@ export function ProjectFormDialog({ open, onOpenChange, project }: Props) {
           });
         }
 
+        const existingVectorDbs = getVectorDbIds(project.sources);
+        const existingVectorDbsSet = new Set(existingVectorDbs);
+        const selectedVectorDbsSet = new Set(selectedVectorDbIds);
+        const vectorDbsToAdd = selectedVectorDbIds.filter(
+          (id) => !existingVectorDbsSet.has(id),
+        );
+        const vectorDbsToRemove = existingVectorDbs.filter(
+          (id) => !selectedVectorDbsSet.has(id),
+        );
+
+        for (const vectorDbId of vectorDbsToAdd) {
+          const match = vectorDbsById.get(vectorDbId);
+          if (!match) continue;
+          const input: CreateDataSourceInput = {
+            kind: "vector_db",
+            name: match.name,
+            config: { vectorDbId, vectorDbName: match.name },
+          };
+          await addSource.mutateAsync({ projectId: project.id, input, organizationId });
+        }
+
+        for (const vectorDbId of vectorDbsToRemove) {
+          const sourceId = getVectorDbSourceIdByVectorDbId(
+            project.sources,
+            vectorDbId,
+          );
+          if (!sourceId) continue;
+          await removeSource.mutateAsync({
+            projectId: project.id,
+            sourceId,
+            organizationId,
+          });
+        }
+
         toast.success("Project updated.");
         onOpenChange(false);
       } catch (err) {
@@ -320,6 +396,17 @@ export function ProjectFormDialog({ open, onOpenChange, project }: Props) {
               kind: "database",
               name: match.name,
               config: { connectionId, connectionName: match.name },
+            };
+          })
+          .filter((v): v is CreateDataSourceInput => v !== null),
+        ...selectedVectorDbIds
+          .map((vectorDbId): CreateDataSourceInput | null => {
+            const match = vectorDbsById.get(vectorDbId);
+            if (!match) return null;
+            return {
+              kind: "vector_db",
+              name: match.name,
+              config: { vectorDbId, vectorDbName: match.name },
             };
           })
           .filter((v): v is CreateDataSourceInput => v !== null),
@@ -376,6 +463,7 @@ export function ProjectFormDialog({ open, onOpenChange, project }: Props) {
               setOrganizationId(id);
               setSelectedCollectionIds([]);
               setSelectedConnectionIds([]);
+              setSelectedVectorDbIds([]);
             }}
             disabled={isEdit}
             organizations={organizations.map((o) => ({ id: o.id, name: o.name }))}
@@ -429,6 +517,27 @@ export function ProjectFormDialog({ open, onOpenChange, project }: Props) {
             <p className="text-xs text-muted-foreground">
               Databases the chat agent can query read-only. Only connections with status
               &quot;ready&quot; appear here.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Vector databases</Label>
+            <MultiSelectCombobox
+              options={vectorDbOptions}
+              value={selectedVectorDbIds}
+              onChange={setSelectedVectorDbIds}
+              placeholder={
+                vectorDbsLoading
+                  ? "Loading vector databases…"
+                  : "Select vector databases"
+              }
+              emptyMessage="No vector databases available. Create one in the Vector databases section."
+              disabled={vectorDbsLoading}
+              data-testid="project-vector-dbs-select"
+            />
+            <p className="text-xs text-muted-foreground">
+              Uploaded-document collections the chat agent retrieves from. A
+              database becomes searchable once its status is &quot;ready&quot;.
             </p>
           </div>
         </div>
