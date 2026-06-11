@@ -241,6 +241,36 @@ describe('vectorDbService', () => {
       });
     });
 
+    it('rejects with VectorDbApiError when 2xx response has data: null', async () => {
+      xhrMock.status = 201;
+      xhrMock.responseText = JSON.stringify({ data: null });
+
+      xhrMock.addEventListener.mockImplementation((event: string, cb: () => void) => {
+        if (event === 'load') setTimeout(cb, 0);
+      });
+
+      const file = new File(['x'], 'x.txt', { type: 'text/plain' });
+      await expect(uploadVectorDb('vdb-1', file)).rejects.toMatchObject({
+        name: 'VectorDbApiError',
+        message: expect.stringContaining('Invalid response'),
+      });
+    });
+
+    it('rejects with VectorDbApiError when 2xx response lacks the data envelope', async () => {
+      xhrMock.status = 201;
+      xhrMock.responseText = JSON.stringify({ unexpected: true });
+
+      xhrMock.addEventListener.mockImplementation((event: string, cb: () => void) => {
+        if (event === 'load') setTimeout(cb, 0);
+      });
+
+      const file = new File(['x'], 'x.txt', { type: 'text/plain' });
+      await expect(uploadVectorDb('vdb-1', file)).rejects.toMatchObject({
+        name: 'VectorDbApiError',
+        message: expect.stringContaining('Invalid response'),
+      });
+    });
+
     it('rejects with VectorDbApiError when 2xx response body is invalid JSON', async () => {
       xhrMock.status = 201;
       xhrMock.responseText = 'not-json';

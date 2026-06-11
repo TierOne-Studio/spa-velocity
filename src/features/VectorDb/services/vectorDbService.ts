@@ -1,5 +1,5 @@
 import { fetchWithAuth } from '@/shared/lib/fetch-with-auth';
-import { VectorDbApiError, parseVectorDbResponse } from '../lib/apiResponse';
+import { VectorDbApiError, parseVectorDbResponse, requireVectorDbData } from '../lib/apiResponse';
 import type {
   CreateVectorDbInput,
   IngestionJob,
@@ -15,7 +15,7 @@ function vectorDbUrl(path = ''): string {
 
 export async function listVectorDb(): Promise<VectorDb[]> {
   const response = await fetchWithAuth(vectorDbUrl());
-  return parseVectorDbResponse<VectorDb[]>(
+  return requireVectorDbData<VectorDb[]>(
     response,
     'Failed to fetch vector databases',
   );
@@ -23,7 +23,7 @@ export async function listVectorDb(): Promise<VectorDb[]> {
 
 export async function getVectorDb(id: string): Promise<VectorDb> {
   const response = await fetchWithAuth(vectorDbUrl(`/${encodeURIComponent(id)}`));
-  return parseVectorDbResponse<VectorDb>(
+  return requireVectorDbData<VectorDb>(
     response,
     `Failed to fetch vector database '${id}'`,
   );
@@ -37,7 +37,7 @@ export async function createVectorDb(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   });
-  return parseVectorDbResponse<VectorDb>(
+  return requireVectorDbData<VectorDb>(
     response,
     'Failed to create vector database',
   );
@@ -52,7 +52,7 @@ export async function updateVectorDb(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   });
-  return parseVectorDbResponse<VectorDb>(
+  return requireVectorDbData<VectorDb>(
     response,
     `Failed to update vector database '${id}'`,
   );
@@ -60,7 +60,7 @@ export async function updateVectorDb(
 
 export async function listVectorDbFiles(id: string): Promise<IngestionJob[]> {
   const response = await fetchWithAuth(vectorDbUrl(`/${encodeURIComponent(id)}/files`));
-  return parseVectorDbResponse<IngestionJob[]>(response, `Failed to list files for vector database '${id}'`);
+  return requireVectorDbData<IngestionJob[]>(response, `Failed to list files for vector database '${id}'`);
 }
 
 export async function deleteVectorDbFile(id: string, jobId: string): Promise<void> {
@@ -101,8 +101,16 @@ export function uploadVectorDb(
     xhr.addEventListener('load', () => {
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
-          const body = JSON.parse(xhr.responseText) as { data: IngestionJob };
-          resolve(body.data);
+          const parsed: unknown = JSON.parse(xhr.responseText);
+          if (
+            parsed !== null &&
+            typeof parsed === 'object' &&
+            (parsed as { data?: unknown }).data != null
+          ) {
+            resolve((parsed as { data: IngestionJob }).data);
+          } else {
+            reject(new VectorDbApiError('Invalid response from server', xhr.status, parsed));
+          }
         } catch {
           reject(new VectorDbApiError('Invalid response from server', xhr.status, null));
         }
