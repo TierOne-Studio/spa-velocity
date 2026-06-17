@@ -258,7 +258,17 @@ test.describe('Projects CRUD', () => {
     await page.getByLabel('Name').fill('RAG Project');
     await page.getByRole('button', { name: /select vector databases/i }).click();
     await page.getByRole('option', { name: /handbook/i }).click();
-    await page.keyboard.press('Escape');
+    // Close the multi-select popover via its trigger (not Escape) and wait for
+    // the listbox to unmount before submitting. An open popover keeps
+    // re-rendering (floating-ui re-positioning), which detaches the submit
+    // button mid-click; closing it deterministically removes that race.
+    await page
+      .getByRole('button', { name: /select vector databases/i })
+      .click();
+    await expect(page.getByRole('listbox')).toBeHidden();
+    await expect(
+      page.getByRole('button', { name: /remove handbook/i }),
+    ).toBeVisible();
     await page.getByTestId('project-form-submit').click();
 
     await expect(page.getByText(/project created/i)).toBeVisible({ timeout: 10000 });
