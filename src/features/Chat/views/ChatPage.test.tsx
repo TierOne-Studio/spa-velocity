@@ -41,7 +41,7 @@ vi.mock("@/features/Projects/hooks/useProjects", () => ({
           projectId: "project-1",
           kind: "airweave_collection",
           name: "Guides",
-          config: { collectionReadableId: "guides", collectionName: "Guides" },
+          config: { airweaveCollectionReadableId: "guides", airweaveCollectionName: "Guides" },
           status: "ready",
           statusDetail: null,
           createdAt: "2026-04-03T00:00:00.000Z",

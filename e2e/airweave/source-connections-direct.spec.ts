@@ -87,7 +87,7 @@ test.describe('Airweave Source Connections — direct auth (admin)', () => {
 
     await expect.poll(() => calls.createSource.length).toBe(1);
     const sent = calls.createSource[0];
-    expect(sent.collectionReadableId).toBe(COLLECTION_READABLE_ID);
+    expect(sent.airweaveCollectionReadableId).toBe(COLLECTION_READABLE_ID);
     expect(sent.body).toMatchObject({
       name: 'Production Postgres',
       shortName: 'postgresql',
@@ -142,7 +142,7 @@ test.describe('Airweave Source Connections — direct auth (admin)', () => {
       id: 'src-existing',
       name: 'Existing Source',
       shortName: 'postgresql',
-      collectionReadableId: COLLECTION_READABLE_ID,
+      airweaveCollectionReadableId: COLLECTION_READABLE_ID,
       createdAt: '',
       updatedAt: '',
       isAuthenticated: true,

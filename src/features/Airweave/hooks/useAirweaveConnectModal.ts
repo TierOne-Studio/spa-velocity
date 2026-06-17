@@ -33,7 +33,7 @@ export interface UseAirweaveConnectModalProps {
   /** Backend call that returns a fresh session token (create or reauth). */
   getSessionToken: () => Promise<string>;
   /** Used to invalidate the right cache slice on successful connect. */
-  collectionReadableId: string;
+  airweaveCollectionReadableId: string;
   /**
    * Light or dark color scheme for the SDK iframe widget. The SDK
    * appends `?theme=<mode>` to the iframe URL — without it the widget
@@ -96,7 +96,7 @@ const CONNECT_URL = validateConnectUrl(
 
 export function useAirweaveConnectModal({
   getSessionToken,
-  collectionReadableId,
+  airweaveCollectionReadableId,
   theme,
   onConnected,
   onCancelled,
@@ -124,16 +124,16 @@ export function useAirweaveConnectModal({
   const handleSuccess = useCallback(
     (connectionId: string) => {
       queryClient.invalidateQueries({
-        queryKey: airweaveKeys.sourceConnections(collectionReadableId),
+        queryKey: airweaveKeys.sourceConnections(airweaveCollectionReadableId),
       });
       queryClient.invalidateQueries({
-        queryKey: airweaveKeys.detail(collectionReadableId),
+        queryKey: airweaveKeys.detail(airweaveCollectionReadableId),
       });
       toast.success('Source connection authenticated.');
       onConnected?.(connectionId);
       restoreFocus();
     },
-    [collectionReadableId, onConnected, queryClient, restoreFocus],
+    [airweaveCollectionReadableId, onConnected, queryClient, restoreFocus],
   );
 
   const handleError = useCallback(

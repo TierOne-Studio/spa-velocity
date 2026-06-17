@@ -99,7 +99,7 @@ function renderDialog(overrides: Partial<{
 }> = {}) {
   return render(
     <CreateSourceConnectionDialog
-      collectionReadableId="acme-x-deadbeef"
+      airweaveCollectionReadableId="acme-x-deadbeef"
       open
       onOpenChange={overrides.onOpenChange ?? vi.fn()}
     />,
@@ -212,7 +212,7 @@ describe("CreateSourceConnectionDialog — DirectAuthForm parse-then-validate", 
     await submitDirect('{"token":"xoxb-secret"}');
     await waitFor(() => {
       expect(mockMutateAsync).toHaveBeenCalledWith({
-        collectionReadableId: "acme-x-deadbeef",
+        airweaveCollectionReadableId: "acme-x-deadbeef",
         input: {
           name: "Pg",
           shortName: "postgresql",

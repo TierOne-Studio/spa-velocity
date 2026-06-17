@@ -80,7 +80,7 @@ describe('useAirweaveCollectionDetail', () => {
     expect(result.current.data?.id).toBe('c1');
   });
 
-  it('does not fetch when collectionReadableId is empty', () => {
+  it('does not fetch when airweaveCollectionReadableId is empty', () => {
     const { Wrapper } = makeWrapper();
     const { result } = renderHook(() => useAirweaveCollectionDetail(''), {
       wrapper: Wrapper,
@@ -121,7 +121,7 @@ describe('useUpdateAirweaveCollection', () => {
     });
 
     await result.current.mutateAsync({
-      collectionReadableId: 'acme-y-cafefeed',
+      airweaveCollectionReadableId: 'acme-y-cafefeed',
       input: { name: 'Renamed' },
     });
 
@@ -138,7 +138,7 @@ describe('useDeleteAirweaveCollection', () => {
   it('on success: invalidates lists + removes detail/source-conns caches', async () => {
     mockFetch.mockResolvedValue(
       jsonResponse({
-        data: { deleted: true, collectionId: 'acme-y-cafefeed' },
+        data: { deleted: true, airweaveCollectionId: 'acme-y-cafefeed' },
       }),
     );
     const { queryClient, Wrapper } = makeWrapper();

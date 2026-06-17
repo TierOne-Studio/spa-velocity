@@ -7,7 +7,7 @@ import type {
 } from '../types';
 
 type Variables = {
-  collectionReadableId: string;
+  airweaveCollectionReadableId: string;
   input: CreateSourceConnectionInput;
 };
 
@@ -31,14 +31,14 @@ export function useCreateAirweaveSourceConnection() {
   const queryClient = useQueryClient();
 
   return useMutation<CreateSourceConnectionResult, Error, Variables>({
-    mutationFn: ({ collectionReadableId, input }) =>
-      createSourceConnection(collectionReadableId, input),
-    onSuccess: (_data, { collectionReadableId }) => {
+    mutationFn: ({ airweaveCollectionReadableId, input }) =>
+      createSourceConnection(airweaveCollectionReadableId, input),
+    onSuccess: (_data, { airweaveCollectionReadableId }) => {
       queryClient.invalidateQueries({
-        queryKey: airweaveKeys.sourceConnections(collectionReadableId),
+        queryKey: airweaveKeys.sourceConnections(airweaveCollectionReadableId),
       });
       queryClient.invalidateQueries({
-        queryKey: airweaveKeys.detail(collectionReadableId),
+        queryKey: airweaveKeys.detail(airweaveCollectionReadableId),
       });
       // Also invalidate lists so the table's `sourceConnectionCount` column
       // refreshes if the user navigates back to /admin/airweave.

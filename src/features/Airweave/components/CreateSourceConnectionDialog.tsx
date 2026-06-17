@@ -24,7 +24,7 @@ import { useCreateAirweaveSourceConnection } from "@/features/Airweave/hooks/use
 import { scrubSessionToken } from "@/features/Airweave/lib/scrub-session-token";
 
 type Props = {
-  collectionReadableId: string;
+  airweaveCollectionReadableId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 };
@@ -62,7 +62,7 @@ type DirectFormShape = {
  * is overkill (you already have a Postgres DSN in clipboard, etc.).
  */
 export function CreateSourceConnectionDialog({
-  collectionReadableId,
+  airweaveCollectionReadableId,
   open,
   onOpenChange,
 }: Props) {
@@ -88,7 +88,7 @@ export function CreateSourceConnectionDialog({
           onSubmit={async (input) => {
             try {
               await createMutation.mutateAsync({
-                collectionReadableId,
+                airweaveCollectionReadableId,
                 input: {
                   name: input.name,
                   shortName: input.shortName,

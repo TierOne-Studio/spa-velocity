@@ -4,7 +4,7 @@ import { airweaveKeys } from './airweaveKeys';
 
 type Variables = {
   sourceConnectionId: string;
-  collectionReadableId: string;
+  airweaveCollectionReadableId: string;
 };
 
 /**
@@ -20,12 +20,12 @@ export function useDeleteAirweaveSourceConnection() {
   return useMutation<void, Error, Variables>({
     mutationFn: ({ sourceConnectionId }) =>
       deleteSourceConnection(sourceConnectionId),
-    onSuccess: (_data, { collectionReadableId }) => {
+    onSuccess: (_data, { airweaveCollectionReadableId }) => {
       queryClient.invalidateQueries({
-        queryKey: airweaveKeys.sourceConnections(collectionReadableId),
+        queryKey: airweaveKeys.sourceConnections(airweaveCollectionReadableId),
       });
       queryClient.invalidateQueries({
-        queryKey: airweaveKeys.detail(collectionReadableId),
+        queryKey: airweaveKeys.detail(airweaveCollectionReadableId),
       });
       // List view shows sourceConnectionCount — refresh that too.
       queryClient.invalidateQueries({ queryKey: airweaveKeys.all });

@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { deleteCollection } from '../services/collections.service';
+import { deleteCollection } from '../services/airweave-collections.service';
 import { airweaveKeys } from './airweaveKeys';
 
 /**
@@ -7,7 +7,7 @@ import { airweaveKeys } from './airweaveKeys';
  * 409 with a `{projects: [{id,name}]}` body when active
  * `project_data_source` rows still reference the collection. The caller
  * inspects `AirweaveApiError.body.projects` to render the "in use by"
- * dialog state (see `DeleteCollectionDialog` in Step 3).
+ * dialog state (see `DeleteAirweaveCollectionDialog` in Step 3).
  *
  * On success (204 / 200 envelope), invalidates ALL airweave lists so
  * the deleted row disappears from the table AND from the legacy
@@ -17,14 +17,14 @@ export function useDeleteAirweaveCollection() {
   const queryClient = useQueryClient();
 
   return useMutation<void, Error, string>({
-    mutationFn: (collectionReadableId) => deleteCollection(collectionReadableId),
-    onSuccess: (_data, collectionReadableId) => {
+    mutationFn: (airweaveCollectionReadableId) => deleteCollection(airweaveCollectionReadableId),
+    onSuccess: (_data, airweaveCollectionReadableId) => {
       queryClient.invalidateQueries({ queryKey: airweaveKeys.all });
       queryClient.removeQueries({
-        queryKey: airweaveKeys.detail(collectionReadableId),
+        queryKey: airweaveKeys.detail(airweaveCollectionReadableId),
       });
       queryClient.removeQueries({
-        queryKey: airweaveKeys.sourceConnections(collectionReadableId),
+        queryKey: airweaveKeys.sourceConnections(airweaveCollectionReadableId),
       });
     },
   });

@@ -21,8 +21,8 @@ import {
   FieldLabel,
 } from "@/shared/components/ui/field";
 import {
-  createCollectionSchema,
-  type CreateCollectionForm,
+  createAirweaveCollectionSchema,
+  type CreateAirweaveCollectionForm,
 } from "@/features/Airweave/schemas/airweave.schema";
 import { useCreateAirweaveCollection } from "@/features/Airweave/hooks/useCreateAirweaveCollection";
 
@@ -41,7 +41,7 @@ type Props = {
  * surfaces the backend message verbatim — it names the offending
  * `readable_id` per ADR-011 § Decision 10 + R5 audit-log message contract.
  */
-export function CreateCollectionDialog({ open, onOpenChange }: Props) {
+export function CreateAirweaveCollectionDialog({ open, onOpenChange }: Props) {
   const navigate = useNavigate();
   const createMutation = useCreateAirweaveCollection();
 
@@ -50,8 +50,8 @@ export function CreateCollectionDialog({ open, onOpenChange }: Props) {
     handleSubmit,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<CreateCollectionForm>({
-    resolver: zodResolver(createCollectionSchema),
+  } = useForm<CreateAirweaveCollectionForm>({
+    resolver: zodResolver(createAirweaveCollectionSchema),
     defaultValues: { name: "", slugHint: "" },
   });
 
@@ -60,20 +60,20 @@ export function CreateCollectionDialog({ open, onOpenChange }: Props) {
     if (open) reset({ name: "", slugHint: "" });
   }, [open, reset]);
 
-  const onSubmit = async (values: CreateCollectionForm) => {
+  const onSubmit = async (values: CreateAirweaveCollectionForm) => {
     try {
       const collection = await createMutation.mutateAsync({
         name: values.name,
         slugHint: values.slugHint || undefined,
       });
-      toast.success(`Collection "${collection.name}" created.`);
+      toast.success(`Airweave Collection "${collection.name}" created.`);
       onOpenChange(false);
       navigate(
         `/admin/airweave/${encodeURIComponent(collection.readableId)}`,
       );
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Failed to create collection";
+        error instanceof Error ? error.message : "Failed to create Airweave Collection";
       toast.error(message);
     }
   };

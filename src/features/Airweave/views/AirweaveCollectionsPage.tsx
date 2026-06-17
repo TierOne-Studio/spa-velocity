@@ -34,9 +34,9 @@ import {
 import { usePermissionsContext } from "@/shared/context/PermissionsContext";
 import { useAirweaveCollections } from "@/features/Admin/hooks/useAirweaveCollections";
 import type { AirweaveCollection } from "@/features/Airweave/types";
-import { CreateCollectionDialog } from "@/features/Airweave/components/CreateCollectionDialog";
-import { RenameCollectionDialog } from "@/features/Airweave/components/RenameCollectionDialog";
-import { DeleteCollectionDialog } from "@/features/Airweave/components/DeleteCollectionDialog";
+import { CreateAirweaveCollectionDialog } from "@/features/Airweave/components/CreateAirweaveCollectionDialog";
+import { RenameAirweaveCollectionDialog } from "@/features/Airweave/components/RenameAirweaveCollectionDialog";
+import { DeleteAirweaveCollectionDialog } from "@/features/Airweave/components/DeleteAirweaveCollectionDialog";
 
 /**
  * `/admin/airweave` — manage Airweave collections owned by the active
@@ -79,14 +79,14 @@ export function AirweaveCollectionsPage() {
         {canCreate && (
           <Button onClick={() => setCreateOpen(true)}>
             <IconPlus className="mr-2 h-4 w-4" />
-            Create Collection
+            Create Airweave Collection
           </Button>
         )}
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Collections ({collections?.length ?? 0})</CardTitle>
+          <CardTitle>Airweave Collections ({collections?.length ?? 0})</CardTitle>
           <CardDescription>
             Click a row to manage source connections. Only collections owned by
             this organization are listed.
@@ -97,12 +97,12 @@ export function AirweaveCollectionsPage() {
             placeholder="Search by name…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            aria-label="Search collections"
+            aria-label="Search Airweave Collections"
           />
 
           {isError && (
             <p className="text-sm text-destructive">
-              Failed to load collections:{" "}
+              Failed to load Airweave Collections:{" "}
               {error instanceof Error ? error.message : "unknown error"}
             </p>
           )}
@@ -147,7 +147,7 @@ export function AirweaveCollectionsPage() {
                           }}
                           tabIndex={0}
                           role="link"
-                          aria-label={`Manage collection ${collection.name}`}
+                          aria-label={`Manage Airweave Collection ${collection.name}`}
                         >
                           <TableCell className="font-medium">{collection.name}</TableCell>
                           <TableCell className="font-mono text-xs text-muted-foreground">
@@ -211,8 +211,8 @@ export function AirweaveCollectionsPage() {
                       <TableRow>
                         <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                           {search
-                            ? "No collections match that search."
-                            : "No collections yet. Click Create Collection to get started."}
+                            ? "No Airweave Collections match that search."
+                            : "No Airweave Collections yet. Click Create Airweave Collection to get started."}
                         </TableCell>
                       </TableRow>
                     )}
@@ -223,20 +223,20 @@ export function AirweaveCollectionsPage() {
       </Card>
 
       {canCreate && (
-        <CreateCollectionDialog
+        <CreateAirweaveCollectionDialog
           open={createOpen}
           onOpenChange={setCreateOpen}
         />
       )}
       {canUpdate && renameTarget && (
-        <RenameCollectionDialog
+        <RenameAirweaveCollectionDialog
           collection={renameTarget}
           open={Boolean(renameTarget)}
           onOpenChange={(open) => !open && setRenameTarget(null)}
         />
       )}
       {canDelete && deleteTarget && (
-        <DeleteCollectionDialog
+        <DeleteAirweaveCollectionDialog
           collection={deleteTarget}
           open={Boolean(deleteTarget)}
           onOpenChange={(open) => !open && setDeleteTarget(null)}

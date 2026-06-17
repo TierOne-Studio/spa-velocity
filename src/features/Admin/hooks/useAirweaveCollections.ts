@@ -3,7 +3,7 @@ import { fetchWithAuth } from "@/shared/lib/fetch-with-auth";
 import { useEffectiveSession } from "@/shared/hooks/useEffectiveSession";
 import {
   airweaveKeys,
-  type CollectionQueryScope,
+  type AirweaveCollectionQueryScope,
 } from "@/features/Airweave/hooks/airweaveKeys";
 import type { AirweaveCollection } from "@/features/Airweave/types";
 
@@ -17,7 +17,7 @@ type ApiResponse<T> = {
 // `@/features/Airweave/hooks/airweaveKeys`.
 export const airweaveCollectionKeys = airweaveKeys;
 
-function useCollectionQueryScope(): CollectionQueryScope {
+function useAirweaveCollectionQueryScope(): AirweaveCollectionQueryScope {
   const { data: session } = useEffectiveSession();
 
   return {
@@ -37,7 +37,7 @@ async function parseApiResponse<T>(response: Response, fallbackMessage: string):
   return result.data;
 }
 
-async function getAvailableCollections(search?: string): Promise<AirweaveCollection[]> {
+async function getAvailableAirweaveCollections(search?: string): Promise<AirweaveCollection[]> {
   const url = new URL(`${API_BASE_URL}/api/airweave/collections`);
   if (search?.trim()) {
     url.searchParams.set("search", search.trim());
@@ -48,11 +48,11 @@ async function getAvailableCollections(search?: string): Promise<AirweaveCollect
 }
 
 export function useAirweaveCollections(options?: { search?: string; enabled?: boolean }) {
-  const scope = useCollectionQueryScope();
+  const scope = useAirweaveCollectionQueryScope();
 
   return useQuery({
     queryKey: airweaveCollectionKeys.lists(options?.search, scope),
-    queryFn: () => getAvailableCollections(options?.search),
+    queryFn: () => getAvailableAirweaveCollections(options?.search),
     enabled: options?.enabled ?? true,
   });
 }

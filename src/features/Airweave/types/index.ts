@@ -30,7 +30,7 @@ export interface AirweaveSourceConnection {
   id: string;
   name: string;
   shortName: string;
-  collectionReadableId: string;
+  airweaveCollectionReadableId: string;
   createdAt: string;
   updatedAt: string;
   isAuthenticated: boolean;
@@ -47,7 +47,7 @@ export interface AirweaveSourceConnection {
 
 // ── Mutation inputs ──────────────────────────────────────────────────────
 
-export interface CreateCollectionInput {
+export interface CreateAirweaveCollectionInput {
   /** Display name shown in the Airweave UI. */
   name: string;
   /**
@@ -58,7 +58,7 @@ export interface CreateCollectionInput {
   slugHint?: string;
 }
 
-export interface UpdateCollectionInput {
+export interface UpdateAirweaveCollectionInput {
   name: string;
 }
 
@@ -100,9 +100,9 @@ export interface ReauthSourceConnectionResult {
 // ── Error body shapes (typed for 409 / 429 handling) ─────────────────────
 
 /** Body shape for DELETE /collections/:id when the collection is still referenced. */
-export interface DeleteCollectionConflictBody {
+export interface DeleteAirweaveCollectionConflictBody {
   message: string;
-  collectionReadableId: string;
+  airweaveCollectionReadableId: string;
   projects: Array<{ id: string; name: string }>;
 }
 

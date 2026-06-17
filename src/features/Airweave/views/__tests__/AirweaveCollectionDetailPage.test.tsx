@@ -8,7 +8,7 @@ import type { AirweaveCollectionDetail } from "@/features/Airweave/types";
 // ── Hoisted mocks ────────────────────────────────────────────────────────
 
 const {
-  mockUseCollectionDetail,
+  mockUseAirweaveCollectionDetail,
   mockCan,
   mockUseModal,
   mockOpenModal,
@@ -16,7 +16,7 @@ const {
   capturedModalProps,
   capturedDialogProps,
 } = vi.hoisted(() => ({
-  mockUseCollectionDetail: vi.fn(),
+  mockUseAirweaveCollectionDetail: vi.fn(),
   mockCan: vi.fn(),
   mockUseModal: vi.fn(),
   mockOpenModal: vi.fn(),
@@ -31,7 +31,7 @@ vi.mock("@/features/Airweave/services/source-connections.service", () => ({
 
 vi.mock(
   "@/features/Airweave/hooks/useAirweaveCollectionDetail",
-  () => ({ useAirweaveCollectionDetail: mockUseCollectionDetail }),
+  () => ({ useAirweaveCollectionDetail: mockUseAirweaveCollectionDetail }),
 );
 
 vi.mock("@/shared/context/PermissionsContext", () => ({
@@ -50,11 +50,11 @@ vi.mock("@/features/Airweave/hooks/useAirweaveConnectModal", () => ({
 vi.mock("@/features/Airweave/components/SourceConnectionsList", () => ({
   SourceConnectionsList: () => <div data-testid="stub-source-list" />,
 }));
-vi.mock("@/features/Airweave/components/RenameCollectionDialog", () => ({
-  RenameCollectionDialog: () => null,
+vi.mock("@/features/Airweave/components/RenameAirweaveCollectionDialog", () => ({
+  RenameAirweaveCollectionDialog: () => null,
 }));
-vi.mock("@/features/Airweave/components/DeleteCollectionDialog", () => ({
-  DeleteCollectionDialog: () => null,
+vi.mock("@/features/Airweave/components/DeleteAirweaveCollectionDialog", () => ({
+  DeleteAirweaveCollectionDialog: () => null,
 }));
 vi.mock(
   "@/features/Airweave/components/CreateSourceConnectionDialog",
@@ -78,7 +78,7 @@ function renderPage(readableId = "acme-x-deadbeef") {
       <QueryClientProvider client={queryClient}>
         <Routes>
           <Route
-            path="/admin/airweave/:collectionReadableId"
+            path="/admin/airweave/:airweaveCollectionReadableId"
             element={children}
           />
         </Routes>
@@ -110,7 +110,7 @@ beforeEach(() => {
   mockCreateConnectSession.mockResolvedValue({ sessionToken: "tok-from-backend" });
   mockUseModal.mockReturnValue({ open: mockOpenModal, isLoading: false });
   mockCan.mockReturnValue(true);
-  mockUseCollectionDetail.mockReturnValue({
+  mockUseAirweaveCollectionDetail.mockReturnValue({
     data: detail,
     isLoading: false,
     isError: false,
@@ -191,8 +191,8 @@ describe("AirweaveCollectionDetailPage — catalog-widget flow (ADR-011 Amendmen
     const dialogProps = capturedDialogProps.current as Record<string, unknown>;
     expect(dialogProps).not.toHaveProperty("onOAuthSubmit");
     // The dialog still owns the direct-auth path; it gets the
-    // standard open/onOpenChange/collectionReadableId trio.
-    expect(dialogProps).toHaveProperty("collectionReadableId");
+    // standard open/onOpenChange/airweaveCollectionReadableId trio.
+    expect(dialogProps).toHaveProperty("airweaveCollectionReadableId");
     expect(dialogProps).toHaveProperty("open");
     expect(dialogProps).toHaveProperty("onOpenChange");
   });
@@ -206,7 +206,7 @@ describe("AirweaveCollectionDetailPage — catalog-widget flow (ADR-011 Amendmen
   });
 
   it("notFound state (404) renders the friendly empty card", () => {
-    mockUseCollectionDetail.mockReturnValue({
+    mockUseAirweaveCollectionDetail.mockReturnValue({
       data: undefined,
       isLoading: false,
       isError: true,

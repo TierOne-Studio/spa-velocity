@@ -51,7 +51,7 @@ afterEach(() => {
 
 describe('source-connections.service', () => {
   describe('listSourceConnections', () => {
-    it('GETs /api/airweave/sources/:collectionId', async () => {
+    it('GETs /api/airweave/sources/:airweaveCollectionId', async () => {
       mockFetch.mockResolvedValue(jsonResponse({ data: [] }));
       await listSourceConnections('acme-x-deadbeef');
       const [url, init] = lastRequest();
@@ -94,7 +94,7 @@ describe('source-connections.service', () => {
   });
 
   describe('createConnectSession', () => {
-    it('POSTs {collectionId} to /api/airweave/connect/session and returns the sessionToken (Amendment 4 primary OAuth path)', async () => {
+    it('POSTs {airweaveCollectionId} to /api/airweave/connect/session and returns the sessionToken (Amendment 4 primary OAuth path)', async () => {
       // Imported below — pulled into scope for this single block.
       const { createConnectSession } = await import(
         '../source-connections.service'
@@ -110,7 +110,7 @@ describe('source-connections.service', () => {
       expect(url).toMatch(/\/api\/airweave\/connect\/session$/);
       expect(init.method).toBe('POST');
       const body = JSON.parse(String(init.body));
-      expect(body).toEqual({ collectionId: 'acme-x-deadbeef' });
+      expect(body).toEqual({ airweaveCollectionId: 'acme-x-deadbeef' });
     });
   });
 
@@ -154,7 +154,7 @@ describe('source-connections.service', () => {
   });
 
   describe('createConnectSession', () => {
-    it('POSTs with the collectionId body and returns sessionToken', async () => {
+    it('POSTs with the airweaveCollectionId body and returns sessionToken', async () => {
       mockFetch.mockResolvedValue(
         jsonResponse({ data: { sessionToken: 'connect-tok' } }),
       );
@@ -163,7 +163,7 @@ describe('source-connections.service', () => {
       expect(url).toMatch(/\/api\/airweave\/connect\/session$/);
       expect(init.method).toBe('POST');
       expect(init.body).toBe(
-        JSON.stringify({ collectionId: 'acme-x-deadbeef' }),
+        JSON.stringify({ airweaveCollectionId: 'acme-x-deadbeef' }),
       );
       expect(result.sessionToken).toBe('connect-tok');
     });

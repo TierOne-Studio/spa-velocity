@@ -65,7 +65,7 @@ const oauthSource: AirweaveSourceConnection = {
   id: "src-1",
   name: "Acme Slack",
   shortName: "slack",
-  collectionReadableId: "acme-x-deadbeef",
+  airweaveCollectionReadableId: "acme-x-deadbeef",
   createdAt: "2026-05-25T00:00:00.000Z",
   updatedAt: "2026-05-25T00:00:00.000Z",
   isAuthenticated: true,
@@ -121,9 +121,9 @@ describe("ReauthSourceConnectionButton", () => {
     // it to prove the round-trip.
     const passedProps = mockUseModal.mock.calls[0][0] as {
       getSessionToken: () => Promise<string>;
-      collectionReadableId: string;
+      airweaveCollectionReadableId: string;
     };
-    expect(passedProps.collectionReadableId).toBe("acme-x-deadbeef");
+    expect(passedProps.airweaveCollectionReadableId).toBe("acme-x-deadbeef");
     await expect(passedProps.getSessionToken()).resolves.toBe("tok-fresh");
     expect(mockMutateAsync).toHaveBeenCalledWith("src-1");
   });

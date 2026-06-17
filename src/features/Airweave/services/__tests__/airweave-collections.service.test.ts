@@ -27,7 +27,7 @@ import {
   getCollection,
   listCollections,
   updateCollection,
-} from '../collections.service';
+} from '../airweave-collections.service';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -50,7 +50,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe('collections.service', () => {
+describe('airweave-collections.service', () => {
   describe('listCollections', () => {
     it('GETs /api/airweave/collections and unwraps the envelope', async () => {
       mockFetch.mockResolvedValue(
@@ -130,7 +130,7 @@ describe('collections.service', () => {
   describe('deleteCollection', () => {
     it('DELETEs and resolves on 200', async () => {
       mockFetch.mockResolvedValue(
-        jsonResponse({ data: { deleted: true, collectionId: 'acme-x-deadbeef' } }),
+        jsonResponse({ data: { deleted: true, airweaveCollectionId: 'acme-x-deadbeef' } }),
       );
       await expect(
         deleteCollection('acme-x-deadbeef'),
@@ -144,7 +144,7 @@ describe('collections.service', () => {
         jsonResponse(
           {
             message: 'Collection is in use by one or more projects',
-            collectionReadableId: 'acme-x-deadbeef',
+            airweaveCollectionReadableId: 'acme-x-deadbeef',
             projects: [
               { id: 'p1', name: 'General' },
               { id: 'p2', name: 'Analytics' },
@@ -161,8 +161,13 @@ describe('collections.service', () => {
         expect(err).toBeInstanceOf(AirweaveApiError);
         const e = err as AirweaveApiError;
         expect(e.status).toBe(409);
-        const body = e.body as { projects: Array<{ id: string }> };
+        const body = e.body as {
+          airweaveCollectionReadableId: string;
+          projects: Array<{ id: string }>;
+        };
         expect(body.projects).toHaveLength(2);
+        // Non-vacuous: the renamed 409 wire field is surfaced under the new name.
+        expect(body.airweaveCollectionReadableId).toBe('acme-x-deadbeef');
       }
     });
 

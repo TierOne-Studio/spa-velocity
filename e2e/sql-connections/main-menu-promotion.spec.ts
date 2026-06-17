@@ -64,7 +64,7 @@ test.describe('Main menu promotion — Collections + SQL Connections', () => {
     expect(page.url()).toMatch(/\/collections$/);
   });
 
-  test('legacy /admin/airweave/:collectionReadableId redirects with param preserved', async ({
+  test('legacy /admin/airweave/:airweaveCollectionReadableId redirects with param preserved', async ({
     page,
   }) => {
     await loginAsAdmin(page);

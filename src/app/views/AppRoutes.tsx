@@ -32,15 +32,15 @@ import { Toaster } from "@shared/components/ui/sonner";
 const queryClient = new QueryClient();
 
 /**
- * Legacy `/admin/airweave/:collectionReadableId` → `/collections/:id` redirect
+ * Legacy `/admin/airweave/:airweaveCollectionReadableId` → `/collections/:id` redirect
  * shim. Reads the path param and forwards. Kept for one release post-promotion.
  */
 function LegacyAirweaveCollectionRedirect() {
-  const { collectionReadableId } = useParams<{ collectionReadableId: string }>();
-  if (!collectionReadableId) {
+  const { airweaveCollectionReadableId } = useParams<{ airweaveCollectionReadableId: string }>();
+  if (!airweaveCollectionReadableId) {
     return <Navigate to="/collections" replace />;
   }
-  return <Navigate to={`/collections/${collectionReadableId}`} replace />;
+  return <Navigate to={`/collections/${airweaveCollectionReadableId}`} replace />;
 }
 
 const AppRoutesContent = () => {
@@ -167,7 +167,7 @@ const AppRoutesContent = () => {
                       }
                     />
                     <Route
-                      path="collections/:collectionReadableId"
+                      path="collections/:airweaveCollectionReadableId"
                       element={
                         <AdminRoute
                           requiredPermission={{ resource: "airweave", action: "read" }}
@@ -218,7 +218,7 @@ const AppRoutesContent = () => {
                       element={<Navigate to="/collections" replace />}
                     />
                     <Route
-                      path="admin/airweave/:collectionReadableId"
+                      path="admin/airweave/:airweaveCollectionReadableId"
                       element={<LegacyAirweaveCollectionRedirect />}
                     />
                     {/* User pages */}

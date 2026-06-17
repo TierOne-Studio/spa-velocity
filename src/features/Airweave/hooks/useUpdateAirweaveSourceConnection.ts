@@ -9,7 +9,7 @@ import type {
 type Variables = {
   sourceConnectionId: string;
   /** Needed because the source-connection list is keyed by the parent collection. */
-  collectionReadableId: string;
+  airweaveCollectionReadableId: string;
   input: UpdateSourceConnectionInput;
 };
 
@@ -25,9 +25,9 @@ export function useUpdateAirweaveSourceConnection() {
   return useMutation<AirweaveSourceConnection, Error, Variables>({
     mutationFn: ({ sourceConnectionId, input }) =>
       updateSourceConnection(sourceConnectionId, input),
-    onSuccess: (_data, { collectionReadableId }) => {
+    onSuccess: (_data, { airweaveCollectionReadableId }) => {
       queryClient.invalidateQueries({
-        queryKey: airweaveKeys.sourceConnections(collectionReadableId),
+        queryKey: airweaveKeys.sourceConnections(airweaveCollectionReadableId),
       });
     },
   });

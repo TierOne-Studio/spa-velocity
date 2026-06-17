@@ -15,7 +15,7 @@
 // established hierarchical key pattern (see useProjects keys for parallel
 // example).
 
-export type CollectionQueryScope = {
+export type AirweaveCollectionQueryScope = {
   activeOrganizationId?: string | null;
   userId?: string | null;
 };
@@ -27,7 +27,7 @@ export const airweaveKeys = {
   /** Collection LIST queries — scope + search-string narrowed. */
   lists: (
     search: string | null | undefined,
-    scope?: CollectionQueryScope,
+    scope?: AirweaveCollectionQueryScope,
   ) =>
     [
       ...airweaveKeys.all,
@@ -38,15 +38,15 @@ export const airweaveKeys = {
     ] as const,
 
   /** Single-collection detail by `readable_id`. */
-  detail: (collectionReadableId: string) =>
-    [...airweaveKeys.all, 'detail', collectionReadableId] as const,
+  detail: (airweaveCollectionReadableId: string) =>
+    [...airweaveKeys.all, 'detail', airweaveCollectionReadableId] as const,
 
   /** Source-connections list scoped to a parent collection. */
-  sourceConnections: (collectionReadableId: string) =>
+  sourceConnections: (airweaveCollectionReadableId: string) =>
     [
       ...airweaveKeys.all,
       'source-connections',
-      collectionReadableId,
+      airweaveCollectionReadableId,
     ] as const,
 };
 

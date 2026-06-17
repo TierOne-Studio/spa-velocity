@@ -25,7 +25,7 @@ import {
  *     ↓
  *   SDK calls our `getSessionToken` callback
  *     ↓
- *   callback POSTs /api/airweave/connect/session  {collectionId}
+ *   callback POSTs /api/airweave/connect/session  {airweaveCollectionId}
  *     ↓
  *   backend returns {sessionToken}
  *     ↓
@@ -116,7 +116,7 @@ test.describe('Airweave Catalog widget — primary OAuth flow (admin)', () => {
     ).toBeVisible();
   });
 
-  test('clicking "Connect a source" POSTs /api/airweave/connect/session with the right collectionId', async ({
+  test('clicking "Connect a source" POSTs /api/airweave/connect/session with the right airweaveCollectionId', async ({
     page,
   }) => {
     await installAirweaveMocks(page, baseState(), calls);
@@ -136,7 +136,7 @@ test.describe('Airweave Catalog widget — primary OAuth flow (admin)', () => {
       .toBeGreaterThanOrEqual(1);
 
     expect(calls.connectSession[0]).toEqual({
-      collectionId: COLLECTION_READABLE_ID,
+      airweaveCollectionId: COLLECTION_READABLE_ID,
     });
   });
 

@@ -14,8 +14,8 @@ import { parseAirweaveResponse } from '../lib/api-response';
 import type {
   AirweaveCollection,
   AirweaveCollectionDetail,
-  CreateCollectionInput,
-  UpdateCollectionInput,
+  CreateAirweaveCollectionInput,
+  UpdateAirweaveCollectionInput,
 } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -39,19 +39,19 @@ export async function listCollections(
 }
 
 export async function getCollection(
-  collectionReadableId: string,
+  airweaveCollectionReadableId: string,
 ): Promise<AirweaveCollectionDetail> {
   const response = await fetchWithAuth(
-    collectionsUrl(`/${encodeURIComponent(collectionReadableId)}`),
+    collectionsUrl(`/${encodeURIComponent(airweaveCollectionReadableId)}`),
   );
   return parseAirweaveResponse<AirweaveCollectionDetail>(
     response,
-    `Failed to fetch collection '${collectionReadableId}'`,
+    `Failed to fetch collection '${airweaveCollectionReadableId}'`,
   );
 }
 
 export async function createCollection(
-  input: CreateCollectionInput,
+  input: CreateAirweaveCollectionInput,
 ): Promise<AirweaveCollectionDetail> {
   const response = await fetchWithAuth(collectionsUrl(), {
     method: 'POST',
@@ -65,11 +65,11 @@ export async function createCollection(
 }
 
 export async function updateCollection(
-  collectionReadableId: string,
-  input: UpdateCollectionInput,
+  airweaveCollectionReadableId: string,
+  input: UpdateAirweaveCollectionInput,
 ): Promise<AirweaveCollectionDetail> {
   const response = await fetchWithAuth(
-    collectionsUrl(`/${encodeURIComponent(collectionReadableId)}`),
+    collectionsUrl(`/${encodeURIComponent(airweaveCollectionReadableId)}`),
     {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -78,22 +78,22 @@ export async function updateCollection(
   );
   return parseAirweaveResponse<AirweaveCollectionDetail>(
     response,
-    `Failed to rename collection '${collectionReadableId}'`,
+    `Failed to rename collection '${airweaveCollectionReadableId}'`,
   );
 }
 
 export async function deleteCollection(
-  collectionReadableId: string,
+  airweaveCollectionReadableId: string,
 ): Promise<void> {
   const response = await fetchWithAuth(
-    collectionsUrl(`/${encodeURIComponent(collectionReadableId)}`),
+    collectionsUrl(`/${encodeURIComponent(airweaveCollectionReadableId)}`),
     { method: 'DELETE' },
   );
-  // 200 returns `{data: {deleted: true, collectionId}}` per the controller;
+  // 200 returns `{data: {deleted: true, airweaveCollectionId}}` per the controller;
   // we don't surface it (caller cares about success vs. AirweaveApiError).
-  // 409 surfaces `DeleteCollectionConflictBody` via the typed error.
+  // 409 surfaces `DeleteAirweaveCollectionConflictBody` via the typed error.
   await parseAirweaveResponse<unknown>(
     response,
-    `Failed to delete collection '${collectionReadableId}'`,
+    `Failed to delete collection '${airweaveCollectionReadableId}'`,
   );
 }

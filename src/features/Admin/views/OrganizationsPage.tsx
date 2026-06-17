@@ -152,7 +152,7 @@ const readOrganizationMetadata = (metadata: unknown): Record<string, unknown> =>
   return { ...(metadata as Record<string, unknown>) }
 }
 
-const readOrganizationAllowedCollectionIds = (metadata: unknown): string[] => {
+const readOrganizationAllowedAirweaveCollectionIds = (metadata: unknown): string[] => {
   const base = readOrganizationMetadata(metadata)
   const raw = base.allowedAirweaveCollectionIds
   if (Array.isArray(raw)) {
@@ -237,7 +237,7 @@ export function OrganizationsPage() {
   // `airweave:read` permission shipped by api-velocity#23 (rbac_020).
   // admin/manager/member all receive `airweave:read` per that migration,
   // so default-role behavior is preserved.
-  const canReadCollections = can('airweave', 'read')
+  const canReadAirweaveCollections = can('airweave', 'read')
 
   // Queries
   const { data: orgsResponse, isLoading: orgsLoading } = useOrganizations({ page, limit: pageSize, search: search || undefined })
@@ -245,11 +245,11 @@ export function OrganizationsPage() {
     selectedOrg?.id ?? "",
   )
   // The allowlist combobox is gone from the modal; we still hydrate
-  // `availableCollections` so the read-only display panel can resolve
+  // `availableAirweaveCollections` so the read-only display panel can resolve
   // collection ids to names. Loading + error states are unused after the
   // strip — the display falls back to the raw readableId on miss.
-  const { data: availableCollections = [] } = useAirweaveCollections({
-    enabled: canReadCollections,
+  const { data: availableAirweaveCollections = [] } = useAirweaveCollections({
+    enabled: canReadAirweaveCollections,
   })
 
   // Extract arrays from response data
@@ -257,9 +257,9 @@ export function OrganizationsPage() {
   const totalPages = orgsResponse?.totalPages ?? 1
   const total = orgsResponse?.total ?? 0
   const members = getMembersArray(membersData)
-  const selectedOrgAllowedCollectionIds = readOrganizationAllowedCollectionIds(selectedOrg?.metadata)
-  const selectedOrgAllowedCollections = selectedOrgAllowedCollectionIds.map((id) => {
-    const found = availableCollections.find((collection) => collection.readableId === id)
+  const selectedOrgAllowedAirweaveCollectionIds = readOrganizationAllowedAirweaveCollectionIds(selectedOrg?.metadata)
+  const selectedOrgAllowedAirweaveCollections = selectedOrgAllowedAirweaveCollectionIds.map((id) => {
+    const found = availableAirweaveCollections.find((collection) => collection.readableId === id)
     return {
       readableId: id,
       name: found?.name ?? id,
@@ -599,7 +599,7 @@ export function OrganizationsPage() {
     setEditOrgData({
       name: org.name,
       slug: org.slug,
-      allowedAirweaveCollectionIds: readOrganizationAllowedCollectionIds(org.metadata),
+      allowedAirweaveCollectionIds: readOrganizationAllowedAirweaveCollectionIds(org.metadata),
     })
     setEditDialogOpen(true)
   }
@@ -770,13 +770,13 @@ export function OrganizationsPage() {
               <div className="space-y-6">
                 <div className="rounded-lg border p-4">
                   <div className="text-sm font-medium text-muted-foreground">Airweave collections allowlist</div>
-                  {selectedOrgAllowedCollections.length === 0 ? (
+                  {selectedOrgAllowedAirweaveCollections.length === 0 ? (
                     <div className="mt-1 text-sm text-muted-foreground">
-                      No collections allowed. Members cannot attach any Airweave collection to projects.
+                      No Airweave Collections allowed. Members cannot attach any Airweave collection to projects.
                     </div>
                   ) : (
                     <ul className="mt-1 flex flex-wrap gap-2">
-                      {selectedOrgAllowedCollections.map((c) => (
+                      {selectedOrgAllowedAirweaveCollections.map((c) => (
                         <li
                           key={c.readableId}
                           className="inline-flex items-center rounded-md border px-2 py-1 text-xs"

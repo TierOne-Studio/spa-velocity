@@ -31,16 +31,16 @@ vi.mock("react-router-dom", async () => {
 
 // Stub the dialog components — they have their own deep deps (RHF, etc.)
 // that aren't relevant to the page-level rendering / gating tests.
-vi.mock("@/features/Airweave/components/CreateCollectionDialog", () => ({
-  CreateCollectionDialog: ({ open }: { open: boolean }) =>
+vi.mock("@/features/Airweave/components/CreateAirweaveCollectionDialog", () => ({
+  CreateAirweaveCollectionDialog: ({ open }: { open: boolean }) =>
     open ? <div data-testid="stub-create-dialog" /> : null,
 }));
-vi.mock("@/features/Airweave/components/RenameCollectionDialog", () => ({
-  RenameCollectionDialog: ({ open }: { open: boolean }) =>
+vi.mock("@/features/Airweave/components/RenameAirweaveCollectionDialog", () => ({
+  RenameAirweaveCollectionDialog: ({ open }: { open: boolean }) =>
     open ? <div data-testid="stub-rename-dialog" /> : null,
 }));
-vi.mock("@/features/Airweave/components/DeleteCollectionDialog", () => ({
-  DeleteCollectionDialog: ({ open }: { open: boolean }) =>
+vi.mock("@/features/Airweave/components/DeleteAirweaveCollectionDialog", () => ({
+  DeleteAirweaveCollectionDialog: ({ open }: { open: boolean }) =>
     open ? <div data-testid="stub-delete-dialog" /> : null,
 }));
 
@@ -101,7 +101,7 @@ describe("AirweaveCollectionsPage", () => {
       </Wrapper>,
     );
     expect(
-      screen.queryByRole("button", { name: /create collection/i }),
+      screen.queryByRole("button", { name: /create airweave collection/i }),
     ).not.toBeInTheDocument();
   });
 
@@ -117,7 +117,7 @@ describe("AirweaveCollectionsPage", () => {
       </Wrapper>,
     );
     expect(
-      screen.getByRole("button", { name: /create collection/i }),
+      screen.getByRole("button", { name: /create airweave collection/i }),
     ).toBeInTheDocument();
   });
 
@@ -141,7 +141,7 @@ describe("AirweaveCollectionsPage", () => {
       </Wrapper>,
     );
     fireEvent.click(
-      screen.getByRole("link", { name: /manage collection knowledge base/i }),
+      screen.getByRole("link", { name: /manage airweave collection knowledge base/i }),
     );
     expect(mockNavigate).toHaveBeenCalledWith(
       "/admin/airweave/acme-kb-deadbeef",
@@ -162,7 +162,7 @@ describe("AirweaveCollectionsPage", () => {
       </Wrapper>,
     );
     expect(
-      screen.getByText(/no collections yet\. click create collection/i),
+      screen.getByText(/no airweave collections yet\. click create airweave collection/i),
     ).toBeInTheDocument();
   });
 

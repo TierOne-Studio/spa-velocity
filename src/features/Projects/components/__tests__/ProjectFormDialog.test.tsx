@@ -172,7 +172,7 @@ describe("ProjectFormDialog", () => {
 
     // Open collections combobox and pick Alpha
     await user.click(
-      screen.getByRole("button", { name: /select collections/i }),
+      screen.getByRole("button", { name: /select airweave collections/i }),
     );
     await user.click(await screen.findByRole("option", { name: /alpha/i }));
     // close popover
@@ -189,7 +189,7 @@ describe("ProjectFormDialog", () => {
           {
             kind: "airweave_collection",
             name: "Alpha",
-            config: { collectionReadableId: "alpha", collectionName: "Alpha" },
+            config: { airweaveCollectionReadableId: "alpha", airweaveCollectionName: "Alpha" },
           },
         ],
       });
@@ -209,7 +209,7 @@ describe("ProjectFormDialog", () => {
     render(<ProjectFormDialog open={true} onOpenChange={vi.fn()} />);
 
     await user.click(
-      screen.getByRole("button", { name: /select collections/i }),
+      screen.getByRole("button", { name: /select airweave collections/i }),
     );
 
     expect(await screen.findByRole("option", { name: /alpha/i })).toBeInTheDocument();
@@ -223,7 +223,7 @@ describe("ProjectFormDialog", () => {
     render(<ProjectFormDialog open={true} onOpenChange={vi.fn()} />);
 
     await user.click(
-      screen.getByRole("button", { name: /select collections/i }),
+      screen.getByRole("button", { name: /select airweave collections/i }),
     );
 
     expect(await screen.findByRole("option", { name: /alpha/i })).toBeInTheDocument();
@@ -253,7 +253,7 @@ describe("ProjectFormDialog", () => {
           projectId: "p1",
           kind: "airweave_collection" as const,
           name: "Alpha",
-          config: { collectionReadableId: "alpha", collectionName: "Alpha" },
+          config: { airweaveCollectionReadableId: "alpha", airweaveCollectionName: "Alpha" },
           status: "ready" as const,
           statusDetail: null,
           createdAt: "2026-01-01",
@@ -278,7 +278,7 @@ describe("ProjectFormDialog", () => {
 
     // Deselect alpha and select beta via combobox (trigger shows Alpha badge)
     await user.click(
-      screen.getByRole("button", { name: /select collections/i }),
+      screen.getByRole("button", { name: /select airweave collections/i }),
     );
     // Alpha is selected — click option to remove
     await user.click(await screen.findByRole("option", { name: /alpha/i }));
@@ -294,7 +294,7 @@ describe("ProjectFormDialog", () => {
         input: {
           kind: "airweave_collection",
           name: "Beta",
-          config: { collectionReadableId: "beta", collectionName: "Beta" },
+          config: { airweaveCollectionReadableId: "beta", airweaveCollectionName: "Beta" },
         },
         organizationId: "org-1",
       });

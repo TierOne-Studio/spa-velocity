@@ -12,12 +12,12 @@ import type { AirweaveSourceConnection } from '../types';
  * our flow.
  */
 export function useAirweaveSourceConnections(
-  collectionReadableId: string,
+  airweaveCollectionReadableId: string,
   options?: { enabled?: boolean },
 ) {
   return useQuery<AirweaveSourceConnection[]>({
-    queryKey: airweaveKeys.sourceConnections(collectionReadableId),
-    queryFn: () => listSourceConnections(collectionReadableId),
-    enabled: (options?.enabled ?? true) && Boolean(collectionReadableId),
+    queryKey: airweaveKeys.sourceConnections(airweaveCollectionReadableId),
+    queryFn: () => listSourceConnections(airweaveCollectionReadableId),
+    enabled: (options?.enabled ?? true) && Boolean(airweaveCollectionReadableId),
   });
 }

@@ -62,7 +62,7 @@ test.describe('Airweave Collections — CRUD (admin)', () => {
       page.getByRole('heading', { name: /airweave collections/i }),
     ).toBeVisible();
     await expect(
-      page.getByRole('button', { name: /create collection/i }),
+      page.getByRole('button', { name: /create airweave collection/i }),
     ).toBeVisible();
     await expect(
       page.getByRole('cell', { name: 'Knowledge Base', exact: true }),
@@ -86,7 +86,7 @@ test.describe('Airweave Collections — CRUD (admin)', () => {
     await loginAsAdmin(page);
     await page.goto('/admin/airweave');
 
-    await page.getByRole('button', { name: /create collection/i }).click();
+    await page.getByRole('button', { name: /create airweave collection/i }).click();
     const createDialog = page.getByRole('dialog');
     await expect(
       createDialog.getByRole('heading', { name: /create airweave collection/i }),
@@ -141,7 +141,7 @@ test.describe('Airweave Collections — CRUD (admin)', () => {
 
     const renameDialog = page.getByRole('dialog');
     await expect(
-      renameDialog.getByRole('heading', { name: /rename collection/i }),
+      renameDialog.getByRole('heading', { name: /rename airweave collection/i }),
     ).toBeVisible();
     await renameDialog.getByRole('textbox', { name: 'Name' }).fill('Renamed Collection');
     await renameDialog.getByRole('button', { name: /^save$/i }).click();
@@ -190,7 +190,7 @@ test.describe('Airweave Collections — CRUD (admin)', () => {
 
     const deleteDialog = page.getByRole('dialog');
     await expect(
-      deleteDialog.getByRole('heading', { name: /delete collection/i }),
+      deleteDialog.getByRole('heading', { name: /delete airweave collection/i }),
     ).toBeVisible();
     await deleteDialog.getByRole('button', { name: /^delete$/i }).click();
 

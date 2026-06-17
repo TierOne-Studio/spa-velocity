@@ -66,7 +66,7 @@ export function RenameSourceConnectionDialog({
     try {
       await updateMutation.mutateAsync({
         sourceConnectionId: sourceConnection.id,
-        collectionReadableId: sourceConnection.collectionReadableId,
+        airweaveCollectionReadableId: sourceConnection.airweaveCollectionReadableId,
         input: { name: values.name.trim() },
       });
       toast.success("Source connection renamed.");

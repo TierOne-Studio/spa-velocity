@@ -60,7 +60,7 @@ describe('useAirweaveSourceConnections', () => {
             id: 'src-1',
             name: 'Slack',
             shortName: 'slack',
-            collectionReadableId: 'acme-x-deadbeef',
+            airweaveCollectionReadableId: 'acme-x-deadbeef',
           },
         ],
       }),
@@ -74,6 +74,10 @@ describe('useAirweaveSourceConnections', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toHaveLength(1);
+    // Non-vacuous: the renamed wire field is surfaced under the new name.
+    expect(result.current.data?.[0].airweaveCollectionReadableId).toBe(
+      'acme-x-deadbeef',
+    );
   });
 });
 
@@ -90,7 +94,7 @@ describe('useCreateAirweaveSourceConnection', () => {
     });
 
     const out = await result.current.mutateAsync({
-      collectionReadableId: 'acme-x-deadbeef',
+      airweaveCollectionReadableId: 'acme-x-deadbeef',
       input: {
         name: 'Slack',
         shortName: 'slack',
@@ -129,7 +133,7 @@ describe('useUpdateAirweaveSourceConnection', () => {
 
     await result.current.mutateAsync({
       sourceConnectionId: 'src-1',
-      collectionReadableId: 'acme-x-deadbeef',
+      airweaveCollectionReadableId: 'acme-x-deadbeef',
       input: { name: 'Renamed' },
     });
 
@@ -158,7 +162,7 @@ describe('useDeleteAirweaveSourceConnection', () => {
 
     await result.current.mutateAsync({
       sourceConnectionId: 'src-1',
-      collectionReadableId: 'acme-x-deadbeef',
+      airweaveCollectionReadableId: 'acme-x-deadbeef',
     });
 
     expect(spy).toHaveBeenCalledWith({

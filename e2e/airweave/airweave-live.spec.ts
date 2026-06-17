@@ -204,7 +204,7 @@ test.describe('Airweave — LIVE Airweave API + LIVE backend + LIVE Postgres', (
 
     // ── DELETE via direct API → confirm gone ─────────────────────────
     // Backend's controller returns 200 + `{data: {deleted: true,
-    // collectionId}}` (airweave.controller.ts deleteCollection), not 204.
+    // airweaveCollectionId}}` (airweave.controller.ts deleteCollection), not 204.
     const delRes = await fetch(
       `${API_BASE_URL}/api/airweave/collections/${encodeURIComponent(created.readableId)}`,
       {
@@ -214,10 +214,10 @@ test.describe('Airweave — LIVE Airweave API + LIVE backend + LIVE Postgres', (
     );
     expect(delRes.status).toBe(200);
     const delBody = (await delRes.json()) as {
-      data: { deleted: boolean; collectionId: string };
+      data: { deleted: boolean; airweaveCollectionId: string };
     };
     expect(delBody.data.deleted).toBe(true);
-    expect(delBody.data.collectionId).toBe(created.readableId);
+    expect(delBody.data.airweaveCollectionId).toBe(created.readableId);
     createdInTest = []; // already cleaned upstream
 
     // Re-fetch → 404 (or 403 if read-lockdown enforces post-delete;
@@ -269,7 +269,7 @@ test.describe('Airweave — LIVE Airweave API + LIVE backend + LIVE Postgres', (
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ collectionId: coll.readableId }),
+        body: JSON.stringify({ airweaveCollectionId: coll.readableId }),
       },
     );
     expect(sessionRes.status, `connect-session body: ${await sessionRes

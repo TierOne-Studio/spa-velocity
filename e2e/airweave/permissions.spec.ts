@@ -48,7 +48,7 @@ function mockState(orgId: string): AirweaveMockState {
         id: 'src-member-can-see',
         name: 'Read-only View',
         shortName: 'postgresql',
-        collectionReadableId: COLLECTION_READABLE_ID,
+        airweaveCollectionReadableId: COLLECTION_READABLE_ID,
         createdAt: '',
         updatedAt: '',
         isAuthenticated: true,
@@ -92,7 +92,7 @@ test.describe.serial('Airweave Permissions — admin vs member affordances', () 
       page.getByRole('heading', { name: /airweave collections/i }),
     ).toBeVisible();
     await expect(
-      page.getByRole('button', { name: /create collection/i }),
+      page.getByRole('button', { name: /create airweave collection/i }),
     ).toBeVisible();
     await expect(
       page.getByRole('button', { name: /actions for shared collection/i }),
@@ -136,7 +136,7 @@ test.describe.serial('Airweave Permissions — admin vs member affordances', () 
 
     // Affordances HIDDEN (not disabled) for member per convention
     await expect(
-      page.getByRole('button', { name: /create collection/i }),
+      page.getByRole('button', { name: /create airweave collection/i }),
     ).toHaveCount(0);
     await expect(
       page.getByRole('button', { name: /actions for shared collection/i }),

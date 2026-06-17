@@ -12,7 +12,7 @@ import {
 } from './airweave-helpers';
 
 /**
- * Pins the `DeleteCollectionDialog` 409 → "Collection in use" flow.
+ * Pins the `DeleteAirweaveCollectionDialog` 409 → "Collection in use" flow.
  *
  * When the backend rejects a delete because the collection is referenced
  * by one or more projects (`{message, projects: [{id, name}]}` payload
@@ -84,14 +84,14 @@ test.describe('Airweave Collections — delete 409 in-use flow', () => {
 
     const deleteDialog = page.getByRole('dialog');
     await expect(
-      deleteDialog.getByRole('heading', { name: /delete collection/i }),
+      deleteDialog.getByRole('heading', { name: /delete airweave collection/i }),
     ).toBeVisible();
     await deleteDialog.getByRole('button', { name: /^delete$/i }).click();
 
     // DELETE goes out; backend returns 409 → dialog flips to in-use screen
     await expect.poll(() => calls.deleteCollection.length).toBe(1);
     await expect(
-      deleteDialog.getByRole('heading', { name: /collection in use/i }),
+      deleteDialog.getByRole('heading', { name: /airweave collection in use/i }),
     ).toBeVisible();
 
     // Both referencing projects are listed

@@ -7,8 +7,8 @@ export type DataSourceKind =
 export type DataSourceStatus = "ready" | "connecting" | "error";
 
 export interface AirweaveCollectionSourceConfig {
-  collectionReadableId: string;
-  collectionName: string;
+  airweaveCollectionReadableId: string;
+  airweaveCollectionName: string;
 }
 
 export interface DatabaseSourceConfig {

@@ -129,7 +129,7 @@ const getNavItems = (
           ...(can("airweave", "read")
             ? [
                 {
-                  title: "Collections",
+                  title: "Airweave Collections",
                   url: "/collections",
                   icon: IconLibrary,
                   isActive: pathname.startsWith("/collections"),

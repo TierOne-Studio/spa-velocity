@@ -25,7 +25,7 @@ import { RenameSourceConnectionDialog } from "./RenameSourceConnectionDialog";
 import { DeleteSourceConnectionDialog } from "./DeleteSourceConnectionDialog";
 
 type Props = {
-  collectionReadableId: string;
+  airweaveCollectionReadableId: string;
   /**
    * Optional slot for an "Add source" affordance (button + dialog) — wired
    * in Step 4b. Step 4a renders the list-only view; this slot keeps the
@@ -51,7 +51,7 @@ type Props = {
  * the parent route's `<AdminRoute>` should already have redirected.
  */
 export function SourceConnectionsList({
-  collectionReadableId,
+  airweaveCollectionReadableId,
   toolbar,
   renderRowExtra,
 }: Props) {
@@ -68,7 +68,7 @@ export function SourceConnectionsList({
     isLoading,
     isError,
     error,
-  } = useAirweaveSourceConnections(collectionReadableId);
+  } = useAirweaveSourceConnections(airweaveCollectionReadableId);
 
   return (
     <div className="space-y-4">

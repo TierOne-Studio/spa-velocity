@@ -29,7 +29,7 @@ export type MockSource = {
   id: string;
   name: string;
   shortName: string;
-  collectionReadableId: string;
+  airweaveCollectionReadableId: string;
   createdAt: string;
   updatedAt: string;
   isAuthenticated: boolean;
@@ -46,7 +46,7 @@ export type AirweaveMockState = {
   /**
    * When set on a collection's readableId, the DELETE handler returns a
    * 409 with the listed projects (matching the backend's "in-use" body
-   * shape). Lets the e2e drive the DeleteCollectionDialog 409 flow
+   * shape). Lets the e2e drive the DeleteAirweaveCollectionDialog 409 flow
    * without needing a real referencing-project row.
    */
   deleteCollectionConflicts?: Record<
@@ -60,7 +60,7 @@ export type AirweaveMockCalls = {
   patchCollection: Array<{ readableId: string; body: unknown }>;
   deleteCollection: string[];
   createSource: Array<{
-    collectionReadableId: string;
+    airweaveCollectionReadableId: string;
     body: Record<string, unknown>;
   }>;
   deleteSource: string[];
@@ -69,9 +69,9 @@ export type AirweaveMockCalls = {
   /**
    * Each `POST /api/airweave/connect/session` call (ADR-011 § Amendment 4
    * primary OAuth path — opens the SDK catalog widget). Body is the
-   * `{collectionId}` payload the SPA sends.
+   * `{airweaveCollectionId}` payload the SPA sends.
    */
-  connectSession: Array<{ collectionId: string }>;
+  connectSession: Array<{ airweaveCollectionId: string }>;
 };
 
 export function newCalls(): AirweaveMockCalls {
@@ -208,16 +208,16 @@ export async function installAirweaveMocks(
     },
   );
 
-  // Sources LIST on /api/airweave/sources/:collectionReadableId
+  // Sources LIST on /api/airweave/sources/:airweaveCollectionReadableId
   await page.route('**/api/airweave/sources/*', async (route: Route) => {
     const url = new URL(route.request().url());
     const segments = url.pathname.split('/');
-    const collectionReadableId = decodeURIComponent(
+    const airweaveCollectionReadableId = decodeURIComponent(
       segments[segments.length - 1],
     );
     if (route.request().method() === 'GET') {
       const list = state.sources.filter(
-        (s) => s.collectionReadableId === collectionReadableId,
+        (s) => s.airweaveCollectionReadableId === airweaveCollectionReadableId,
       );
       await route.fulfill({
         status: 200,
@@ -240,18 +240,18 @@ export async function installAirweaveMocks(
       const url = new URL(route.request().url());
       const segments = url.pathname.split('/');
       // /api/airweave/collections/:id/source-connections → :id is at -2
-      const collectionReadableId = decodeURIComponent(
+      const airweaveCollectionReadableId = decodeURIComponent(
         segments[segments.length - 2],
       );
       const body = route.request().postDataJSON() as Record<string, unknown>;
-      calls.createSource.push({ collectionReadableId, body });
+      calls.createSource.push({ airweaveCollectionReadableId, body });
       state.seq += 1;
       const authBlock = body.authentication as { kind: 'direct' | 'oauth' };
       const created: MockSource = {
         id: `src-${state.seq}`,
         name: String(body.name ?? `Source ${state.seq}`),
         shortName: String(body.shortName ?? 'unknown'),
-        collectionReadableId,
+        airweaveCollectionReadableId,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         isAuthenticated: authBlock.kind === 'direct',
@@ -278,15 +278,15 @@ export async function installAirweaveMocks(
 
   // Connect session on /api/airweave/connect/session — ADR-011 Amendment 4
   // primary OAuth path. SPA's "Connect a source" button POSTs here with
-  // {collectionId} on every click; backend returns {sessionToken} that
+  // {airweaveCollectionId} on every click; backend returns {sessionToken} that
   // gets handed to the SDK catalog widget.
   await page.route('**/api/airweave/connect/session', async (route: Route) => {
     if (route.request().method() !== 'POST') {
       await route.fallback();
       return;
     }
-    const body = route.request().postDataJSON() as { collectionId: string };
-    calls.connectSession.push({ collectionId: body.collectionId });
+    const body = route.request().postDataJSON() as { airweaveCollectionId: string };
+    calls.connectSession.push({ airweaveCollectionId: body.airweaveCollectionId });
     await route.fulfill({
       status: 201,
       contentType: 'application/json',

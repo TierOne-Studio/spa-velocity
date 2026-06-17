@@ -19,7 +19,7 @@ const trimmedString = (label: string, max = 100) =>
 /** Matches api-velocity `requireValidSlugHint` regex. */
 const SLUG_HINT_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-export const createCollectionSchema = z.object({
+export const createAirweaveCollectionSchema = z.object({
   name: trimmedString('Name'),
   slugHint: z
     .string()
@@ -33,7 +33,7 @@ export const createCollectionSchema = z.object({
     .or(z.literal('').transform(() => undefined)),
 });
 
-export const updateCollectionSchema = z.object({
+export const updateAirweaveCollectionSchema = z.object({
   name: trimmedString('Name'),
 });
 
@@ -65,8 +65,8 @@ export const updateSourceConnectionSchema = z.object({
 });
 
 // Inferred form types — use these in `useForm<typeof X>()` calls.
-export type CreateCollectionForm = z.infer<typeof createCollectionSchema>;
-export type UpdateCollectionForm = z.infer<typeof updateCollectionSchema>;
+export type CreateAirweaveCollectionForm = z.infer<typeof createAirweaveCollectionSchema>;
+export type UpdateAirweaveCollectionForm = z.infer<typeof updateAirweaveCollectionSchema>;
 export type CreateDirectSourceConnectionForm = z.infer<
   typeof createDirectSourceConnectionSchema
 >;

@@ -46,7 +46,7 @@ export function ReauthSourceConnectionButton({ sourceConnection }: Props) {
           ? "dark"
           : "light";
   const connectModal = useAirweaveConnectModal({
-    collectionReadableId: sourceConnection.collectionReadableId,
+    airweaveCollectionReadableId: sourceConnection.airweaveCollectionReadableId,
     theme: widgetTheme,
     getSessionToken: async () => {
       const result = await reauthMutation.mutateAsync(sourceConnection.id);

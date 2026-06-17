@@ -1,9 +1,9 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { createCollection } from '../services/collections.service';
+import { createCollection } from '../services/airweave-collections.service';
 import { airweaveKeys } from './airweaveKeys';
 import type {
   AirweaveCollectionDetail,
-  CreateCollectionInput,
+  CreateAirweaveCollectionInput,
 } from '../types';
 
 /**
@@ -17,7 +17,7 @@ import type {
 export function useCreateAirweaveCollection() {
   const queryClient = useQueryClient();
 
-  return useMutation<AirweaveCollectionDetail, Error, CreateCollectionInput>({
+  return useMutation<AirweaveCollectionDetail, Error, CreateAirweaveCollectionInput>({
     mutationFn: (input) => createCollection(input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: airweaveKeys.all });

@@ -9,20 +9,20 @@ export type {
   AirweaveCollection,
   AirweaveCollectionDetail,
   AirweaveSourceConnection,
-  CreateCollectionInput,
+  CreateAirweaveCollectionInput,
   CreateSourceConnectionInput,
   CreateSourceConnectionResult,
-  DeleteCollectionConflictBody,
+  DeleteAirweaveCollectionConflictBody,
   RateLimitBody,
   ReauthSourceConnectionResult,
-  UpdateCollectionInput,
+  UpdateAirweaveCollectionInput,
   UpdateSourceConnectionInput,
 } from './types';
 
 export {
   airweaveKeys,
   airweaveCollectionKeys,
-  type CollectionQueryScope,
+  type AirweaveCollectionQueryScope,
 } from './hooks/airweaveKeys';
 
 // Schemas are surfaced so other features (e.g. Projects' future
@@ -33,12 +33,12 @@ export {
 // source-create flow moved into the Airweave Connect catalog widget.
 // Direct-auth is the only Velocity-side source-create surface.
 export {
-  createCollectionSchema,
-  updateCollectionSchema,
+  createAirweaveCollectionSchema,
+  updateAirweaveCollectionSchema,
   createDirectSourceConnectionSchema,
   updateSourceConnectionSchema,
-  type CreateCollectionForm,
-  type UpdateCollectionForm,
+  type CreateAirweaveCollectionForm,
+  type UpdateAirweaveCollectionForm,
   type CreateDirectSourceConnectionForm,
   type UpdateSourceConnectionForm,
 } from './schemas/airweave.schema';

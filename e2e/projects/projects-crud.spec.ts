@@ -31,7 +31,7 @@ type MockProject = {
     id: string;
     kind: 'airweave_collection';
     name: string;
-    config: { collectionReadableId: string; collectionName: string };
+    config: { airweaveCollectionReadableId: string; airweaveCollectionName: string };
     status: 'ready';
     statusDetail: null;
     createdAt: string;

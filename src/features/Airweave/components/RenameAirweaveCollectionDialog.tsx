@@ -19,8 +19,8 @@ import {
   FieldLabel,
 } from "@/shared/components/ui/field";
 import {
-  updateCollectionSchema,
-  type UpdateCollectionForm,
+  updateAirweaveCollectionSchema,
+  type UpdateAirweaveCollectionForm,
 } from "@/features/Airweave/schemas/airweave.schema";
 import { useUpdateAirweaveCollection } from "@/features/Airweave/hooks/useUpdateAirweaveCollection";
 import type { AirweaveCollection } from "@/features/Airweave/types";
@@ -37,7 +37,7 @@ type Props = {
  * valid after this mutation completes. The mutation hook invalidates
  * both the list and the specific detail so the UI updates everywhere.
  */
-export function RenameCollectionDialog({ collection, open, onOpenChange }: Props) {
+export function RenameAirweaveCollectionDialog({ collection, open, onOpenChange }: Props) {
   const updateMutation = useUpdateAirweaveCollection();
 
   const {
@@ -45,8 +45,8 @@ export function RenameCollectionDialog({ collection, open, onOpenChange }: Props
     handleSubmit,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<UpdateCollectionForm>({
-    resolver: zodResolver(updateCollectionSchema),
+  } = useForm<UpdateAirweaveCollectionForm>({
+    resolver: zodResolver(updateAirweaveCollectionSchema),
     defaultValues: { name: collection.name },
   });
 
@@ -54,21 +54,21 @@ export function RenameCollectionDialog({ collection, open, onOpenChange }: Props
     if (open) reset({ name: collection.name });
   }, [open, reset, collection.name]);
 
-  const onSubmit = async (values: UpdateCollectionForm) => {
+  const onSubmit = async (values: UpdateAirweaveCollectionForm) => {
     if (values.name.trim() === collection.name) {
       onOpenChange(false);
       return;
     }
     try {
       await updateMutation.mutateAsync({
-        collectionReadableId: collection.readableId,
+        airweaveCollectionReadableId: collection.readableId,
         input: { name: values.name.trim() },
       });
-      toast.success("Collection renamed.");
+      toast.success("Airweave Collection renamed.");
       onOpenChange(false);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Failed to rename collection";
+        error instanceof Error ? error.message : "Failed to rename Airweave Collection";
       toast.error(message);
     }
   };
@@ -77,7 +77,7 @@ export function RenameCollectionDialog({ collection, open, onOpenChange }: Props
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Rename Collection</DialogTitle>
+          <DialogTitle>Rename Airweave Collection</DialogTitle>
           <DialogDescription>
             Changes only the display name. The internal identifier (
             <span className="font-mono text-xs">{collection.readableId}</span>)

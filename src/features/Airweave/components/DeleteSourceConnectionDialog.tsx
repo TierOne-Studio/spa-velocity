@@ -20,7 +20,7 @@ type Props = {
 /**
  * Confirm + delete a source connection. Backend cancels any in-flight
  * sync server-side (ADR-011 assumption A5) — no client-side draining.
- * Simpler than DeleteCollectionDialog: source connections don't have
+ * Simpler than DeleteAirweaveCollectionDialog: source connections don't have
  * the "still referenced by projects" failure mode.
  */
 export function DeleteSourceConnectionDialog({
@@ -34,7 +34,7 @@ export function DeleteSourceConnectionDialog({
     try {
       await deleteMutation.mutateAsync({
         sourceConnectionId: sourceConnection.id,
-        collectionReadableId: sourceConnection.collectionReadableId,
+        airweaveCollectionReadableId: sourceConnection.airweaveCollectionReadableId,
       });
       toast.success(`Source connection "${sourceConnection.name}" deleted.`);
       onOpenChange(false);

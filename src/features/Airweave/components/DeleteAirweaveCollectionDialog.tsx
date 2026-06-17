@@ -13,7 +13,7 @@ import {
 } from "@/shared/components/ui/dialog";
 import { useDeleteAirweaveCollection } from "@/features/Airweave/hooks/useDeleteAirweaveCollection";
 import { AirweaveApiError } from "@/features/Airweave/lib/api-response";
-import type { AirweaveCollection, DeleteCollectionConflictBody } from "@/features/Airweave/types";
+import type { AirweaveCollection, DeleteAirweaveCollectionConflictBody } from "@/features/Airweave/types";
 
 type Props = {
   collection: AirweaveCollection;
@@ -44,7 +44,7 @@ type DialogState =
  * No precedent for this state pattern in spa-velocity — this is the
  * first "delete-blocked-by-references" surface.
  */
-export function DeleteCollectionDialog({
+export function DeleteAirweaveCollectionDialog({
   collection,
   open,
   onOpenChange,
@@ -61,7 +61,7 @@ export function DeleteCollectionDialog({
   const handleConfirm = async () => {
     try {
       await deleteMutation.mutateAsync(collection.readableId);
-      toast.success(`Collection "${collection.name}" deleted.`);
+      toast.success(`Airweave Collection "${collection.name}" deleted.`);
       handleClose();
       onDeleted?.();
     } catch (error) {
@@ -74,7 +74,7 @@ export function DeleteCollectionDialog({
         return;
       }
       const message =
-        error instanceof Error ? error.message : "Failed to delete collection";
+        error instanceof Error ? error.message : "Failed to delete Airweave Collection";
       toast.error(message);
     }
   };
@@ -85,7 +85,7 @@ export function DeleteCollectionDialog({
         {state.kind === "confirm" ? (
           <>
             <DialogHeader>
-              <DialogTitle>Delete Collection</DialogTitle>
+              <DialogTitle>Delete Airweave Collection</DialogTitle>
               <DialogDescription>
                 Permanently delete <strong>{collection.name}</strong> and all of
                 its source connections from Airweave. This cannot be undone.
@@ -113,7 +113,7 @@ export function DeleteCollectionDialog({
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <IconAlertTriangle className="h-5 w-5 text-amber-500" />
-                Collection in use
+                Airweave Collection in use
               </DialogTitle>
               <DialogDescription>
                 <strong>{collection.name}</strong> is referenced by{" "}
@@ -150,7 +150,7 @@ export function DeleteCollectionDialog({
   );
 }
 
-function isConflictBody(body: unknown): body is DeleteCollectionConflictBody {
+function isConflictBody(body: unknown): body is DeleteAirweaveCollectionConflictBody {
   return (
     typeof body === "object" &&
     body !== null &&

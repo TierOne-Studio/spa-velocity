@@ -23,27 +23,27 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 // ── LIST by parent collection ────────────────────────────────────────────
 
 export async function listSourceConnections(
-  collectionReadableId: string,
+  airweaveCollectionReadableId: string,
 ): Promise<AirweaveSourceConnection[]> {
   const response = await fetchWithAuth(
-    `${API_BASE_URL}/api/airweave/sources/${encodeURIComponent(collectionReadableId)}`,
+    `${API_BASE_URL}/api/airweave/sources/${encodeURIComponent(airweaveCollectionReadableId)}`,
   );
   return parseAirweaveResponse<AirweaveSourceConnection[]>(
     response,
-    `Failed to list source connections for '${collectionReadableId}'`,
+    `Failed to list source connections for '${airweaveCollectionReadableId}'`,
   );
 }
 
 // ── CREATE (discriminated by authentication.kind) ────────────────────────
 
 export async function createSourceConnection(
-  collectionReadableId: string,
+  airweaveCollectionReadableId: string,
   input: CreateSourceConnectionInput,
 ): Promise<CreateSourceConnectionResult> {
   // Backend accepts the same body shape verbatim — the discriminated
   // union is the wire format too. See api-velocity airweave.dto.ts.
   const response = await fetchWithAuth(
-    `${API_BASE_URL}/api/airweave/collections/${encodeURIComponent(collectionReadableId)}/source-connections`,
+    `${API_BASE_URL}/api/airweave/collections/${encodeURIComponent(airweaveCollectionReadableId)}/source-connections`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -52,7 +52,7 @@ export async function createSourceConnection(
   );
   return parseAirweaveResponse<CreateSourceConnectionResult>(
     response,
-    `Failed to create source connection in '${collectionReadableId}'`,
+    `Failed to create source connection in '${airweaveCollectionReadableId}'`,
   );
 }
 
@@ -109,18 +109,18 @@ export async function reauthSourceConnection(
 // flow in OrganizationsPage and remains available; we don't add new UI
 // for it here.
 export async function createConnectSession(
-  collectionReadableId: string,
+  airweaveCollectionReadableId: string,
 ): Promise<{ sessionToken: string }> {
   const response = await fetchWithAuth(
     `${API_BASE_URL}/api/airweave/connect/session`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ collectionId: collectionReadableId }),
+      body: JSON.stringify({ airweaveCollectionId: airweaveCollectionReadableId }),
     },
   );
   return parseAirweaveResponse<{ sessionToken: string }>(
     response,
-    `Failed to create connect session for '${collectionReadableId}'`,
+    `Failed to create connect session for '${airweaveCollectionReadableId}'`,
   );
 }

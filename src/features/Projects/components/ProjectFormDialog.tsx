@@ -44,7 +44,7 @@ type Props = {
   project?: ProjectDetail | null;
 };
 
-function readAllowedCollectionIds(metadata: unknown): string[] {
+function readAllowedAirweaveCollectionIds(metadata: unknown): string[] {
   if (!metadata || typeof metadata !== "object") return [];
   const raw = (metadata as { allowedAirweaveCollectionIds?: unknown })
     .allowedAirweaveCollectionIds;
@@ -59,7 +59,7 @@ function getAirweaveCollectionIds(sources: ProjectDataSource[]): string[] {
     .filter((s): s is ProjectDataSource & { kind: "airweave_collection" } =>
       s.kind === "airweave_collection",
     )
-    .map((s) => s.config.collectionReadableId);
+    .map((s) => s.config.airweaveCollectionReadableId);
 }
 
 function getAirweaveSourceIdByReadableId(
@@ -69,7 +69,7 @@ function getAirweaveSourceIdByReadableId(
   const match = sources.find(
     (s) =>
       s.kind === "airweave_collection" &&
-      s.config.collectionReadableId === readableId,
+      s.config.airweaveCollectionReadableId === readableId,
   );
   return match ? match.id : null;
 }
@@ -131,7 +131,7 @@ export function ProjectFormDialog({ open, onOpenChange, project }: Props) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [organizationId, setOrganizationId] = useState<string | null>(null);
-  const [selectedCollectionIds, setSelectedCollectionIds] = useState<string[]>([]);
+  const [selectedAirweaveCollectionIds, setSelectedAirweaveCollectionIds] = useState<string[]>([]);
   const [selectedConnectionIds, setSelectedConnectionIds] = useState<string[]>([]);
   const [selectedVectorDbIds, setSelectedVectorDbIds] = useState<string[]>([]);
 
@@ -141,14 +141,14 @@ export function ProjectFormDialog({ open, onOpenChange, project }: Props) {
       setName(project.name);
       setDescription(project.description ?? "");
       setOrganizationId(project.organizationId);
-      setSelectedCollectionIds(getAirweaveCollectionIds(project.sources));
+      setSelectedAirweaveCollectionIds(getAirweaveCollectionIds(project.sources));
       setSelectedConnectionIds(getDatabaseConnectionIds(project.sources));
       setSelectedVectorDbIds(getVectorDbIds(project.sources));
     } else {
       setName("");
       setDescription("");
       setOrganizationId(activeOrgId);
-      setSelectedCollectionIds([]);
+      setSelectedAirweaveCollectionIds([]);
       setSelectedConnectionIds([]);
       setSelectedVectorDbIds([]);
     }
@@ -175,22 +175,22 @@ export function ProjectFormDialog({ open, onOpenChange, project }: Props) {
     return undefined;
   }, [organizations, organizationId, selectedOrgFull]);
 
-  const allowedCollectionIds = useMemo(() => {
+  const allowedAirweaveCollectionIds = useMemo(() => {
     if (isSuperadmin) return null;
-    if (selectedOrg) return readAllowedCollectionIds(selectedOrg.metadata);
+    if (selectedOrg) return readAllowedAirweaveCollectionIds(selectedOrg.metadata);
     return null;
   }, [isSuperadmin, selectedOrg]);
 
   const collectionOptions = useMemo<MultiSelectOption[]>(() => {
     const list = collections ?? [];
-    const allowed = allowedCollectionIds;
+    const allowed = allowedAirweaveCollectionIds;
     const filtered = allowed ? list.filter((c) => allowed.includes(c.readableId)) : list;
     return filtered.map((c) => ({
       value: c.readableId,
       label: c.name,
       description: c.readableId,
     }));
-  }, [collections, allowedCollectionIds]);
+  }, [collections, allowedAirweaveCollectionIds]);
 
   const { data: sqlConnections, isLoading: sqlConnectionsLoading } = useSqlConnections(
     organizationId ?? undefined,
@@ -272,8 +272,8 @@ export function ProjectFormDialog({ open, onOpenChange, project }: Props) {
 
         const existing = getAirweaveCollectionIds(project.sources);
         const existingSet = new Set(existing);
-        const selectedSet = new Set(selectedCollectionIds);
-        const toAdd = selectedCollectionIds.filter((id) => !existingSet.has(id));
+        const selectedSet = new Set(selectedAirweaveCollectionIds);
+        const toAdd = selectedAirweaveCollectionIds.filter((id) => !existingSet.has(id));
         const toRemove = existing.filter((id) => !selectedSet.has(id));
 
         for (const readableId of toAdd) {
@@ -282,8 +282,8 @@ export function ProjectFormDialog({ open, onOpenChange, project }: Props) {
             kind: "airweave_collection",
             name: match?.name ?? readableId,
             config: {
-              collectionReadableId: readableId,
-              collectionName: match?.name ?? readableId,
+              airweaveCollectionReadableId: readableId,
+              airweaveCollectionName: match?.name ?? readableId,
             },
           };
           await addSource.mutateAsync({ projectId: project.id, input, organizationId });
@@ -377,14 +377,14 @@ export function ProjectFormDialog({ open, onOpenChange, project }: Props) {
 
     try {
       const initialSources: CreateDataSourceInput[] = [
-        ...selectedCollectionIds.map((readableId): CreateDataSourceInput => {
+        ...selectedAirweaveCollectionIds.map((readableId): CreateDataSourceInput => {
           const match = collectionsById.get(readableId);
           return {
             kind: "airweave_collection",
             name: match?.name ?? readableId,
             config: {
-              collectionReadableId: readableId,
-              collectionName: match?.name ?? readableId,
+              airweaveCollectionReadableId: readableId,
+              airweaveCollectionName: match?.name ?? readableId,
             },
           };
         }),
@@ -461,7 +461,7 @@ export function ProjectFormDialog({ open, onOpenChange, project }: Props) {
             value={organizationId}
             onChange={(id) => {
               setOrganizationId(id);
-              setSelectedCollectionIds([]);
+              setSelectedAirweaveCollectionIds([]);
               setSelectedConnectionIds([]);
               setSelectedVectorDbIds([]);
             }}
@@ -482,15 +482,15 @@ export function ProjectFormDialog({ open, onOpenChange, project }: Props) {
           />
 
           <div className="space-y-2">
-            <Label>Collections</Label>
+            <Label>Airweave Collections</Label>
             <MultiSelectCombobox
               options={collectionOptions}
-              value={selectedCollectionIds}
-              onChange={setSelectedCollectionIds}
+              value={selectedAirweaveCollectionIds}
+              onChange={setSelectedAirweaveCollectionIds}
               placeholder={
-                collectionsLoading ? "Loading collections…" : "Select collections"
+                collectionsLoading ? "Loading Airweave Collections…" : "Select Airweave Collections"
               }
-              emptyMessage="No collections available for this organization."
+              emptyMessage="No Airweave Collections available for this organization."
               disabled={collectionsLoading}
               data-testid="project-collections-select"
             />

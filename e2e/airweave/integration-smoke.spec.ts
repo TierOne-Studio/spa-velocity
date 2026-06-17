@@ -134,7 +134,7 @@ test.describe('Airweave — full-stack smoke (real backend + real DB)', () => {
     // (rbac_020 migration ran on backend boot, member-role helper
     // extension granted airweave:read).
     await expect(
-      page.getByRole('button', { name: /create collection/i }),
+      page.getByRole('button', { name: /create airweave collection/i }),
     ).toBeVisible();
 
     // SDK shim path validation: if `airweave-connect/lib/*` failed to

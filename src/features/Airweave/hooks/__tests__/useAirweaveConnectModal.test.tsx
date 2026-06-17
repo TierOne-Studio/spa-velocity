@@ -73,7 +73,7 @@ describe('useAirweaveConnectModal', () => {
       () =>
         useAirweaveConnectModal({
           getSessionToken,
-          collectionReadableId: 'acme-x-deadbeef',
+          airweaveCollectionReadableId: 'acme-x-deadbeef',
         }),
       { wrapper: Wrapper },
     );
@@ -88,7 +88,7 @@ describe('useAirweaveConnectModal', () => {
       () =>
         useAirweaveConnectModal({
           getSessionToken,
-          collectionReadableId: 'acme-x-deadbeef',
+          airweaveCollectionReadableId: 'acme-x-deadbeef',
         }),
       { wrapper: Wrapper },
     );
@@ -105,7 +105,7 @@ describe('useAirweaveConnectModal', () => {
       () =>
         useAirweaveConnectModal({
           getSessionToken,
-          collectionReadableId: 'acme-x-deadbeef',
+          airweaveCollectionReadableId: 'acme-x-deadbeef',
           onConnected,
         }),
       { wrapper: Wrapper },
@@ -134,7 +134,7 @@ describe('useAirweaveConnectModal', () => {
       () =>
         useAirweaveConnectModal({
           getSessionToken,
-          collectionReadableId: 'acme-x-deadbeef',
+          airweaveCollectionReadableId: 'acme-x-deadbeef',
         }),
       { wrapper: Wrapper },
     );
@@ -165,7 +165,7 @@ describe('useAirweaveConnectModal', () => {
               'No pending OAuth token — click Reauth on the row to retry.',
             );
           },
-          collectionReadableId: 'acme-x-deadbeef',
+          airweaveCollectionReadableId: 'acme-x-deadbeef',
         }),
       { wrapper: Wrapper },
     );
@@ -193,7 +193,7 @@ describe('useAirweaveConnectModal', () => {
       () =>
         useAirweaveConnectModal({
           getSessionToken,
-          collectionReadableId: 'acme-x-deadbeef',
+          airweaveCollectionReadableId: 'acme-x-deadbeef',
           onCancelled,
         }),
       { wrapper: Wrapper },
@@ -217,7 +217,7 @@ describe('useAirweaveConnectModal', () => {
       () =>
         useAirweaveConnectModal({
           getSessionToken,
-          collectionReadableId: 'acme-x-deadbeef',
+          airweaveCollectionReadableId: 'acme-x-deadbeef',
         }),
       { wrapper: Wrapper },
     );
@@ -240,7 +240,7 @@ describe('useAirweaveConnectModal', () => {
       () =>
         useAirweaveConnectModal({
           getSessionToken,
-          collectionReadableId: 'acme-x-deadbeef',
+          airweaveCollectionReadableId: 'acme-x-deadbeef',
         }),
       { wrapper: Wrapper },
     );
@@ -254,7 +254,7 @@ describe('useAirweaveConnectModal', () => {
       () =>
         useAirweaveConnectModal({
           getSessionToken,
-          collectionReadableId: 'acme-x-deadbeef',
+          airweaveCollectionReadableId: 'acme-x-deadbeef',
         }),
       { wrapper: Wrapper },
     );
@@ -269,7 +269,7 @@ describe('useAirweaveConnectModal', () => {
       () =>
         useAirweaveConnectModal({
           getSessionToken,
-          collectionReadableId: 'acme-x-deadbeef',
+          airweaveCollectionReadableId: 'acme-x-deadbeef',
           theme: 'dark',
         }),
       { wrapper: Wrapper },
@@ -283,7 +283,7 @@ describe('useAirweaveConnectModal', () => {
       () =>
         useAirweaveConnectModal({
           getSessionToken,
-          collectionReadableId: 'acme-x-deadbeef',
+          airweaveCollectionReadableId: 'acme-x-deadbeef',
           theme: 'light',
         }),
       { wrapper: Wrapper },
@@ -297,7 +297,7 @@ describe('useAirweaveConnectModal', () => {
       () =>
         useAirweaveConnectModal({
           getSessionToken,
-          collectionReadableId: 'acme-x-deadbeef',
+          airweaveCollectionReadableId: 'acme-x-deadbeef',
         }),
       { wrapper: Wrapper },
     );
@@ -391,7 +391,7 @@ describe('useAirweaveConnectModal — focus capture + restore', () => {
       () =>
         useAirweaveConnectModal({
           getSessionToken: vi.fn().mockResolvedValue('tok'),
-          collectionReadableId: 'acme-x-deadbeef',
+          airweaveCollectionReadableId: 'acme-x-deadbeef',
         }),
       { wrapper: Wrapper },
     );
@@ -425,7 +425,7 @@ describe('useAirweaveConnectModal — focus capture + restore', () => {
       () =>
         useAirweaveConnectModal({
           getSessionToken: vi.fn().mockResolvedValue('tok'),
-          collectionReadableId: 'acme-x-deadbeef',
+          airweaveCollectionReadableId: 'acme-x-deadbeef',
         }),
       { wrapper: Wrapper },
     );
@@ -453,7 +453,7 @@ describe('useAirweaveConnectModal — focus capture + restore', () => {
       () =>
         useAirweaveConnectModal({
           getSessionToken: vi.fn().mockResolvedValue('tok'),
-          collectionReadableId: 'acme-x-deadbeef',
+          airweaveCollectionReadableId: 'acme-x-deadbeef',
         }),
       { wrapper: Wrapper },
     );
@@ -481,7 +481,7 @@ describe('useAirweaveConnectModal — focus capture + restore', () => {
       () =>
         useAirweaveConnectModal({
           getSessionToken: vi.fn().mockResolvedValue('tok'),
-          collectionReadableId: 'acme-x-deadbeef',
+          airweaveCollectionReadableId: 'acme-x-deadbeef',
         }),
       { wrapper: Wrapper },
     );

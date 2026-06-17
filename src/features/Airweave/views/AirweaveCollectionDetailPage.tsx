@@ -26,8 +26,8 @@ import {
 import { usePermissionsContext } from "@/shared/context/PermissionsContext";
 import { useAirweaveCollectionDetail } from "@/features/Airweave/hooks/useAirweaveCollectionDetail";
 import { AirweaveApiError } from "@/features/Airweave/lib/api-response";
-import { RenameCollectionDialog } from "@/features/Airweave/components/RenameCollectionDialog";
-import { DeleteCollectionDialog } from "@/features/Airweave/components/DeleteCollectionDialog";
+import { RenameAirweaveCollectionDialog } from "@/features/Airweave/components/RenameAirweaveCollectionDialog";
+import { DeleteAirweaveCollectionDialog } from "@/features/Airweave/components/DeleteAirweaveCollectionDialog";
 import { SourceConnectionsList } from "@/features/Airweave/components/SourceConnectionsList";
 import { CreateSourceConnectionDialog } from "@/features/Airweave/components/CreateSourceConnectionDialog";
 import { ReauthSourceConnectionButton } from "@/features/Airweave/components/ReauthSourceConnectionButton";
@@ -36,7 +36,7 @@ import { createConnectSession } from "@/features/Airweave/services/source-connec
 import { useTheme } from "@/shared/components/ui/theme-provider";
 
 /**
- * `/admin/airweave/:collectionReadableId` — manage a single collection
+ * `/admin/airweave/:airweaveCollectionReadableId` — manage a single collection
  * and its source connections.
  *
  * Per ADR-011 § Decision 12: the URL parameter is the durable readable_id
@@ -50,8 +50,8 @@ import { useTheme } from "@/shared/components/ui/theme-provider";
  *  - 5xx: surface the upstream message
  */
 export function AirweaveCollectionDetailPage() {
-  const { collectionReadableId = "" } = useParams<{
-    collectionReadableId: string;
+  const { airweaveCollectionReadableId = "" } = useParams<{
+    airweaveCollectionReadableId: string;
   }>();
   const navigate = useNavigate();
   const { can } = usePermissionsContext();
@@ -114,7 +114,7 @@ export function AirweaveCollectionDetailPage() {
           : "light";
 
   const connectModal = useAirweaveConnectModal({
-    collectionReadableId,
+    airweaveCollectionReadableId,
     theme: widgetTheme,
     getSessionToken: async () => {
       // Re-check mount BEFORE the backend round-trip — the SDK invokes
@@ -126,7 +126,7 @@ export function AirweaveCollectionDetailPage() {
         throw new Error("Page unmounted; aborted Airweave session fetch.");
       }
       const { sessionToken } = await createConnectSession(
-        collectionReadableId,
+        airweaveCollectionReadableId,
       );
       return sessionToken;
     },
@@ -147,7 +147,7 @@ export function AirweaveCollectionDetailPage() {
     isLoading,
     isError,
     error,
-  } = useAirweaveCollectionDetail(collectionReadableId);
+  } = useAirweaveCollectionDetail(airweaveCollectionReadableId);
 
   const notFound =
     isError &&
@@ -160,13 +160,13 @@ export function AirweaveCollectionDetailPage() {
         <Button asChild variant="ghost" size="sm" className="mb-2 -ml-3">
           <Link to="/admin/airweave">
             <IconArrowLeft className="mr-1 h-4 w-4" />
-            Back to collections
+            Back to Airweave Collections
           </Link>
         </Button>
         {isLoading ? (
           <Skeleton className="h-8 w-64" />
         ) : notFound ? (
-          <h1 className="text-2xl font-bold">Collection not found</h1>
+          <h1 className="text-2xl font-bold">Airweave Collection not found</h1>
         ) : collection ? (
           <div className="flex items-center justify-between gap-4">
             <div className="min-w-0">
@@ -181,7 +181,7 @@ export function AirweaveCollectionDetailPage() {
                   <Button
                     variant="outline"
                     size="icon"
-                    aria-label="Collection actions"
+                    aria-label="Airweave Collection actions"
                   >
                     <IconDotsVertical className="h-4 w-4" />
                   </Button>
@@ -214,18 +214,18 @@ export function AirweaveCollectionDetailPage() {
         <Card>
           <CardContent className="py-10 text-center text-muted-foreground">
             <p>
-              The collection <code>{collectionReadableId}</code> doesn't exist
+              The collection <code>{airweaveCollectionReadableId}</code> doesn't exist
               or isn't owned by your organization.
             </p>
             <Button asChild className="mt-4">
-              <Link to="/admin/airweave">Back to collections</Link>
+              <Link to="/admin/airweave">Back to Airweave Collections</Link>
             </Button>
           </CardContent>
         </Card>
       ) : isError ? (
         <Card>
           <CardContent className="py-6 text-destructive">
-            Failed to load collection:{" "}
+            Failed to load Airweave Collection:{" "}
             {error instanceof Error ? error.message : "unknown error"}
           </CardContent>
         </Card>
@@ -234,7 +234,7 @@ export function AirweaveCollectionDetailPage() {
           <CardHeader>
             <CardTitle>Source Connections</CardTitle>
             <CardDescription>
-              Data integrations powering this collection. The "Add source"
+              Data integrations powering this Airweave Collection. The "Add source"
               workflow ships in the next slice.
             </CardDescription>
           </CardHeader>
@@ -248,7 +248,7 @@ export function AirweaveCollectionDetailPage() {
               needed.
             */}
             <SourceConnectionsList
-              collectionReadableId={collectionReadableId}
+              airweaveCollectionReadableId={airweaveCollectionReadableId}
               toolbar={
                 canManageSources ? (
                   // Primary path: catalog widget. Opens the Airweave
@@ -298,14 +298,14 @@ export function AirweaveCollectionDetailPage() {
       )}
 
       {collection && canUpdate && (
-        <RenameCollectionDialog
+        <RenameAirweaveCollectionDialog
           collection={collection}
           open={renameOpen}
           onOpenChange={setRenameOpen}
         />
       )}
       {collection && canDelete && (
-        <DeleteCollectionDialog
+        <DeleteAirweaveCollectionDialog
           collection={collection}
           open={deleteOpen}
           onOpenChange={setDeleteOpen}
@@ -314,7 +314,7 @@ export function AirweaveCollectionDetailPage() {
       )}
       {canManageSources && (
         <CreateSourceConnectionDialog
-          collectionReadableId={collectionReadableId}
+          airweaveCollectionReadableId={airweaveCollectionReadableId}
           open={addSourceOpen}
           onOpenChange={setAddSourceOpen}
         />

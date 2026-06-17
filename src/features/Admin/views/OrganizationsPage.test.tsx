@@ -19,7 +19,7 @@ const {
   mockUseAddMember,
   mockUseCheckSlug,
   mockUseSetActiveOrganization,
-  mockUseAvailableCollections,
+  mockUseAvailableAirweaveCollections,
   mockGetOrganizationRolesMetadata,
   mockListUsers,
   mockListMemberCandidates,
@@ -48,7 +48,7 @@ const {
   mockUseAddMember: vi.fn(),
   mockUseCheckSlug: vi.fn(),
   mockUseSetActiveOrganization: vi.fn(),
-  mockUseAvailableCollections: vi.fn(),
+  mockUseAvailableAirweaveCollections: vi.fn(),
   mockGetOrganizationRolesMetadata: vi.fn(),
   mockListUsers: vi.fn(),
   mockListMemberCandidates: vi.fn(),
@@ -82,7 +82,7 @@ vi.mock("../hooks/useOrganizations", () => ({
 }));
 
 vi.mock("../hooks/useAirweaveCollections", () => ({
-  useAirweaveCollections: (...args: unknown[]) => mockUseAvailableCollections(...args),
+  useAirweaveCollections: (...args: unknown[]) => mockUseAvailableAirweaveCollections(...args),
 }));
 
 vi.mock("../hooks/useSqlConnections", () => ({
@@ -278,7 +278,7 @@ describe("OrganizationsPage", () => {
     mockUseAddMember.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
     mockUseCheckSlug.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
     mockUseSetActiveOrganization.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
-    mockUseAvailableCollections.mockReturnValue({
+    mockUseAvailableAirweaveCollections.mockReturnValue({
       data: [
         {
           id: "collection-1-id",
@@ -504,7 +504,7 @@ describe("OrganizationsPage – CRUD and member operations", () => {
     mockUseAddMember.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
     mockUseCheckSlug.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
     mockUseSetActiveOrganization.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
-    mockUseAvailableCollections.mockReturnValue({
+    mockUseAvailableAirweaveCollections.mockReturnValue({
       data: [
         {
           id: "collection-1-id",
@@ -1113,7 +1113,7 @@ describe("OrganizationsPage – CRUD and member operations", () => {
       },
       isLoading: false,
     });
-    mockUseAvailableCollections.mockReturnValue({
+    mockUseAvailableAirweaveCollections.mockReturnValue({
       data: [{
         id: "col-id",
         name: "My Collection",
@@ -1138,7 +1138,7 @@ describe("OrganizationsPage – CRUD and member operations", () => {
     });
   });
 
-  it("shows collectionId text when collection ID is set but collection is not found", async () => {
+  it("shows airweaveCollectionId text when collection ID is set but collection is not found", async () => {
     mockUseOrganizations.mockReturnValue({
       data: {
         data: [{
@@ -1153,7 +1153,7 @@ describe("OrganizationsPage – CRUD and member operations", () => {
       },
       isLoading: false,
     });
-    mockUseAvailableCollections.mockReturnValue({
+    mockUseAvailableAirweaveCollections.mockReturnValue({
       data: [],
       isLoading: false,
       error: null,
@@ -1163,7 +1163,7 @@ describe("OrganizationsPage – CRUD and member operations", () => {
     fireEvent.click(screen.getByRole("button", { name: /org one/i }));
 
     await waitFor(() => {
-      // When collectionId is set but collection not found: shows collectionId as fallback (appears in 2 divs)
+      // When airweaveCollectionId is set but collection not found: shows airweaveCollectionId as fallback (appears in 2 divs)
       const matches = screen.getAllByText("unknown-collection");
       expect(matches.length).toBeGreaterThanOrEqual(1);
     });
@@ -1190,7 +1190,7 @@ describe("OrganizationsPage – CRUD and member operations", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText(/no collections allowed/i),
+        screen.getByText(/no airweave collections allowed/i),
       ).toBeInTheDocument();
     });
   });
@@ -1420,7 +1420,7 @@ describe("OrganizationsPage – CRUD and member operations", () => {
     });
     mockUseOrganizationMembers.mockReturnValue({ data: [], isLoading: false });
     mockUseSqlConnections.mockReturnValue({ data: [], isLoading: false, error: null });
-    mockUseAvailableCollections.mockReturnValue({ data: [], isLoading: false, error: null });
+    mockUseAvailableAirweaveCollections.mockReturnValue({ data: [], isLoading: false, error: null });
     mockGetOrganizationRolesMetadata.mockResolvedValue({
       roles: [],
       assignableRoles: [],
@@ -1567,7 +1567,7 @@ describe("OrganizationsPage – CRUD and member operations", () => {
     });
     mockUseOrganizationMembers.mockReturnValue({ data: [], isLoading: false });
     mockUseSqlConnections.mockReturnValue({ data: [], isLoading: false, error: null });
-    mockUseAvailableCollections.mockReturnValue({ data: [], isLoading: false, error: null });
+    mockUseAvailableAirweaveCollections.mockReturnValue({ data: [], isLoading: false, error: null });
     mockGetOrganizationRolesMetadata.mockResolvedValue({ roles: [], assignableRoles: [] });
     mockUseAuth.mockReturnValue({ user: { id: "mgr-1", role: "manager" } });
     mockCan.mockImplementation((resource: string, action: string) =>
