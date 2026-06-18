@@ -5,7 +5,7 @@ status: Draft
 layer: ui
 owner: Mariano Ravinale
 created: 2026-06-03
-updated: 2026-06-03
+updated: 2026-06-17
 feature_paths:
   - .ruler/skills/spec-workflow
   - .ruler/agents/spec-steward.md
@@ -25,10 +25,11 @@ coordination_doc: "docs/spec-first-workflow-proposal.md"
 
 ## 1. Summary (intended behavior)
 
-Every *behavioral* code change in this repo must begin by creating/updating a Markdown SPEC
-(this folder) before implementation, and end by reconciling that SPEC with what shipped —
-enforced by a hard CI `spec-gate`, deterministic lints, and the `spec-steward` agent.
-Documentation becomes part of the implementation, not an optional extra.
+Every *behavioral* code change in this repo must ship with a paired **documentation** update —
+preferably a Markdown SPEC (this folder) created before implementation and reconciled with what
+shipped after, but a `docs/decisions/**` **ADR** (decision/rationale, common for bug fixes) also
+satisfies the pairing — enforced by a hard CI `spec-gate`, deterministic lints, and the
+`spec-steward` agent. Documentation becomes part of the implementation, not an optional extra.
 
 ## 2. Context & problem
 
@@ -67,8 +68,9 @@ the OpenAPI machine-link (deferred — needs ci-gates Phase C); api-velocity's o
 
 | # | Criterion (observable behavior) | Proving test |
 |---|---|---|
-| AC1 | A behavioral `src/**` diff with no `docs/specs/**` change fails the gate | `scripts/spec-gate.sh` vs fixture (negative) |
+| AC1 | A behavioral `src/**` diff with no `docs/specs/**` OR `docs/decisions/**` change fails the gate | `scripts/spec-gate.sh` vs fixture (negative) |
 | AC2 | The same diff + a spec change passes the gate | `scripts/spec-gate.sh` vs fixture (positive) |
+| AC2b | The same diff + an ADR (`docs/decisions/**`) change passes; an unrelated doc (e.g. `docs/README.md`) still fails | `scripts/spec-gate.sh` vs fixture (ADR-pairing + negative) |
 | AC3 | A `[skip-spec: type-only]` waiver token passes the gate | `scripts/spec-gate.sh` vs fixture (waiver) |
 | AC4 | A spec with an empty required section or `TBD` placeholder fails completeness | `scripts/spec-complete-check.sh` vs fixture |
 | AC5 | A spec with an unresolved `counterpart_spec` fails the link lint | `scripts/spec-links-check.sh` vs fixture |
@@ -105,5 +107,11 @@ Harness: `npm run test:claude`. No app-runtime layer (this change touches the ha
 
 ## Change Log
 
+- 2026-06-17 · PR (pending, chore/spec-gate-accept-adrs) · Widened the spec-gate's accepted paired
+  documentation from `docs/specs/**` only to `docs/specs/**` (SPEC) OR `docs/decisions/**` (ADR), so a
+  behavioral change documented via an ADR — common for bug fixes / decision changes — satisfies the
+  gate without a separate SPEC. Unrelated docs (README, etc.) still don't count; the three
+  `[skip-spec:…]` waivers are unchanged. AC2b added; `spec-gate.sh` + fixtures + ADR-011 updated.
+  Mirrors `api-velocity#SPEC-000`. · No assumption corrections.
 - 2026-06-04 · PR (pending) · Corrected assumption #5 (api uses `docs/decisions/`; api ADR-013) after completing the api mirror; counterpart `api-velocity#SPEC-000` now exists and cross-links resolve.
 - 2026-06-03 · PR (pending) · Slice 0 scaffolding + this SPEC authored · install of the spec-first workflow (spa-velocity, layer ui).

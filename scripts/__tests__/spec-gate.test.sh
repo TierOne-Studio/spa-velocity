@@ -26,6 +26,15 @@ SPEC_GATE_FILES=$'src/features/Admin/views/UsersPage.tsx' SPEC_GATE_MSG='fix use
 SPEC_GATE_FILES=$'src/features/Admin/views/UsersPage.tsx\ndocs/specs/SPEC-002-users-crud.md' SPEC_GATE_MSG='fix users bug' \
   run_case "behavioral change with spec passes" 0
 
+# AC2b: behavioral src change + ADR change -> PASS (0)
+# Documentation pairing is satisfied by a docs/decisions/** (ADR) change, not only docs/specs/**.
+SPEC_GATE_FILES=$'src/features/Admin/views/UsersPage.tsx\ndocs/decisions/ADR-099-users-fix.md' SPEC_GATE_MSG='fix users bug' \
+  run_case "behavioral change with ADR passes" 0
+
+# AC2c: behavioral src change + non-spec/non-ADR doc (e.g. README) -> still FAIL (1)
+SPEC_GATE_FILES=$'src/features/Admin/views/UsersPage.tsx\ndocs/README.md' SPEC_GATE_MSG='fix users bug' \
+  run_case "behavioral change with unrelated doc still fails" 1
+
 # AC3: behavioral src change, no spec, valid waiver -> PASS (0)
 SPEC_GATE_FILES=$'src/shared/types/index.ts' SPEC_GATE_MSG=$'chore: retype\n\n[skip-spec: type-only]' \
   run_case "valid waiver passes" 0
