@@ -20,6 +20,7 @@ not restate rationale. `plan-mode` is ephemeral execution sequencing, persisted 
 |---|---|---|---|---|
 | [SPEC-000](SPEC-000-specification-first-workflow.md) | Specification-first workflow | Draft | 2026-06-03 | .ruler, docs/specs, scripts |
 | [SPEC-001](SPEC-001-vector-db-ui.md) | Vector Databases UI — CRUD, document upload, project attach | Draft | 2026-06-11 | src/features/VectorDb, src/features/Projects |
+| [SPEC-002](SPEC-002-chat-source-chips-dedupe.md) | Chat source chips — one chip per unique document | Draft | 2026-06-12 | src/features/Chat |
 
 ## Status lifecycle
 

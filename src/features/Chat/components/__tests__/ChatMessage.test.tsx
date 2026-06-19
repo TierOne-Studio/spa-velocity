@@ -87,6 +87,28 @@ describe("ChatMessage", () => {
     expect(screen.queryByText("Sources")).not.toBeInTheDocument();
   });
 
+  it("renders one chip per unique source when metadata contains chunk-level duplicates", () => {
+    const sources: ChatSource[] = [
+      { name: "infrastructure-runbook.docx", sourceName: "RAG ENG Benchmark", webUrl: "", entityType: "document" },
+      { name: "infrastructure-runbook.docx", sourceName: "RAG ENG Benchmark", webUrl: "", entityType: "document" },
+      { name: "security-policy.pdf", sourceName: "RAG ENG Benchmark", webUrl: "", entityType: "document" },
+      { name: "infrastructure-runbook.docx", sourceName: "RAG ENG Benchmark", webUrl: "", entityType: "document" },
+    ];
+    render(<ChatMessage content="With duplicated sources" role="assistant" sources={sources} />);
+    expect(screen.getAllByText("infrastructure-runbook.docx · RAG ENG Benchmark")).toHaveLength(1);
+    expect(screen.getAllByText("security-policy.pdf · RAG ENG Benchmark")).toHaveLength(1);
+  });
+
+  it("keeps same-named sources from different collections as separate chips", () => {
+    const sources: ChatSource[] = [
+      { name: "readme.md", sourceName: "Collection A", webUrl: "", entityType: "document" },
+      { name: "readme.md", sourceName: "Collection B", webUrl: "", entityType: "document" },
+    ];
+    render(<ChatMessage content="Distinct collections" role="assistant" sources={sources} />);
+    expect(screen.getByText("readme.md · Collection A")).toBeInTheDocument();
+    expect(screen.getByText("readme.md · Collection B")).toBeInTheDocument();
+  });
+
   it("extracts and shows reasoning from think tags", () => {
     const content = "<think>This is my reasoning</think>The actual response";
     render(<ChatMessage content={content} role="assistant" />);

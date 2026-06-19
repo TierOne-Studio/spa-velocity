@@ -23,6 +23,19 @@ export interface ChatMessageProps {
   className?: string;
 }
 
+// Persisted source metadata is chunk-level: several chunks of one document
+// project to identical {name, sourceName, webUrl} entries. Collapse them so
+// each document renders a single chip.
+function dedupeSources(sources: ChatSource[]): ChatSource[] {
+  const seen = new Set<string>();
+  return sources.filter((source) => {
+    const key = `${source.name}|${source.sourceName}|${source.webUrl}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function SqlCallPanel({ call }: { call: ChatSqlCall }) {
   const [isOpen, setIsOpen] = useState(false);
   const rowLabel = call.rowCount === 1 ? "row" : "rows";
@@ -74,6 +87,7 @@ export function ChatMessage({
   const [showReasoning, setShowReasoning] = useState(false);
   const isAssistant = role === "assistant";
   const isUser = role === "user";
+  const uniqueSources = dedupeSources(sources);
 
   const { reasoning, displayContent } = useMemo(() => {
     const THINK_TAG_REGEX = /<think>([\s\S]*?)<\/think>/i;
@@ -213,13 +227,13 @@ export function ChatMessage({
             </div>
           )}
 
-          {sources.length > 0 && (
+          {uniqueSources.length > 0 && (
             <>
               <Separator className="my-1" />
               <div className="flex flex-col gap-2 text-xs text-muted-foreground">
                 <div className="font-medium text-foreground">Sources</div>
                 <div className="flex flex-wrap gap-2">
-                  {sources.map((source, index) => {
+                  {uniqueSources.map((source, index) => {
                     const isSafeUrl = /^https?:\/\//i.test(source.webUrl);
 
                     return isSafeUrl ? (
