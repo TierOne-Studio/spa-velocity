@@ -1,4 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type MockInstance,
+} from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import {
   jsonResponse,
@@ -16,6 +24,18 @@ import { useReauthAirweaveSourceConnection } from '../useReauthAirweaveSourceCon
 
 beforeEach(resetAirweaveHookMocks);
 afterEach(() => vi.clearAllMocks());
+
+// create + delete both fully invalidate — they assert the same trio of keys.
+function expectInvalidatedAll(
+  spy: MockInstance,
+  readableId = 'acme-x-deadbeef',
+) {
+  expect(spy).toHaveBeenCalledWith({
+    queryKey: airweaveKeys.sourceConnections(readableId),
+  });
+  expect(spy).toHaveBeenCalledWith({ queryKey: airweaveKeys.detail(readableId) });
+  expect(spy).toHaveBeenCalledWith({ queryKey: airweaveKeys.all });
+}
 
 describe('useAirweaveSourceConnections', () => {
   it('fetches and unwraps the list envelope', async () => {
@@ -69,13 +89,7 @@ describe('useCreateAirweaveSourceConnection', () => {
     });
 
     expect(out.sourceConnection.id).toBe('src-1');
-    expect(spy).toHaveBeenCalledWith({
-      queryKey: airweaveKeys.sourceConnections('acme-x-deadbeef'),
-    });
-    expect(spy).toHaveBeenCalledWith({
-      queryKey: airweaveKeys.detail('acme-x-deadbeef'),
-    });
-    expect(spy).toHaveBeenCalledWith({ queryKey: airweaveKeys.all });
+    expectInvalidatedAll(spy);
   });
 
   // ADR-011 § Amendment 4: the "OAuth branch — returns sessionToken
@@ -131,13 +145,7 @@ describe('useDeleteAirweaveSourceConnection', () => {
       airweaveCollectionReadableId: 'acme-x-deadbeef',
     });
 
-    expect(spy).toHaveBeenCalledWith({
-      queryKey: airweaveKeys.sourceConnections('acme-x-deadbeef'),
-    });
-    expect(spy).toHaveBeenCalledWith({
-      queryKey: airweaveKeys.detail('acme-x-deadbeef'),
-    });
-    expect(spy).toHaveBeenCalledWith({ queryKey: airweaveKeys.all });
+    expectInvalidatedAll(spy);
   });
 });
 

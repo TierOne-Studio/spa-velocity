@@ -1,28 +1,6 @@
-import { useEffect } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { toast } from "sonner";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/shared/components/ui/dialog";
-import { DialogActions } from "./DialogActions";
-import { Input } from "@/shared/components/ui/input";
-import {
-  Field,
-  FieldError,
-  FieldGroup,
-  FieldLabel,
-} from "@/shared/components/ui/field";
-import {
-  updateSourceConnectionSchema,
-  type UpdateSourceConnectionForm,
-} from "@/features/Airweave/schemas/airweave.schema";
 import { useUpdateAirweaveSourceConnection } from "@/features/Airweave/hooks/useUpdateAirweaveSourceConnection";
 import type { AirweaveSourceConnection } from "@/features/Airweave/types";
+import { RenameEntityDialog } from "./RenameEntityDialog";
 
 type Props = {
   sourceConnection: AirweaveSourceConnection;
@@ -40,76 +18,26 @@ export function RenameSourceConnectionDialog({
   sourceConnection,
   open,
   onOpenChange,
-}: Props) {
+}: Readonly<Props>) {
   const updateMutation = useUpdateAirweaveSourceConnection();
 
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors, isSubmitting },
-  } = useForm<UpdateSourceConnectionForm>({
-    resolver: zodResolver(updateSourceConnectionSchema),
-    defaultValues: { name: sourceConnection.name },
-  });
-
-  useEffect(() => {
-    if (open) reset({ name: sourceConnection.name });
-  }, [open, reset, sourceConnection.name]);
-
-  const onSubmit = async (values: UpdateSourceConnectionForm) => {
-    if (values.name.trim() === sourceConnection.name) {
-      onOpenChange(false);
-      return;
-    }
-    try {
-      await updateMutation.mutateAsync({
-        sourceConnectionId: sourceConnection.id,
-        airweaveCollectionReadableId: sourceConnection.airweaveCollectionReadableId,
-        input: { name: values.name.trim() },
-      });
-      toast.success("Source connection renamed.");
-      onOpenChange(false);
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Failed to rename source connection";
-      toast.error(message);
-    }
-  };
-
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Rename Source Connection</DialogTitle>
-          <DialogDescription>
-            Changes only the display name. The source's identifier and
-            credentials are unchanged.
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit(onSubmit)} noValidate>
-          <FieldGroup>
-            <Field data-invalid={Boolean(errors.name)}>
-              <FieldLabel htmlFor="airweave-source-rename-name">Name</FieldLabel>
-              <Input
-                id="airweave-source-rename-name"
-                aria-invalid={Boolean(errors.name)}
-                autoFocus
-                {...register("name")}
-              />
-              <FieldError errors={[errors.name]} />
-            </Field>
-          </FieldGroup>
-          <DialogActions
-            onCancel={() => onOpenChange(false)}
-            submitLabel="Save"
-            pendingLabel="Saving…"
-            isPending={isSubmitting}
-          />
-        </form>
-      </DialogContent>
-    </Dialog>
+    <RenameEntityDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Rename Source Connection"
+      description="Changes only the display name. The source's identifier and credentials are unchanged."
+      fieldId="airweave-source-rename-name"
+      currentName={sourceConnection.name}
+      successMessage="Source connection renamed."
+      fallbackError="Failed to rename source connection"
+      onRename={(name) =>
+        updateMutation.mutateAsync({
+          sourceConnectionId: sourceConnection.id,
+          airweaveCollectionReadableId: sourceConnection.airweaveCollectionReadableId,
+          input: { name },
+        })
+      }
+    />
   );
 }

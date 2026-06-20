@@ -173,20 +173,22 @@ describe("ReauthSourceConnectionButton — theme wiring", () => {
     expect(passed.theme).toBe("light");
   });
 
+  function mockMatchMedia(matches: boolean) {
+    return vi.spyOn(window, "matchMedia").mockReturnValue({
+      matches,
+      media: "(prefers-color-scheme: dark)",
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    });
+  }
+
   it("resolves 'system' via matchMedia(prefers-color-scheme: dark) → 'dark' when system is dark", () => {
     mockUseTheme.mockReturnValue({ theme: "system", setTheme: () => {} });
-    const matchMediaSpy = vi
-      .spyOn(window, "matchMedia")
-      .mockReturnValue({
-        matches: true,
-        media: "(prefers-color-scheme: dark)",
-        onchange: null,
-        addListener: () => {},
-        removeListener: () => {},
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-      });
+    const matchMediaSpy = mockMatchMedia(true);
     render(<ReauthSourceConnectionButton sourceConnection={oauthSource} />);
     const passed = mockUseModal.mock.calls[0][0] as { theme?: string };
     expect(passed.theme).toBe("dark");
@@ -195,18 +197,7 @@ describe("ReauthSourceConnectionButton — theme wiring", () => {
 
   it("resolves 'system' to 'light' when system is NOT dark", () => {
     mockUseTheme.mockReturnValue({ theme: "system", setTheme: () => {} });
-    const matchMediaSpy = vi
-      .spyOn(window, "matchMedia")
-      .mockReturnValue({
-        matches: false,
-        media: "(prefers-color-scheme: dark)",
-        onchange: null,
-        addListener: () => {},
-        removeListener: () => {},
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-      });
+    const matchMediaSpy = mockMatchMedia(false);
     render(<ReauthSourceConnectionButton sourceConnection={oauthSource} />);
     const passed = mockUseModal.mock.calls[0][0] as { theme?: string };
     expect(passed.theme).toBe("light");
