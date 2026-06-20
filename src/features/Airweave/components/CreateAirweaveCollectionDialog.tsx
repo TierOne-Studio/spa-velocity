@@ -41,7 +41,7 @@ type Props = {
  * surfaces the backend message verbatim — it names the offending
  * `readable_id` per ADR-011 § Decision 10 + R5 audit-log message contract.
  */
-export function CreateAirweaveCollectionDialog({ open, onOpenChange }: Props) {
+export function CreateAirweaveCollectionDialog({ open, onOpenChange }: Readonly<Props>) {
   const navigate = useNavigate();
   const createMutation = useCreateAirweaveCollection();
 

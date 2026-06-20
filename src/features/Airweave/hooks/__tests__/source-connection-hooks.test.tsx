@@ -1,25 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { ReactNode } from 'react';
-
-const mockFetch = vi.fn();
-const storage: Record<string, string> = {};
-Object.defineProperty(globalThis, 'localStorage', {
-  value: {
-    getItem: vi.fn((k: string) => storage[k] ?? null),
-    setItem: vi.fn((k: string, v: string) => {
-      storage[k] = v;
-    }),
-    removeItem: vi.fn((k: string) => {
-      delete storage[k];
-    }),
-    clear: vi.fn(() => {
-      for (const k of Object.keys(storage)) delete storage[k];
-    }),
-  },
-});
-vi.stubGlobal('fetch', mockFetch);
+import {
+  jsonResponse,
+  makeWrapper,
+  mockFetch,
+  resetAirweaveHookMocks,
+} from './test-helpers';
 
 import { airweaveKeys } from '../airweaveKeys';
 import { useAirweaveSourceConnections } from '../useAirweaveSourceConnections';
@@ -28,27 +14,7 @@ import { useUpdateAirweaveSourceConnection } from '../useUpdateAirweaveSourceCon
 import { useDeleteAirweaveSourceConnection } from '../useDeleteAirweaveSourceConnection';
 import { useReauthAirweaveSourceConnection } from '../useReauthAirweaveSourceConnection';
 
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
-}
-
-function makeWrapper() {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  const Wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-  );
-  return { queryClient, Wrapper };
-}
-
-beforeEach(() => {
-  mockFetch.mockReset();
-  for (const k of Object.keys(storage)) delete storage[k];
-});
+beforeEach(resetAirweaveHookMocks);
 afterEach(() => vi.clearAllMocks());
 
 describe('useAirweaveSourceConnections', () => {

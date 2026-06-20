@@ -1,23 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-const storage: Record<string, string> = {};
-Object.defineProperty(globalThis, 'localStorage', {
-  value: {
-    getItem: vi.fn((k: string) => storage[k] ?? null),
-    setItem: vi.fn((k: string, v: string) => {
-      storage[k] = v;
-    }),
-    removeItem: vi.fn((k: string) => {
-      delete storage[k];
-    }),
-    clear: vi.fn(() => {
-      for (const k of Object.keys(storage)) delete storage[k];
-    }),
-  },
-});
-
-const mockFetch = vi.fn();
-vi.stubGlobal('fetch', mockFetch);
+import {
+  jsonResponse,
+  lastRequest,
+  mockFetch,
+  resetAirweaveServiceMocks,
+} from './test-helpers';
 
 import {
   createConnectSession,
@@ -28,22 +15,7 @@ import {
   updateSourceConnection,
 } from '../source-connections.service';
 
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
-}
-
-function lastRequest(): [string, RequestInit] {
-  const calls = mockFetch.mock.calls;
-  return calls[calls.length - 1] as [string, RequestInit];
-}
-
-beforeEach(() => {
-  mockFetch.mockReset();
-  for (const k of Object.keys(storage)) delete storage[k];
-});
+beforeEach(resetAirweaveServiceMocks);
 
 afterEach(() => {
   vi.clearAllMocks();

@@ -2,15 +2,14 @@ import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/shared/components/ui/dialog";
+import { DialogActions } from "./DialogActions";
 import { Input } from "@/shared/components/ui/input";
 import {
   Field,
@@ -37,7 +36,7 @@ type Props = {
  * valid after this mutation completes. The mutation hook invalidates
  * both the list and the specific detail so the UI updates everywhere.
  */
-export function RenameAirweaveCollectionDialog({ collection, open, onOpenChange }: Props) {
+export function RenameAirweaveCollectionDialog({ collection, open, onOpenChange }: Readonly<Props>) {
   const updateMutation = useUpdateAirweaveCollection();
 
   const {
@@ -79,9 +78,9 @@ export function RenameAirweaveCollectionDialog({ collection, open, onOpenChange 
         <DialogHeader>
           <DialogTitle>Rename Airweave Collection</DialogTitle>
           <DialogDescription>
-            Changes only the display name. The internal identifier (
-            <span className="font-mono text-xs">{collection.readableId}</span>)
-            stays the same, so existing project references continue to work.
+            Changes only the display name. The internal identifier{" "}
+            (<span className="font-mono text-xs">{collection.readableId}</span>) stays
+            the same, so existing project references continue to work.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} noValidate>
@@ -97,19 +96,12 @@ export function RenameAirweaveCollectionDialog({ collection, open, onOpenChange 
               <FieldError errors={[errors.name]} />
             </Field>
           </FieldGroup>
-          <DialogFooter className="mt-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={isSubmitting}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Saving…" : "Save"}
-            </Button>
-          </DialogFooter>
+          <DialogActions
+            onCancel={() => onOpenChange(false)}
+            submitLabel="Save"
+            pendingLabel="Saving…"
+            isPending={isSubmitting}
+          />
         </form>
       </DialogContent>
     </Dialog>

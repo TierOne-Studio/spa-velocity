@@ -383,6 +383,25 @@ describe('useAirweaveConnectModal — focus capture + restore', () => {
     return btn;
   }
 
+  // Render the hook with a focused trigger button in the DOM and the modal
+  // opened — the shared arrange for the focus-restore tests below.
+  function renderOpenedModalWithFocus() {
+    mockUseAirweaveConnect.mockReturnValue({ open: vi.fn(), isLoading: false });
+    const { Wrapper } = makeWrapper();
+    const { result } = renderHook(
+      () =>
+        useAirweaveConnectModal({
+          getSessionToken: vi.fn().mockResolvedValue('tok'),
+          airweaveCollectionReadableId: 'acme-x-deadbeef',
+        }),
+      { wrapper: Wrapper },
+    );
+    const btn = focusButton();
+    result.current.open();
+    const focusSpy = vi.spyOn(btn, 'focus');
+    return { result, btn, focusSpy };
+  }
+
   it('open() snapshots document.activeElement as the focus-restore target', () => {
     const sdkOpen = vi.fn();
     mockUseAirweaveConnect.mockReturnValue({ open: sdkOpen, isLoading: false });
@@ -416,23 +435,7 @@ describe('useAirweaveConnectModal — focus capture + restore', () => {
   });
 
   it('onError restores focus to the captured trigger', () => {
-    mockUseAirweaveConnect.mockReturnValue({
-      open: vi.fn(),
-      isLoading: false,
-    });
-    const { Wrapper } = makeWrapper();
-    const { result } = renderHook(
-      () =>
-        useAirweaveConnectModal({
-          getSessionToken: vi.fn().mockResolvedValue('tok'),
-          airweaveCollectionReadableId: 'acme-x-deadbeef',
-        }),
-      { wrapper: Wrapper },
-    );
-
-    const btn = focusButton();
-    result.current.open();
-    const focusSpy = vi.spyOn(btn, 'focus');
+    const { btn, focusSpy } = renderOpenedModalWithFocus();
 
     const sdkProps = captureProps.current as {
       onError: (e: { message: string }) => void;
@@ -444,23 +447,7 @@ describe('useAirweaveConnectModal — focus capture + restore', () => {
   });
 
   it("onClose('cancel') restores focus to the captured trigger", () => {
-    mockUseAirweaveConnect.mockReturnValue({
-      open: vi.fn(),
-      isLoading: false,
-    });
-    const { Wrapper } = makeWrapper();
-    const { result } = renderHook(
-      () =>
-        useAirweaveConnectModal({
-          getSessionToken: vi.fn().mockResolvedValue('tok'),
-          airweaveCollectionReadableId: 'acme-x-deadbeef',
-        }),
-      { wrapper: Wrapper },
-    );
-
-    const btn = focusButton();
-    result.current.open();
-    const focusSpy = vi.spyOn(btn, 'focus');
+    const { btn, focusSpy } = renderOpenedModalWithFocus();
 
     const sdkProps = captureProps.current as {
       onClose: (reason: 'success' | 'cancel' | 'error') => void;
@@ -472,23 +459,7 @@ describe('useAirweaveConnectModal — focus capture + restore', () => {
   });
 
   it("onClose('success' | 'error') does NOT double-restore (handled by onSuccess/onError)", () => {
-    mockUseAirweaveConnect.mockReturnValue({
-      open: vi.fn(),
-      isLoading: false,
-    });
-    const { Wrapper } = makeWrapper();
-    const { result } = renderHook(
-      () =>
-        useAirweaveConnectModal({
-          getSessionToken: vi.fn().mockResolvedValue('tok'),
-          airweaveCollectionReadableId: 'acme-x-deadbeef',
-        }),
-      { wrapper: Wrapper },
-    );
-
-    const btn = focusButton();
-    result.current.open();
-    const focusSpy = vi.spyOn(btn, 'focus');
+    const { btn, focusSpy } = renderOpenedModalWithFocus();
 
     const sdkProps = captureProps.current as {
       onClose: (reason: 'success' | 'cancel' | 'error') => void;

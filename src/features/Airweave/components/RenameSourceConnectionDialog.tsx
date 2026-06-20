@@ -2,15 +2,14 @@ import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/shared/components/ui/dialog";
+import { DialogActions } from "./DialogActions";
 import { Input } from "@/shared/components/ui/input";
 import {
   Field,
@@ -103,19 +102,12 @@ export function RenameSourceConnectionDialog({
               <FieldError errors={[errors.name]} />
             </Field>
           </FieldGroup>
-          <DialogFooter className="mt-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={isSubmitting}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Saving…" : "Save"}
-            </Button>
-          </DialogFooter>
+          <DialogActions
+            onCancel={() => onOpenChange(false)}
+            submitLabel="Save"
+            pendingLabel="Saving…"
+            isPending={isSubmitting}
+          />
         </form>
       </DialogContent>
     </Dialog>

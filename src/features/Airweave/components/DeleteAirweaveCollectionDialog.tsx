@@ -49,7 +49,7 @@ export function DeleteAirweaveCollectionDialog({
   open,
   onOpenChange,
   onDeleted,
-}: Props) {
+}: Readonly<Props>) {
   const [state, setState] = useState<DialogState>({ kind: "confirm" });
   const deleteMutation = useDeleteAirweaveCollection();
 
