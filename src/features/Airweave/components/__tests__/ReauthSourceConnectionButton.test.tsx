@@ -94,6 +94,19 @@ beforeEach(() => {
 
 afterEach(() => vi.clearAllMocks());
 
+function mockMatchMedia(matches: boolean) {
+  return vi.spyOn(globalThis, "matchMedia").mockReturnValue({
+    matches,
+    media: "(prefers-color-scheme: dark)",
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  });
+}
+
 describe("ReauthSourceConnectionButton", () => {
   it("renders null when authMethod !== 'oauth_browser' (defense-in-depth visibility filter)", () => {
     const { container } = render(
@@ -172,19 +185,6 @@ describe("ReauthSourceConnectionButton — theme wiring", () => {
     const passed = mockUseModal.mock.calls[0][0] as { theme?: string };
     expect(passed.theme).toBe("light");
   });
-
-  function mockMatchMedia(matches: boolean) {
-    return vi.spyOn(window, "matchMedia").mockReturnValue({
-      matches,
-      media: "(prefers-color-scheme: dark)",
-      onchange: null,
-      addListener: () => {},
-      removeListener: () => {},
-      addEventListener: () => {},
-      removeEventListener: () => {},
-      dispatchEvent: () => false,
-    });
-  }
 
   it("resolves 'system' via matchMedia(prefers-color-scheme: dark) → 'dark' when system is dark", () => {
     mockUseTheme.mockReturnValue({ theme: "system", setTheme: () => {} });
