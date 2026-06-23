@@ -17,6 +17,7 @@ import { AirweaveCollectionsPage } from "@features/Airweave/views/AirweaveCollec
 import { AirweaveCollectionDetailPage } from "@features/Airweave/views/AirweaveCollectionDetailPage";
 import { SqlConnectionsPage } from "@features/SqlConnections/views/SqlConnectionsPage";
 import { VectorDbsPage } from "@features/VectorDb";
+import { EmbedSitesPage } from "@features/EmbedSites";
 import { AdminDashboardPage } from "@features/AdminDashboard/views/AdminDashboardPage";
 import { ChatPage } from "@features/Chat";
 import { ProjectsPage } from "@features/Projects";
@@ -206,6 +207,21 @@ const AppRoutesContent = () => {
                           fallbackPath="/account"
                         >
                           <VectorDbsPage />
+                        </AdminRoute>
+                      }
+                    />
+                    {/*
+                     * Public Widget (embed sites) — first-class Main feature
+                     * (SPEC-003). Gates on embed-site:read.
+                     */}
+                    <Route
+                      path="embed-sites"
+                      element={
+                        <AdminRoute
+                          requiredPermission={{ resource: "embed-site", action: "read" }}
+                          fallbackPath="/account"
+                        >
+                          <EmbedSitesPage />
                         </AdminRoute>
                       }
                     />
