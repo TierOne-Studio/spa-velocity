@@ -39,6 +39,41 @@ describe("buildEmbedSnippet", () => {
     expect(snippet).toContain("/api/public/widget/v1/widget.js");
     expect(snippet).toContain('data-api-base="https://api.example.com"');
   });
+
+  it("omits data-theme when no theme is given (backward compatible)", () => {
+    expect(buildEmbedSnippet("wgt_pub_abc123")).not.toContain("data-theme");
+  });
+
+  it("appends data-theme when a theme id is given", () => {
+    const snippet = buildEmbedSnippet(
+      "wgt_pub_abc123",
+      "https://api.example.com",
+      "obsidian",
+    );
+    expect(snippet).toContain('data-theme="obsidian"');
+  });
+
+  it("formats the snippet as multiline with one attribute per indented line", () => {
+    const lines = buildEmbedSnippet(
+      "wgt_pub_abc123",
+      "https://api.example.com",
+      "obsidian",
+    ).split("\n");
+    expect(lines[0]).toBe("<script");
+    expect(lines).toContain(
+      '  src="https://api.example.com/api/public/widget/v1/widget.js"',
+    );
+    expect(lines).toContain('  data-embed-key="wgt_pub_abc123"');
+    expect(lines).toContain('  data-api-base="https://api.example.com"');
+    expect(lines).toContain('  data-theme="obsidian"');
+    expect(lines[lines.length - 1]).toBe("></script>");
+  });
+
+  it("drops the data-theme line entirely when no theme is given", () => {
+    const lines = buildEmbedSnippet("wgt_pub_abc123").split("\n");
+    expect(lines.some((l) => l.includes("data-theme"))).toBe(false);
+    expect(lines[lines.length - 1]).toBe("></script>");
+  });
 });
 
 describe("EmbedCodeDialog", () => {
@@ -47,6 +82,29 @@ describe("EmbedCodeDialog", () => {
     expect(screen.getByTestId("embed-snippet").textContent).toContain(
       "wgt_pub_abc123",
     );
+  });
+
+  it("defaults to the cloud theme and reflects it in the snippet", () => {
+    render(<EmbedCodeDialog site={site} open onOpenChange={() => {}} />);
+    expect(screen.getByTestId("embed-snippet").textContent).toContain(
+      'data-theme="cloud"',
+    );
+  });
+
+  it("offers all four themes and updates the snippet + preview when one is picked", async () => {
+    render(<EmbedCodeDialog site={site} open onOpenChange={() => {}} />);
+    for (const label of ["Cloud", "Obsidian", "Neo Brutalism", "Mono Chrome"]) {
+      expect(screen.getByRole("radio", { name: label })).toBeInTheDocument();
+    }
+
+    await userEvent.click(screen.getByRole("radio", { name: "Obsidian" }));
+
+    expect(screen.getByTestId("embed-snippet").textContent).toContain(
+      'data-theme="obsidian"',
+    );
+    expect(
+      screen.getByRole("img", { name: /obsidian theme preview/i }),
+    ).toBeInTheDocument();
   });
 
   it("copies the snippet to the clipboard and toasts success", async () => {
