@@ -48,7 +48,12 @@ export interface WidgetTheme {
 // Palette data lives once, in the shared fixture; the inline list below carries
 // only id + display label and pulls each palette from it (keeps Sonar happy and
 // is genuinely DRY — no second copy of the 17 palette keys per preset).
-const PRESET_PALETTES = presetPalettes as Record<string, WidgetThemePalette>;
+// Cast via `unknown` because the JSON also carries a `_comment` string field,
+// which doesn't structurally overlap with the palette record type.
+const PRESET_PALETTES = presetPalettes as unknown as Record<
+  string,
+  WidgetThemePalette
+>;
 
 const THEME_LABELS: Record<WidgetThemeId, string> = {
   cloud: "Cloud",
