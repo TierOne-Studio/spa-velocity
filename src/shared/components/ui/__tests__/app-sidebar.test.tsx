@@ -49,6 +49,7 @@ vi.mock("@tabler/icons-react", () => ({
   IconBuilding: () => null,
   IconChartBar: () => null,
   IconCloud: () => null,
+  IconCode: () => null,
   IconDatabase: () => null,
   IconFolder: () => null,
   IconHome: () => null,
@@ -101,6 +102,35 @@ describe("AppSidebar", () => {
     );
 
     expect(screen.getByTestId("nav-main").textContent).not.toContain("Chat");
+  });
+
+  it("shows the Public Widget nav item when embed-site:read is granted", () => {
+    mockUsePermissionsContext.mockReturnValue({
+      can: (resource: string, action: string) =>
+        resource === "embed-site" && action === "read",
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/embed-sites"]}>
+        <AppSidebar />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId("nav-main").textContent).toContain("Public Widget");
+  });
+
+  it("hides the Public Widget nav item when embed-site:read is missing", () => {
+    mockUsePermissionsContext.mockReturnValue({
+      can: () => false,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <AppSidebar />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId("nav-main").textContent).not.toContain("Public Widget");
   });
 
   it("uses fallback name and email when user is null (covers lines 133-134 ?? fallbacks)", () => {

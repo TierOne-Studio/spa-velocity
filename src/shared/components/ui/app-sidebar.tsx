@@ -5,6 +5,7 @@ import {
   IconBrain,
   IconBuilding,
   IconChartBar,
+  IconCode,
   IconDatabase,
   IconHome,
   IconInnerShadowTop,
@@ -102,7 +103,8 @@ const getNavItems = (
           pathname.startsWith("/projects") ||
           pathname.startsWith("/collections") ||
           pathname.startsWith("/sql-connections") ||
-          pathname.startsWith("/vector-dbs"),
+          pathname.startsWith("/vector-dbs") ||
+          pathname.startsWith("/embed-sites"),
         items: [
           ...(can("chat", "read")
             ? [
@@ -155,6 +157,16 @@ const getNavItems = (
                   url: "/vector-dbs",
                   icon: IconBrain,
                   isActive: pathname.startsWith("/vector-dbs"),
+                },
+              ]
+            : []),
+          ...(can("embed-site", "read")
+            ? [
+                {
+                  title: "Public Widget",
+                  url: "/embed-sites",
+                  icon: IconCode,
+                  isActive: pathname.startsWith("/embed-sites"),
                 },
               ]
             : []),

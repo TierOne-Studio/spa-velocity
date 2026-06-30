@@ -40,6 +40,8 @@
     "test:e2e:admin-dashboard": "E2E_API_BASE_URL=http://127.0.0.1:3100 E2E_FE_URL=http://127.0.0.1:4173 playwright test e2e/admin-dashboard/",
     "pretest:e2e:dashboard": "npm run playwright:install:chromium",
     "test:e2e:dashboard": "E2E_API_BASE_URL=http://127.0.0.1:3100 E2E_FE_URL=http://127.0.0.1:4173 playwright test e2e/dashboard/",
+    "pretest:e2e:embed-sites": "npm run playwright:install:chromium",
+    "test:e2e:embed-sites": "E2E_API_BASE_URL=http://127.0.0.1:3100 E2E_FE_URL=http://127.0.0.1:4173 playwright test e2e/embed-sites/",
     "pretest:e2e:shared": "npm run playwright:install:chromium",
     "test:e2e:shared": "E2E_API_BASE_URL=http://127.0.0.1:3100 E2E_FE_URL=http://127.0.0.1:4173 playwright test e2e/shared/",
     "pretest:e2e:api": "npm run playwright:install:chromium",
