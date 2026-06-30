@@ -1,5 +1,5 @@
 {
-  "_comment": "SSoT MIRROR. These four palettes MUST stay byte-identical to THEME_PRESETS (cloud/obsidian/neo-brutalism/mono-chrome) in api-velocity/src/modules/public-chat/widget/theme.ts — the widget is the source of truth; this is the embed-modal preview's mirror. themes.ts is asserted deep-equal to this file by themes.test.ts; if the widget palette changes, update both.",
+  "_comment": "SSoT MIRROR of THEME_PRESETS (cloud/obsidian/neo-brutalism/mono-chrome) in api-velocity/src/modules/public-chat/widget/theme.ts — the widget is the source of truth; this is the embed-modal preview's mirror and the single home for the palette data (themes.ts derives WIDGET_THEMES from it). Update this file when the widget palette changes.",
   "cloud": {
     "primaryColor": "#6366f1",
     "surfaceColor": "#f5f6fb",

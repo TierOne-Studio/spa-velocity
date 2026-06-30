@@ -3,18 +3,33 @@ import {
   WIDGET_THEMES,
   paletteToCssVars,
   type WidgetThemeId,
+  type WidgetThemePalette,
 } from "../themes";
-import presetFixture from "../__fixtures__/widget-theme-presets.json";
+// WIDGET_THEMES is derived from widget-theme-presets.json (the single home for
+// the palette data, mirrored from api-velocity's THEME_PRESETS). These tests
+// validate the SHAPE the UI consumes — order, labels, and that every preset
+// carries the full palette — not a self-comparison against its own source.
+const EXPECTED_PALETTE_KEYS: (keyof WidgetThemePalette)[] = [
+  "primaryColor",
+  "surfaceColor",
+  "textColor",
+  "mutedColor",
+  "headerBg",
+  "headerText",
+  "aiBubbleBg",
+  "aiBubbleText",
+  "userBubbleBg",
+  "userBubbleText",
+  "border",
+  "borderWidth",
+  "radius",
+  "shadow",
+  "launcherBg",
+  "launcherText",
+  "inputBg",
+];
 
-// Cross-repo SSoT guard: the four preview palettes MUST stay byte-identical to
-// the widget's THEME_PRESETS (mirrored into widget-theme-presets.json). If the
-// widget palette drifts and this fixture isn't updated, this test fails.
-describe("WIDGET_THEMES cross-repo contract", () => {
-  const { _comment: _ignored, ...fixturePalettes } = presetFixture as Record<
-    string,
-    unknown
-  >;
-
+describe("WIDGET_THEMES", () => {
   it("exposes exactly the four selectable presets, in a stable order", () => {
     expect(WIDGET_THEMES.map((t) => t.id)).toEqual([
       "cloud",
@@ -30,11 +45,16 @@ describe("WIDGET_THEMES cross-repo contract", () => {
     }
   });
 
-  it("each theme palette is byte-identical to the shared fixture", () => {
-    const runtime = Object.fromEntries(
-      WIDGET_THEMES.map((t) => [t.id, t.palette]),
-    );
-    expect(runtime).toEqual(fixturePalettes);
+  it("every theme palette carries the full set of non-empty palette keys", () => {
+    for (const theme of WIDGET_THEMES) {
+      expect(Object.keys(theme.palette).sort()).toEqual(
+        [...EXPECTED_PALETTE_KEYS].sort(),
+      );
+      for (const key of EXPECTED_PALETTE_KEYS) {
+        expect(typeof theme.palette[key]).toBe("string");
+        expect(theme.palette[key].length).toBeGreaterThan(0);
+      }
+    }
   });
 });
 

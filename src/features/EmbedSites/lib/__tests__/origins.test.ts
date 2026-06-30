@@ -31,6 +31,8 @@ describe('isValidOrigin', () => {
     ['ftp://example.com', false],
     ['javascript:alert(1)', false],
     ['example.com', false],
+    ['https://user:pass@example.com', false],
+    ['https://user@example.com', false],
     ['', false],
   ])('isValidOrigin(%s) === %s', (value, expected) => {
     expect(isValidOrigin(value)).toBe(expected);

@@ -39,6 +39,11 @@ export async function parseEmbedSiteResponse<T>(
   if (envelope === null || typeof envelope !== 'object') {
     throw new EmbedSiteApiError(fallbackMessage, response.status, envelope);
   }
+  // A 2xx body that isn't the { data } envelope is a server-contract violation —
+  // surface it instead of silently returning `undefined` on optional-body paths.
+  if (!('data' in envelope)) {
+    throw new EmbedSiteApiError(fallbackMessage, response.status, envelope);
+  }
   return (envelope as ApiEnvelope<T>).data;
 }
 

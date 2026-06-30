@@ -16,7 +16,11 @@ export function parseOrigins(text: string): string[] {
   return result;
 }
 
-/** A valid embed origin is an http(s) scheme + host with no path/query/hash. */
+/**
+ * A valid embed origin is an http(s) scheme + host with no credentials and no
+ * path/query/hash. Credentialed forms (`https://user:pass@host`) are not real
+ * origin-allowlist entries and are rejected to avoid confusing misconfiguration.
+ */
 export function isValidOrigin(value: string): boolean {
   let url: URL;
   try {
@@ -26,6 +30,8 @@ export function isValidOrigin(value: string): boolean {
   }
   return (
     (url.protocol === 'http:' || url.protocol === 'https:') &&
+    url.username === '' &&
+    url.password === '' &&
     url.pathname === '/' &&
     url.search === '' &&
     url.hash === ''
